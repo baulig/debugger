@@ -14,6 +14,7 @@ using System.Runtime.Remoting.Channels;
 using System.Runtime.Remoting.Messaging;
 
 using Mono.Debugger.Languages;
+using Mono.Debugger.Server;
 
 namespace Mono.Debugger.Backend
 {
@@ -24,6 +25,8 @@ namespace Mono.Debugger.Backend
 		internal ThreadManager (Debugger debugger)
 		{
 			this.debugger = debugger;
+
+			debugger_server = new NativeDebuggerServer ();
 
 			thread_hash = Hashtable.Synchronized (new Hashtable ());
 			engine_hash = Hashtable.Synchronized (new Hashtable ());
@@ -70,6 +73,8 @@ namespace Mono.Debugger.Backend
 
 		AddressDomain address_domain;
 
+		DebuggerServer debugger_server;
+
 		DateTime last_pending_sigstop;
 		Dictionary<int,DateTime> pending_sigstops;
 
@@ -83,7 +88,7 @@ namespace Mono.Debugger.Backend
 		static extern int mono_debugger_server_global_wait (out int status);
 
 		[DllImport("monodebuggerserver")]
-		static extern Inferior.ChildEventType mono_debugger_server_dispatch_simple (int status, out int arg);
+		static extern DebuggerServer.ChildEventType mono_debugger_server_dispatch_simple (int status, out int arg);
 
 		void start_inferior ()
 		{
@@ -140,14 +145,14 @@ namespace Mono.Debugger.Backend
 		}
 
 		internal bool HandleChildEvent (SingleSteppingEngine engine, Inferior inferior,
-						ref Inferior.ChildEvent cevent, out bool resume_target)
+						ref DebuggerServer.ChildEvent cevent, out bool resume_target)
 		{
-			if (cevent.Type == Inferior.ChildEventType.NONE) {
+			if (cevent.Type == DebuggerServer.ChildEventType.NONE) {
 				resume_target = true;
 				return true;
 			}
 
-			if (cevent.Type == Inferior.ChildEventType.CHILD_CREATED_THREAD) {
+			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_CREATED_THREAD) {
 				int pid = (int) cevent.Argument;
 				inferior.Process.ThreadCreated (inferior, pid, false, true);
 				if (pending_sigstops.ContainsKey (pid))
@@ -156,13 +161,13 @@ namespace Mono.Debugger.Backend
 				return true;
 			}
 
-			if (cevent.Type == Inferior.ChildEventType.CHILD_FORKED) {
+			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_FORKED) {
 				inferior.Process.ChildForked (inferior, (int) cevent.Argument);
 				resume_target = true;
 				return true;
 			}
 
-			if (cevent.Type == Inferior.ChildEventType.CHILD_EXECD) {
+			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_EXECD) {
 				thread_hash.Remove (engine.PID);
 				engine_hash.Remove (engine.ID);
 				inferior.Process.ChildExecd (engine, inferior);
@@ -170,10 +175,10 @@ namespace Mono.Debugger.Backend
 				return true;
 			}
 
-			if (cevent.Type == Inferior.ChildEventType.CHILD_STOPPED) {
+			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) {
 				if (cevent.Argument == inferior.SIGCHLD) {
-					cevent = new Inferior.ChildEvent (
-						Inferior.ChildEventType.CHILD_STOPPED, 0, 0, 0);
+					cevent = new DebuggerServer.ChildEvent (
+						DebuggerServer.ChildEventType.CHILD_STOPPED, 0, 0, 0);
 					resume_target = true;
 					return true;
 				} else if (inferior.Has_SIGWINCH && (cevent.Argument == inferior.SIGWINCH)) {
@@ -197,8 +202,8 @@ namespace Mono.Debugger.Backend
 				retval = inferior.Process.MonoManager.HandleChildEvent (
 					engine, inferior, ref cevent, out resume_target);
 
-			if ((cevent.Type == Inferior.ChildEventType.CHILD_EXITED) ||
-			    (cevent.Type == Inferior.ChildEventType.CHILD_SIGNALED)) {
+			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_EXITED) ||
+			    (cevent.Type == DebuggerServer.ChildEventType.CHILD_SIGNALED)) {
 				thread_hash.Remove (engine.PID);
 				engine_hash.Remove (engine.ID);
 				engine.OnThreadExited (cevent);
@@ -228,6 +233,10 @@ namespace Mono.Debugger.Backend
 
 		internal bool InBackgroundThread {
 			get { return ST.Thread.CurrentThread == inferior_thread; }
+		}
+
+		internal DebuggerServer DebuggerServer {
+			get { return debugger_server; }
 		}
 
 		internal object SendCommand (SingleSteppingEngine sse, TargetAccessDelegate target,
@@ -280,7 +289,7 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		internal void AddPendingEvent (SingleSteppingEngine engine, Inferior.ChildEvent cevent)
+		internal void AddPendingEvent (SingleSteppingEngine engine, DebuggerServer.ChildEvent cevent)
 		{
 			Report.Debug (DebugFlags.Wait, "Add pending event: {0} {1}", engine, cevent);
 			pending_events.Add (engine, cevent);
@@ -400,7 +409,7 @@ namespace Mono.Debugger.Backend
 				if (engine.Process.HasThreadLock)
 					continue;
 
-				Inferior.ChildEvent cevent = (Inferior.ChildEvent) pending_events [engine];
+				DebuggerServer.ChildEvent cevent = (DebuggerServer.ChildEvent) pending_events [engine];
 				pending_events.Remove (engine);
 
 				try {
@@ -514,12 +523,11 @@ namespace Mono.Debugger.Backend
 			if (abort_requested || (pid <= 0))
 				return true;
 
-			if(!Inferior.HasThreadEvents)
-			{
+			if (!HasThreadEvents) {
 				int arg;
-				Inferior.ChildEventType etype = mono_debugger_server_dispatch_simple (status, out arg);
+				DebuggerServer.ChildEventType etype = mono_debugger_server_dispatch_simple (status, out arg);
 				SingleSteppingEngine engine = (SingleSteppingEngine) thread_hash [pid];
-				if(etype == Inferior.ChildEventType.CHILD_EXITED) {
+				if(etype == DebuggerServer.ChildEventType.CHILD_EXITED) {
 					if(engine != null) {
 						SingleSteppingEngine[] sses = new SingleSteppingEngine [thread_hash.Count];
 						thread_hash.Values.CopyTo (sses, 0);
@@ -562,15 +570,15 @@ namespace Mono.Debugger.Backend
 			}
 
 			SingleSteppingEngine event_engine = (SingleSteppingEngine) thread_hash [pid];
-			if (event_engine == null && Inferior.HasThreadEvents) {
+			if (event_engine == null && HasThreadEvents) {
 				int arg;
-				Inferior.ChildEventType etype = mono_debugger_server_dispatch_simple (status, out arg);
+				DebuggerServer.ChildEventType etype = mono_debugger_server_dispatch_simple (status, out arg);
 
 				/*
 				 * Ignore exit events from unknown children.
 				 */
 
-				if ((etype == Inferior.ChildEventType.CHILD_EXITED) && (arg == 0))
+				if ((etype == DebuggerServer.ChildEventType.CHILD_EXITED) && (arg == 0))
 					goto again;
 
 				/*
@@ -587,7 +595,7 @@ namespace Mono.Debugger.Backend
 				 *
 				 */
 
-				if ((etype != Inferior.ChildEventType.CHILD_STOPPED) || (arg != 0)) {
+				if ((etype != DebuggerServer.ChildEventType.CHILD_STOPPED) || (arg != 0)) {
 					Report.Error ("WARNING: Got event {0:x} for unknown pid {1}", status, pid);
 					waiting = false;
 					RequestWait ();
@@ -642,6 +650,75 @@ namespace Mono.Debugger.Backend
 				this.TimeStamp = DateTime.Now;
 			}
 		}
+
+		protected static void check_error (TargetError error)
+		{
+			if (error == TargetError.None)
+				return;
+
+			throw new TargetException (error);
+		}
+
+		public TargetInfo GetTargetInfo ()
+		{
+			int target_int_size, target_long_size, target_addr_size, is_bigendian;
+			check_error (debugger_server.GetTargetInfo (
+				out target_int_size, out target_long_size,
+				out target_addr_size, out is_bigendian));
+
+			return new TargetInfo (target_int_size, target_long_size,
+					       target_addr_size, is_bigendian != 0);
+		}
+
+		public TargetMemoryInfo GetTargetMemoryInfo (AddressDomain domain)
+		{
+			int target_int_size, target_long_size, target_addr_size, is_bigendian;
+			check_error (debugger_server.GetTargetInfo (
+				out target_int_size, out target_long_size,
+				out target_addr_size, out is_bigendian));
+
+			return new TargetMemoryInfo (target_int_size, target_long_size,
+						     target_addr_size, is_bigendian != 0, domain);
+		}
+
+		public bool HasThreadEvents {
+			get {
+				DebuggerServer.ServerCapabilities capabilities = debugger_server.GetCapabilities ();
+				return (capabilities & DebuggerServer.ServerCapabilities.THREAD_EVENTS) != 0;
+			}
+		}
+
+		//
+		// Whether we can detach from any target.
+		//
+		// Background:
+		//
+		// The Linux kernel allows detaching from any traced child, even if we did not
+		// previously attach to it.
+		//
+
+		public bool CanDetachAny {
+			get {
+				DebuggerServer.ServerCapabilities capabilities = debugger_server.GetCapabilities ();
+				return (capabilities & DebuggerServer.ServerCapabilities.CAN_DETACH_ANY) != 0;
+			}
+		}
+
+		public OperatingSystemBackend CreateOperatingSystemBackend (Process process)
+		{
+			DebuggerServer.ServerType type = debugger_server.GetServerType ();
+			switch (type) {
+			case DebuggerServer.ServerType.LINUX_PTRACE:
+				return new LinuxOperatingSystem (process);
+			case DebuggerServer.ServerType.DARWIN:
+				return new DarwinOperatingSystem (process);
+			case DebuggerServer.ServerType.WINDOWS:
+				return new WindowsOperatingSystem (process);
+			default:
+				throw new NotSupportedException (String.Format ("Unknown server type {0}.", type));
+			}
+		}
+
 
 #region IDisposable implementation
 		private bool disposed = false;

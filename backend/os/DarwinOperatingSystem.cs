@@ -232,7 +232,8 @@ namespace Mono.Debugger.Backend
 				return;
 			}
 
-			TargetMemoryInfo info = Inferior.GetTargetMemoryInfo (AddressDomain.Global);			Bfd dyld_image = new Bfd (this, info, "/usr/lib/dyld", TargetAddress.Null, true);
+			TargetMemoryInfo info = Process.ThreadManager.GetTargetMemoryInfo (AddressDomain.Global);
+			Bfd dyld_image = new Bfd (this, info, "/usr/lib/dyld", TargetAddress.Null, true);
 
 			dyld_all_image_infos = dyld_image.LookupSymbol("dyld_all_image_infos");
 			if (dyld_all_image_infos.IsNull)

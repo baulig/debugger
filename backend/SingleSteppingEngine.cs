@@ -17,6 +17,7 @@ using Mono.Debugger.Languages;
 using Mono.Debugger.Languages.Mono;
 using Mono.Debugger.Architectures;
 using Mono.Debugger.Backend.Mono;
+using Mono.Debugger.Server;
 
 namespace Mono.Debugger.Backend
 {
@@ -172,16 +173,16 @@ namespace Mono.Debugger.Backend
 			ProcessEvent (inferior.ProcessEvent (status));
 		}
 
-		public bool ProcessEvent (Inferior.ChildEvent cevent)
+		public bool ProcessEvent (DebuggerServer.ChildEvent cevent)
 		{
 			Report.Debug (DebugFlags.EventLoop, "{0} received event {1}",
 				      this, cevent);
 
 			if (killed) {
-				if (cevent.Type == Inferior.ChildEventType.CHILD_INTERRUPTED) {
+				if (cevent.Type == DebuggerServer.ChildEventType.CHILD_INTERRUPTED) {
 					inferior.Continue ();
 					return true;
-				} else if (cevent.Type != Inferior.ChildEventType.CHILD_EXITED) {
+				} else if (cevent.Type != DebuggerServer.ChildEventType.CHILD_EXITED) {
 					Report.Debug (DebugFlags.EventLoop,
 						      "{0} received event {1} when already killed",
 						      this, cevent);
@@ -189,8 +190,8 @@ namespace Mono.Debugger.Backend
 				}
 			}
 
-			if ((cevent.Type == Inferior.ChildEventType.CHILD_EXITED) ||
-			    (cevent.Type == Inferior.ChildEventType.CHILD_SIGNALED)) {
+			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_EXITED) ||
+			    (cevent.Type == DebuggerServer.ChildEventType.CHILD_SIGNALED)) {
 				Report.Debug (DebugFlags.EventLoop, "{0} received {1} while running {2}",
 					      this, cevent, current_operation);
 				// we can't remove the breakpoint anymore after
@@ -210,7 +211,7 @@ namespace Mono.Debugger.Backend
 					running_text = String.Format ("running {0}", current_operation);
 
 				string event_text;
-				if (cevent.Type == Inferior.ChildEventType.CHILD_NOTIFICATION)
+				if (cevent.Type == DebuggerServer.ChildEventType.CHILD_NOTIFICATION)
 					event_text = String.Format ("notification {0} ({1})", cevent, (NotificationType) cevent.Argument);
 				else
 					event_text = "event " + cevent.ToString ();
@@ -227,8 +228,8 @@ namespace Mono.Debugger.Backend
 			if (Process.IsAttached && !attach_initialized) {
 				attach_initialized = true;
 
-				if (cevent.Type == Inferior.ChildEventType.CHILD_INTERRUPTED)
-					cevent = new Inferior.ChildEvent (Inferior.ChildEventType.CHILD_STOPPED, 0, 0, 0);
+				if (cevent.Type == DebuggerServer.ChildEventType.CHILD_INTERRUPTED)
+					cevent = new DebuggerServer.ChildEvent (DebuggerServer.ChildEventType.CHILD_STOPPED, 0, 0, 0);
 			}
 
 			bool resume_target;
@@ -247,38 +248,38 @@ namespace Mono.Debugger.Backend
 				return true;
 			}
 
-			Inferior.ChildEventType message = cevent.Type;
+			DebuggerServer.ChildEventType message = cevent.Type;
 			int arg = (int) cevent.Argument;
 
 			switch (message) {
-			case Inferior.ChildEventType.CHILD_INTERRUPTED:
+			case DebuggerServer.ChildEventType.CHILD_INTERRUPTED:
 				if (current_operation != null)
 					OperationInterrupted ();
 				return true;
-			case Inferior.ChildEventType.CHILD_SIGNALED:
+			case DebuggerServer.ChildEventType.CHILD_SIGNALED:
 				if (killed)
 					OperationCompleted (new TargetEventArgs (TargetEventType.TargetExited, 0));
 				else
 					OperationCompleted (new TargetEventArgs (TargetEventType.TargetSignaled, arg));
 				return true;
 
-			case Inferior.ChildEventType.INTERNAL_ERROR:
+			case DebuggerServer.ChildEventType.INTERNAL_ERROR:
 				frame_changed (inferior.CurrentFrame, null);
 				Report.Error ("{0} got {1} at {2} while executing {3}", this, message,
 					      inferior.CurrentFrame, current_operation);
 				OperationCompleted (new TargetEventArgs (TargetEventType.TargetSignaled, -1));
 				return true;
 
-			case Inferior.ChildEventType.CHILD_EXITED:
+			case DebuggerServer.ChildEventType.CHILD_EXITED:
 				OperationCompleted (new TargetEventArgs (TargetEventType.TargetExited, arg));
 				return true;
 
-			case Inferior.ChildEventType.CHILD_CALLBACK_COMPLETED:
+			case DebuggerServer.ChildEventType.CHILD_CALLBACK_COMPLETED:
 				frame_changed (inferior.CurrentFrame, null);
 				OperationCompleted (new TargetEventArgs (TargetEventType.TargetStopped, 0, current_frame));
 				return true;
 
-			case Inferior.ChildEventType.RUNTIME_INVOKE_DONE:
+			case DebuggerServer.ChildEventType.RUNTIME_INVOKE_DONE:
 				OperationRuntimeInvoke rti = rti_stack.Pop ();
 				if (rti.ID != cevent.Argument)
 					throw new InternalError ("{0} got unknown RUNTIME_INVOKE_DONE: {1} {2}", this, rti.ID, cevent);
@@ -308,16 +309,16 @@ namespace Mono.Debugger.Backend
 
 			if (stop_requested) {
 				switch (message) {
-				case Inferior.ChildEventType.CHILD_STOPPED:
-				case Inferior.ChildEventType.CHILD_CALLBACK:
-				case Inferior.ChildEventType.CHILD_HIT_BREAKPOINT:
+				case DebuggerServer.ChildEventType.CHILD_STOPPED:
+				case DebuggerServer.ChildEventType.CHILD_CALLBACK:
+				case DebuggerServer.ChildEventType.CHILD_HIT_BREAKPOINT:
 					OperationInterrupted ();
 					return true;
 
-				case Inferior.ChildEventType.UNHANDLED_EXCEPTION:
-				case Inferior.ChildEventType.THROW_EXCEPTION:
-				case Inferior.ChildEventType.HANDLE_EXCEPTION:
-				case Inferior.ChildEventType.CHILD_NOTIFICATION:
+				case DebuggerServer.ChildEventType.UNHANDLED_EXCEPTION:
+				case DebuggerServer.ChildEventType.THROW_EXCEPTION:
+				case DebuggerServer.ChildEventType.HANDLE_EXCEPTION:
+				case DebuggerServer.ChildEventType.CHILD_NOTIFICATION:
 					inferior.RestartNotification ();
 					OperationInterrupted ();
 					return true;
@@ -332,12 +333,12 @@ namespace Mono.Debugger.Backend
 			return true;
 		}
 
-		protected void DoProcessEvent (Inferior.ChildEvent cevent)
+		protected void DoProcessEvent (DebuggerServer.ChildEvent cevent)
 		{
-			Inferior.ChildEventType message = cevent.Type;
+			DebuggerServer.ChildEventType message = cevent.Type;
 			int arg = (int) cevent.Argument;
 
-			if (message == Inferior.ChildEventType.THROW_EXCEPTION) {
+			if (message == DebuggerServer.ChildEventType.THROW_EXCEPTION) {
 				TargetAddress info = new TargetAddress (inferior.AddressDomain, cevent.Data1);
 				TargetAddress ip = new TargetAddress (manager.AddressDomain, cevent.Data2);
 
@@ -372,7 +373,7 @@ namespace Mono.Debugger.Backend
 				}
 			}
 
-			if (message == Inferior.ChildEventType.HANDLE_EXCEPTION) {
+			if (message == DebuggerServer.ChildEventType.HANDLE_EXCEPTION) {
 				TargetAddress info = new TargetAddress (inferior.AddressDomain, cevent.Data1);
 				TargetAddress ip = new TargetAddress (manager.AddressDomain, cevent.Data2);
 
@@ -400,7 +401,7 @@ namespace Mono.Debugger.Backend
 
 
 			if (lmf_breakpoint != null) {
-				if ((message == Inferior.ChildEventType.CHILD_HIT_BREAKPOINT) &&
+				if ((message == DebuggerServer.ChildEventType.CHILD_HIT_BREAKPOINT) &&
 				    (arg == lmf_breakpoint.Breakpoint.ID)) {
 					remove_lmf_breakpoint ();
 
@@ -435,7 +436,7 @@ namespace Mono.Debugger.Backend
 			// here only deals with the temporary breakpoint, the handling of
 			// a signal or another breakpoint is done later.
 			if ((temp_breakpoint != null) &&
-			    (message == Inferior.ChildEventType.CHILD_HIT_BREAKPOINT) && (arg == temp_breakpoint.ID)) {
+			    (message == DebuggerServer.ChildEventType.CHILD_HIT_BREAKPOINT) && (arg == temp_breakpoint.ID)) {
 				// we hit the temporary breakpoint; this'll always
 				// happen in the `correct' thread since the
 				// `temp_breakpoint_id' is only set in this
@@ -459,22 +460,22 @@ namespace Mono.Debugger.Backend
 
 				if ((handle == null) || !is_enabled || !handle.Breakpoint.Breaks (thread.ID) ||
 				    handle.Breakpoint.HideFromUser) {
-					message = Inferior.ChildEventType.CHILD_STOPPED;
+					message = DebuggerServer.ChildEventType.CHILD_STOPPED;
 					arg = 0;
-					cevent = new Inferior.ChildEvent (Inferior.ChildEventType.CHILD_STOPPED, 0, 0, 0);
+					cevent = new DebuggerServer.ChildEvent (DebuggerServer.ChildEventType.CHILD_STOPPED, 0, 0, 0);
 				} else {
-					cevent = new Inferior.ChildEvent (Inferior.ChildEventType.CHILD_HIT_BREAKPOINT, idx, 0, 0);
+					cevent = new DebuggerServer.ChildEvent (DebuggerServer.ChildEventType.CHILD_HIT_BREAKPOINT, idx, 0, 0);
 					ProcessOperationEvent (cevent);
 					return;
 				}
 			}
 
-			if (message == Inferior.ChildEventType.UNHANDLED_EXCEPTION) {
+			if (message == DebuggerServer.ChildEventType.UNHANDLED_EXCEPTION) {
 				TargetAddress exc = new TargetAddress (manager.AddressDomain, cevent.Data1);
 				TargetAddress ip = new TargetAddress (manager.AddressDomain, cevent.Data2);
 				PushOperation (new OperationException (this, ip, exc, true));
 				return;
-			} else if (message == Inferior.ChildEventType.CHILD_HIT_BREAKPOINT) {
+			} else if (message == DebuggerServer.ChildEventType.CHILD_HIT_BREAKPOINT) {
 				// Ok, the next thing we need to check is whether this is actually "our"
 				// breakpoint or whether it belongs to another thread.  In this case,
 				// `step_over_breakpoint' does everything for us and we can just continue
@@ -490,11 +491,11 @@ namespace Mono.Debugger.Backend
 			ProcessOperationEvent (cevent);
 		}
 
-		protected void ProcessOperationEvent (Inferior.ChildEvent cevent)
+		protected void ProcessOperationEvent (DebuggerServer.ChildEvent cevent)
 		{
 			TargetEventArgs result = null;
 
-			Inferior.ChildEventType message = cevent.Type;
+			DebuggerServer.ChildEventType message = cevent.Type;
 			int arg = (int) cevent.Argument;
 
 			//
@@ -698,13 +699,13 @@ namespace Mono.Debugger.Backend
 			process.OnManagedThreadExitedEvent (this);
 		}
 
-		internal void OnThreadExited (Inferior.ChildEvent cevent)
+		internal void OnThreadExited (DebuggerServer.ChildEvent cevent)
 		{
 			TargetEventArgs result;
 			int arg = (int) cevent.Argument;
 			if (killed)
 				result = new TargetEventArgs (TargetEventType.TargetExited, 0);
-			else if (cevent.Type == Inferior.ChildEventType.CHILD_SIGNALED)
+			else if (cevent.Type == DebuggerServer.ChildEventType.CHILD_SIGNALED)
 				result = new TargetEventArgs (TargetEventType.TargetSignaled, arg);
 			else
 				result = new TargetEventArgs (TargetEventType.TargetExited, arg);
@@ -964,7 +965,7 @@ namespace Mono.Debugger.Backend
 		{
 			killed = true;
 			SendCommand (delegate {
-				Inferior.ChildEvent stop_event;
+				DebuggerServer.ChildEvent stop_event;
 				Report.Debug (DebugFlags.SSE, "{0} kill: {1}", this, engine_stopped);
 				if (!engine_stopped) {
 					bool stopped = inferior.Stop (out stop_event);
@@ -1040,7 +1041,7 @@ namespace Mono.Debugger.Backend
 					return;
 
 				bool stopped = inferior.Stop ();
-				if (!Inferior.HasThreadEvents && !stopped)
+				if (!manager.HasThreadEvents && !stopped)
 					OperationInterrupted ();
 				
 				Report.Debug (DebugFlags.EventLoop, "{0} interrupt #1: {1}",
@@ -1072,7 +1073,7 @@ namespace Mono.Debugger.Backend
 		//   If we can't find a handler for the breakpoint, the default is to stop
 		//   the target and let the user decide what to do.
 		// </summary>
-		bool child_breakpoint (Inferior.ChildEvent cevent, int index, out Breakpoint bpt)
+		bool child_breakpoint (DebuggerServer.ChildEvent cevent, int index, out Breakpoint bpt)
 		{
 			// The inferior knows about breakpoints from all threads, so if this is
 			// zero, then no other thread has set this breakpoint.
@@ -1681,7 +1682,7 @@ namespace Mono.Debugger.Backend
 			if (engine_stopped)
 				return;
 
-			Inferior.ChildEvent stop_event;
+			DebuggerServer.ChildEvent stop_event;
 			bool stopped = inferior.Stop (out stop_event);
 			thread_lock = new ThreadLockData (stopped, stop_event, true);
 
@@ -1690,8 +1691,8 @@ namespace Mono.Debugger.Backend
 				      this, stopped, stop_event);
 
 			if ((stop_event != null) &&
-			    ((stop_event.Type == Inferior.ChildEventType.CHILD_EXITED) ||
-			     ((stop_event.Type == Inferior.ChildEventType.CHILD_SIGNALED))))
+			    ((stop_event.Type == DebuggerServer.ChildEventType.CHILD_EXITED) ||
+			     ((stop_event.Type == DebuggerServer.ChildEventType.CHILD_SIGNALED))))
 				return;
 
 			TargetAddress new_rsp = inferior.PushRegisters ();
@@ -1729,7 +1730,7 @@ namespace Mono.Debugger.Backend
 			thread_lock = null;
 		}
 
-		internal void ReleaseThreadLock (Inferior.ChildEvent cevent)
+		internal void ReleaseThreadLock (DebuggerServer.ChildEvent cevent)
 		{
 			Report.Debug (DebugFlags.Threads,
 				      "{0} releasing thread lock #1: {1} {2} {3}",
@@ -1738,7 +1739,7 @@ namespace Mono.Debugger.Backend
 
 			// The target stopped before we were able to send the SIGSTOP,
 			// but we haven't processed this event yet.
-			if ((cevent.Type == Inferior.ChildEventType.CHILD_STOPPED) &&
+			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) &&
 			    (cevent.Argument == 0)) {
 				if (current_operation != null)
 					current_operation.ResumeOperation ();
@@ -1746,7 +1747,7 @@ namespace Mono.Debugger.Backend
 				return;
 			}
 
-			if (cevent.Type == Inferior.ChildEventType.CHILD_INTERRUPTED) {
+			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_INTERRUPTED) {
 				inferior.Resume ();
 				return;
 			}
@@ -1768,7 +1769,7 @@ namespace Mono.Debugger.Backend
 			if (engine_stopped)
 				return;
 
-			Inferior.ChildEvent stop_event;
+			DebuggerServer.ChildEvent stop_event;
 			bool stopped = inferior.Stop (out stop_event);
 
 			stop_requested = true;
@@ -2641,7 +2642,7 @@ namespace Mono.Debugger.Backend
 				get; private set;
 			}
 
-			public Inferior.ChildEvent StopEvent {
+			public DebuggerServer.ChildEvent StopEvent {
 				get; private set;
 			}
 
@@ -2649,14 +2650,14 @@ namespace Mono.Debugger.Backend
 				get; private set;
 			}
 
-			public ThreadLockData (bool stopped, Inferior.ChildEvent stop_event, bool pushed_regs)
+			public ThreadLockData (bool stopped, DebuggerServer.ChildEvent stop_event, bool pushed_regs)
 			{
 				this.Stopped = stopped;
 				this.StopEvent = stop_event;
 				this.PushedRegisters = pushed_regs;
 			}
 
-			public void SetStopEvent (Inferior.ChildEvent stop_event)
+			public void SetStopEvent (DebuggerServer.ChildEvent stop_event)
 			{
 				if (StopEvent != null)
 					throw new InternalError ();
@@ -2763,16 +2764,16 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		public virtual EventResult ProcessEvent (Inferior.ChildEvent cevent,
+		public virtual EventResult ProcessEvent (DebuggerServer.ChildEvent cevent,
 							 out TargetEventArgs args)
 		{
-			if (cevent.Type == Inferior.ChildEventType.CHILD_INTERRUPTED) {
+			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_INTERRUPTED) {
 				args = null;
 				if (ResumeOperation ())
 					return EventResult.Running;
 			}
 
-			if ((cevent.Type == Inferior.ChildEventType.CHILD_STOPPED) && (cevent.Argument != 0)) {
+			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) && (cevent.Argument != 0)) {
 				sse.frame_changed (inferior.CurrentFrame, null);
 				args = new TargetEventArgs (TargetEventType.TargetStopped, (int) cevent.Argument, sse.current_frame);
 				return EventResult.Completed;
@@ -2813,7 +2814,7 @@ namespace Mono.Debugger.Backend
 			return result;
 		}
 
-		public virtual EventResult CompletedOperation (Inferior.ChildEvent cevent, EventResult result, ref TargetEventArgs args)
+		public virtual EventResult CompletedOperation (DebuggerServer.ChildEvent cevent, EventResult result, ref TargetEventArgs args)
 		{
 			Report.Debug (DebugFlags.EventLoop, "{0} operation completed: {1} {2} {3} - {4} {5}",
 				      sse, this, cevent, result, ReportBreakpointHit, ReportSuspend);
@@ -2860,7 +2861,7 @@ namespace Mono.Debugger.Backend
 					      "{0} frame changed at {1} => new operation {2}",
 					      this, inferior.CurrentFrame, new_operation);
 
-				if (cevent.Type == Inferior.ChildEventType.CHILD_HIT_BREAKPOINT)
+				if (cevent.Type == DebuggerServer.ChildEventType.CHILD_HIT_BREAKPOINT)
 					ReportBreakpointHit = (int) cevent.Argument;
 				if (result == EventResult.SuspendOperation)
 					ReportSuspend = true;
@@ -2877,7 +2878,7 @@ namespace Mono.Debugger.Backend
 			int bpt_hit = ReportBreakpointHit;
 			ReportBreakpointHit = -1;
 
-			if (cevent.Type == Inferior.ChildEventType.CHILD_HIT_BREAKPOINT)
+			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_HIT_BREAKPOINT)
 				bpt_hit = (int) cevent.Argument;
 
 			if (bpt_hit >= 0) {
@@ -2899,7 +2900,7 @@ namespace Mono.Debugger.Backend
 			return null;
 		}
 
-		protected abstract EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected abstract EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args);
 
 		public virtual bool HandleException (TargetAddress stack, TargetAddress exc)
@@ -2962,13 +2963,13 @@ namespace Mono.Debugger.Backend
 				      "{0} execute start: {1} {2} {3}", sse, sse.Process.IsAttached,
 				      inferior.CurrentFrame, inferior.EntryPoint);
 
-			if (!sse.Process.IsAttached && Inferior.HasThreadEvents)
+			if (!sse.Process.IsAttached && sse.manager.HasThreadEvents)
 				sse.do_continue (inferior.EntryPoint);
 			else
-				sse.ProcessEvent (new Inferior.ChildEvent (Inferior.ChildEventType.CHILD_STOPPED, 0, 0, 0));
+				sse.ProcessEvent (new DebuggerServer.ChildEvent (DebuggerServer.ChildEventType.CHILD_STOPPED, 0, 0, 0));
 		}
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
 			Report.Debug (DebugFlags.SSE,
@@ -2977,8 +2978,8 @@ namespace Mono.Debugger.Backend
 				      inferior.CurrentFrame, inferior.EntryPoint);
 
 			args = null;
-			if ((cevent.Type != Inferior.ChildEventType.CHILD_STOPPED) &&
-			    (cevent.Type != Inferior.ChildEventType.CHILD_CALLBACK))
+			if ((cevent.Type != DebuggerServer.ChildEventType.CHILD_STOPPED) &&
+			    (cevent.Type != DebuggerServer.ChildEventType.CHILD_CALLBACK))
 				return EventResult.Completed;
 
 			if (sse.Architecture.IsSyscallInstruction (inferior, inferior.CurrentFrame)) {
@@ -3036,7 +3037,7 @@ namespace Mono.Debugger.Backend
 		PendingBreakpointQueue pending_events;
 		bool completed;
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
 			args = null;
@@ -3174,7 +3175,7 @@ namespace Mono.Debugger.Backend
 			sse.do_continue ();
 		}
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
 			Report.Debug (DebugFlags.SSE,
@@ -3254,7 +3255,7 @@ namespace Mono.Debugger.Backend
 			inferior.Step ();
 		}
 
-		bool ReleaseThreadLock (Inferior.ChildEvent cevent)
+		bool ReleaseThreadLock (DebuggerServer.ChildEvent cevent)
 		{
 			if (!has_thread_lock)
 				return true;
@@ -3279,13 +3280,13 @@ namespace Mono.Debugger.Backend
 			return false;
 		}
 
-		public override EventResult ProcessEvent (Inferior.ChildEvent cevent,
+		public override EventResult ProcessEvent (DebuggerServer.ChildEvent cevent,
 							  out TargetEventArgs args)
 		{
-			if (((cevent.Type == Inferior.ChildEventType.CHILD_STOPPED) &&
+			if (((cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) &&
 			     (cevent.Argument == 0)) ||
-			    ((cevent.Type != Inferior.ChildEventType.CHILD_CALLBACK) &&
-			     (cevent.Type != Inferior.ChildEventType.RUNTIME_INVOKE_DONE))) {
+			    ((cevent.Type != DebuggerServer.ChildEventType.CHILD_CALLBACK) &&
+			     (cevent.Type != DebuggerServer.ChildEventType.RUNTIME_INVOKE_DONE))) {
 				if (!ReleaseThreadLock (cevent)) {
 					args = null;
 					return EventResult.Running;
@@ -3294,14 +3295,14 @@ namespace Mono.Debugger.Backend
 			return base.ProcessEvent (cevent, out args);
 		}
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
 			Report.Debug (DebugFlags.SSE,
 				      "{0} stepped over breakpoint {1} at {2}: {3} {4}",
 				      sse, Index, inferior.CurrentFrame, cevent, until);
 
-			if ((cevent.Type == Inferior.ChildEventType.CHILD_HIT_BREAKPOINT) &&
+			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_HIT_BREAKPOINT) &&
 			    (cevent.Argument != Index)) {
 				args = null;
 				return EventResult.Completed;
@@ -3354,7 +3355,7 @@ namespace Mono.Debugger.Backend
 			inferior.ExecuteInstruction (Instruction, UpdateIP);
 		}
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
 			Report.Debug (DebugFlags.SSE,
@@ -3389,12 +3390,12 @@ namespace Mono.Debugger.Backend
 			base.Execute ();
 		}
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
 			args = null;
 			bool completed;
-			if (cevent.Type == Inferior.ChildEventType.CHILD_INTERRUPTED)
+			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_INTERRUPTED)
 				completed = !ResumeOperation ();
 			else
 				completed = DoProcessEvent ();
@@ -3708,7 +3709,7 @@ namespace Mono.Debugger.Backend
 			return false;
 		}
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
 			string frame_text = "";
@@ -3720,9 +3721,9 @@ namespace Mono.Debugger.Backend
 				      sse, cevent, frame_text, this);
 
 			if ((StepMode == StepMode.Run) &&
-			    ((cevent.Type == Inferior.ChildEventType.CHILD_HIT_BREAKPOINT) ||
-			     (cevent.Type == Inferior.ChildEventType.CHILD_CALLBACK) ||
-			     (cevent.Type == Inferior.ChildEventType.RUNTIME_INVOKE_DONE))) {
+			    ((cevent.Type == DebuggerServer.ChildEventType.CHILD_HIT_BREAKPOINT) ||
+			     (cevent.Type == DebuggerServer.ChildEventType.CHILD_CALLBACK) ||
+			     (cevent.Type == DebuggerServer.ChildEventType.RUNTIME_INVOKE_DONE))) {
 				args = null;
 				return EventResult.Completed;
 			}
@@ -3769,7 +3770,7 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
 			Report.Debug (DebugFlags.EventLoop,
@@ -3778,12 +3779,12 @@ namespace Mono.Debugger.Backend
 				      ID, this);
 
 			args = null;
-			if ((cevent.Type == Inferior.ChildEventType.CHILD_STOPPED) &&
+			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) &&
 			    (cevent.Argument == 0)) {
 				sse.do_continue ();
 				return EventResult.Running;
-			} else if ((cevent.Type != Inferior.ChildEventType.CHILD_CALLBACK) &&
-				   (cevent.Type != Inferior.ChildEventType.RUNTIME_INVOKE_DONE)) {
+			} else if ((cevent.Type != DebuggerServer.ChildEventType.CHILD_CALLBACK) &&
+				   (cevent.Type != DebuggerServer.ChildEventType.RUNTIME_INVOKE_DONE)) {
 				Report.Debug (DebugFlags.SSE,
 					      "{0} aborting callback {1} ({2}) at {3}: {4}",
 					      sse, this, ID, inferior.CurrentFrame, cevent);
@@ -3836,7 +3837,7 @@ namespace Mono.Debugger.Backend
 	protected class OperationManagedCallback : Operation
 	{
 		ThreadLockData thread_lock;
-		Inferior.ChildEvent stop_event;
+		DebuggerServer.ChildEvent stop_event;
 
 		public Queue<ManagedCallbackData> CallbackFunctions {
 			get; private set;
@@ -3922,7 +3923,7 @@ namespace Mono.Debugger.Backend
 			return false;
 		}
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
 			Report.Debug (DebugFlags.SSE, "{0} managed callback process event: {1} {2} {3}",
@@ -4027,7 +4028,7 @@ namespace Mono.Debugger.Backend
 			return true;
 		}
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
 			Report.Debug (DebugFlags.SSE,
@@ -4036,7 +4037,7 @@ namespace Mono.Debugger.Backend
 
 			args = null;
 
-			if ((cevent.Type == Inferior.ChildEventType.CHILD_STOPPED) &&
+			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) &&
 			    (cevent.Argument == 0)) {
 				if (Debug && (inferior.CurrentFrame == helper.InvokeMethod)) {
 					if (NestedBreakStates)
@@ -4046,7 +4047,7 @@ namespace Mono.Debugger.Backend
 				}
 
 				goto resume_target;
-			} else if (cevent.Type == Inferior.ChildEventType.CHILD_HIT_BREAKPOINT) {
+			} else if (cevent.Type == DebuggerServer.ChildEventType.CHILD_HIT_BREAKPOINT) {
 				if (NestedBreakStates)
 					return EventResult.SuspendOperation;
 				if (Debug)
@@ -4398,11 +4399,11 @@ namespace Mono.Debugger.Backend
 				}
 			}
 
-			protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+			protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 								       out TargetEventArgs args)
 			{
-				if ((cevent.Type == Inferior.ChildEventType.CHILD_HIT_BREAKPOINT) ||
-				    ((cevent.Type == Inferior.ChildEventType.CHILD_STOPPED) &&
+				if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_HIT_BREAKPOINT) ||
+				    ((cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) &&
 				     (cevent.Argument == 0))) {
 					if (inferior.CurrentFrame == invoke) {
 						Report.Debug (DebugFlags.SSE,
@@ -4525,7 +4526,7 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
 			if (!interrupted_syscall)
@@ -4537,7 +4538,7 @@ namespace Mono.Debugger.Backend
 				      ID, this);
 
 			args = null;
-			if ((cevent.Type != Inferior.ChildEventType.CHILD_STOPPED) &&
+			if ((cevent.Type != DebuggerServer.ChildEventType.CHILD_STOPPED) &&
 			    (cevent.Argument != 0)) {
 				Report.Debug (DebugFlags.SSE,
 					      "{0} aborting callback {1} ({2}) at {3}: {4}",
@@ -4639,10 +4640,10 @@ namespace Mono.Debugger.Backend
 			sse.do_continue (code);
 		}
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
-			if ((cevent.Type == Inferior.ChildEventType.CHILD_NOTIFICATION) &&
+			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_NOTIFICATION) &&
 			    ((NotificationType) cevent.Argument == NotificationType.Trampoline)) {
 				TargetAddress info = new TargetAddress (
 					inferior.AddressDomain, cevent.Data1);
@@ -4662,7 +4663,7 @@ namespace Mono.Debugger.Backend
 				compiled = true;
 				TrampolineCompiled (method, code);
 				return EventResult.Running;
-			} else if ((cevent.Type == Inferior.ChildEventType.CHILD_NOTIFICATION) &&
+			} else if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_NOTIFICATION) &&
 				   ((NotificationType) cevent.Argument == NotificationType.OldTrampoline)) {
 				TargetAddress method = new TargetAddress (
 					inferior.AddressDomain, cevent.Data1);
@@ -4717,7 +4718,7 @@ namespace Mono.Debugger.Backend
 			sse.do_continue (Trampoline);
 		}
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
 			Report.Debug (DebugFlags.SSE,
@@ -4793,7 +4794,7 @@ namespace Mono.Debugger.Backend
 			sse.do_continue (ip);
 		}
 
-		protected override EventResult DoProcessEvent (Inferior.ChildEvent cevent,
+		protected override EventResult DoProcessEvent (DebuggerServer.ChildEvent cevent,
 							       out TargetEventArgs args)
 		{
 			Report.Debug (DebugFlags.SSE,
@@ -5117,16 +5118,16 @@ namespace Mono.Debugger.Backend
 
 		long callback_id;
 
-		public override EventResult ProcessEvent (Inferior.ChildEvent cevent,
+		public override EventResult ProcessEvent (DebuggerServer.ChildEvent cevent,
 							  out TargetEventArgs args)
 		{
-			if ((cevent.Type == Inferior.ChildEventType.CHILD_CALLBACK) ||
-			    (cevent.Type == Inferior.ChildEventType.RUNTIME_INVOKE_DONE)) {
+			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_CALLBACK) ||
+			    (cevent.Type == DebuggerServer.ChildEventType.RUNTIME_INVOKE_DONE)) {
 				if ((callback_id > 0) && (cevent.Argument == callback_id))
 					return CallbackCompleted (cevent.Data1, cevent.Data2, out args);
 			}
 
-			if ((cevent.Type == Inferior.ChildEventType.CHILD_STOPPED) && (cevent.Argument != 0)) {
+			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) && (cevent.Argument != 0)) {
 				sse.frame_changed (inferior.CurrentFrame, null);
 				args = new TargetEventArgs (TargetEventType.TargetStopped, (int) cevent.Argument, sse.current_frame);
 				return EventResult.SuspendOperation;

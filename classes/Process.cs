@@ -189,7 +189,7 @@ namespace Mono.Debugger
 
 			thread_hash = Hashtable.Synchronized (new Hashtable ());
 
-			target_info = Inferior.GetTargetInfo ();
+			target_info = manager.GetTargetInfo ();
 			if (target_info.TargetAddressSize == 8)
 				architecture = new Architecture_X86_64 (this, target_info);
 			else
@@ -209,7 +209,7 @@ namespace Mono.Debugger
 
 			symtab_manager = new SymbolTableManager (session);
 
-			os = Inferior.CreateOperatingSystemBackend (this);
+			os = manager.CreateOperatingSystemBackend (this);
 			native_language = new NativeLanguage (this, os, target_info);
 
 			session.OnProcessCreated (this);
@@ -246,7 +246,7 @@ namespace Mono.Debugger
 		}
 
 		public bool CanDetach {
-			get { return is_attached || Inferior.CanDetachAny; }
+			get { return is_attached || manager.CanDetachAny; }
 		}
 
 		public bool IsExeced {
@@ -404,7 +404,7 @@ namespace Mono.Debugger
 
 			symtab_manager = new SymbolTableManager (session);
 
-			os = Inferior.CreateOperatingSystemBackend (this);
+			os = manager.CreateOperatingSystemBackend (this);
 			native_language = new NativeLanguage (this, os, target_info);
 
 			Inferior new_inferior = Inferior.CreateInferior (manager, this, start);
@@ -553,7 +553,7 @@ namespace Mono.Debugger
 			foreach (int thread in threads) {
 				if (thread_hash.Contains (thread))
 					continue;
-				ThreadCreated (inferior, thread, Inferior.HasThreadEvents, resume_threads);
+				ThreadCreated (inferior, thread, manager.HasThreadEvents, resume_threads);
 			}
 
 			thread_db.GetThreadInfo (inferior, delegate (int lwp, long tid) {
@@ -630,7 +630,7 @@ namespace Mono.Debugger
 
 		public void Kill ()
 		{
-			if (!Inferior.HasThreadEvents) {
+			if (!manager.HasThreadEvents) {
 				SingleSteppingEngine[] sses = new SingleSteppingEngine [thread_hash.Count];
 				thread_hash.Values.CopyTo (sses, 0);
 				foreach (SingleSteppingEngine sse in sses)
@@ -834,7 +834,7 @@ namespace Mono.Debugger
 
 		internal void OperationCompleted (SingleSteppingEngine caller, TargetEventArgs result, ThreadingModel model)
 		{
-			if (!ThreadManager.InBackgroundThread && Inferior.HasThreadEvents)
+			if (!ThreadManager.InBackgroundThread && manager.HasThreadEvents)
 				throw new InternalError ();
 
 			if (current_state == ProcessState.Stopping)

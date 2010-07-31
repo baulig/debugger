@@ -3,6 +3,8 @@ using System.Threading;
 using System.Collections;
 using System.Runtime.InteropServices;
 
+using Mono.Debugger.Server;
+
 namespace Mono.Debugger.Backend
 {
 	internal class BreakpointManager : IDisposable
@@ -145,13 +147,13 @@ namespace Mono.Debugger.Backend
 
 				case EventType.WatchRead:
 					index = inferior.InsertHardwareWatchPoint (
-						address, Inferior.HardwareBreakpointType.READ,
+						address, DebuggerServer.HardwareBreakpointType.READ,
 						out dr_index);
 					break;
 
 				case EventType.WatchWrite:
 					index = inferior.InsertHardwareWatchPoint (
-						address, Inferior.HardwareBreakpointType.WRITE,
+						address, DebuggerServer.HardwareBreakpointType.WRITE,
 						out dr_index);
 					break;
 

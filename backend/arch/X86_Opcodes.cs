@@ -15,7 +15,7 @@ namespace Mono.Debugger.Architectures
 		{
 			this.process = process;
 
-			target_info = Inferior.GetTargetMemoryInfo (AddressDomain.Global);
+			target_info = process.ThreadManager.GetTargetMemoryInfo (AddressDomain.Global);
 			if (!Inferior.IsRunningOnWindows)
 				disassembler = new BfdDisassembler (null, Is64BitMode);
 		}

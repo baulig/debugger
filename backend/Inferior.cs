@@ -11,15 +11,12 @@ using System.Collections.Specialized;
 using System.Runtime.InteropServices;
 
 using Mono.Debugger.Languages;
+using Mono.Debugger.Server;
 
 namespace Mono.Debugger.Backend
 {
-	internal delegate void ChildOutputHandler (bool is_stderr, string output);
-
 	internal class Inferior : TargetAccess, ITargetNotification, IDisposable
 	{
-		protected IntPtr server_handle;
-		protected IntPtr io_data;
 		protected NativeExecutableReader exe;
 		protected ThreadManager thread_manager;
 
@@ -31,6 +28,9 @@ namespace Mono.Debugger.Backend
 		protected readonly AddressDomain address_domain;
 		protected readonly bool native;
 
+		DebuggerServer server;
+		DebuggerServer.InferiorHandle inferior;
+
 		int child_pid;
 		bool initialized;
 		bool has_target;
@@ -40,7 +40,7 @@ namespace Mono.Debugger.Backend
 		Architecture arch;
 
 		bool has_signals;
-		SignalInfo signal_info;
+		DebuggerServer.SignalInfo signal_info;
 
 		public static bool IsRunningOnWindows {
 			get {
@@ -61,251 +61,9 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_initialize_process (IntPtr handle);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_initialize_thread (IntPtr handle, int child_pid, bool wait);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_io_thread_main (IntPtr io_data, ChildOutputHandler output_handler);
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_spawn (IntPtr handle, string working_directory, string[] argv, string[] envp, bool redirect_fds, out int child_pid, out IntPtr io_data, out IntPtr error);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_attach (IntPtr handle, int child_pid);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_get_frame (IntPtr handle, out ServerStackFrame frame);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_current_insn_is_bpt (IntPtr handle, out int is_breakpoint);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_step (IntPtr handle);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_continue (IntPtr handle);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_resume (IntPtr handle);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_detach (IntPtr handle);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_finalize (IntPtr handle);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_read_memory (IntPtr handle, long start, int size, IntPtr data);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_write_memory (IntPtr handle, long start, int size, IntPtr data);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_get_target_info (out int target_int_size, out int target_long_size, out int target_address_size, out int is_bigendian);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_call_method (IntPtr handle, long method_address, long method_argument1, long method_argument2, long callback_argument);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_call_method_1 (IntPtr handle, long method_address, long method_argument, long data_argument, long data_argument2, string string_argument, long callback_argument);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_call_method_2 (IntPtr handle, long method_address, int data_size, IntPtr data, long callback_argument);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_call_method_3 (IntPtr handle, long method_address, long method_argument, long address_argument, int blob_size, IntPtr blob_data, long callback_argument);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_mark_rti_frame (IntPtr handle);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_abort_invoke (IntPtr handle, long rti_id);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_call_method_invoke (IntPtr handle, long invoke_method, long method_address, int num_params, int blob_size, IntPtr param_data, IntPtr offset_data, IntPtr blob_data, long callback_argument, bool debug);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_execute_instruction (IntPtr handle, IntPtr instruction, int insn_size, bool update_ip);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_insert_breakpoint (IntPtr handle, long address, out int breakpoint);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_insert_hw_breakpoint (IntPtr handle, HardwareBreakpointType type, out int index, long address, out int breakpoint);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_remove_breakpoint (IntPtr handle, int breakpoint);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_enable_breakpoint (IntPtr handle, int breakpoint);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_disable_breakpoint (IntPtr handle, int breakpoint);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_get_registers (IntPtr handle, IntPtr values);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_set_registers (IntPtr handle, IntPtr values);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_stop (IntPtr handle);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_stop_and_wait (IntPtr handle, out int status);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_set_signal (IntPtr handle, int signal, int send_it);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_get_pending_signal (IntPtr handle, out int signal);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_kill (IntPtr handle);
-
-		[DllImport("monodebuggerserver")]
-		static extern IntPtr mono_debugger_server_create_inferior (IntPtr breakpoint_manager);
-
-		[DllImport("monodebuggerserver")]
-		static extern ChildEventType mono_debugger_server_dispatch_event (IntPtr handle, int status, out long arg, out long data1, out long data2, out int opt_data_size, out IntPtr opt_data);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_get_signal_info (IntPtr handle, out IntPtr data);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_get_threads (IntPtr handle, out int count, out IntPtr data);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_get_application (IntPtr handle, out IntPtr exe_file, out IntPtr cwd, out int nargs, out IntPtr data);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_detach_after_fork (IntPtr handle);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_push_registers (IntPtr handle, out long new_rsp);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_pop_registers (IntPtr handle);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_get_callback_frame (IntPtr handle, long stack_pointer, bool exact_match, IntPtr info);
-
-		[DllImport("monodebuggerserver")]
-		static extern TargetError mono_debugger_server_restart_notification (IntPtr handle);
-
-		[DllImport("monodebuggerserver")]
-		static extern void mono_debugger_server_set_runtime_info (IntPtr handle, IntPtr mono_runtime_info);
-
-		[DllImport("monodebuggerserver")]
-		static extern ServerType mono_debugger_server_get_server_type ();
-
-		[DllImport("monodebuggerserver")]
-		static extern ServerCapabilities mono_debugger_server_get_capabilities ();
-
-		internal enum ChildEventType {
-			NONE = 0,
-			UNKNOWN_ERROR = 1,
-			CHILD_EXITED,
-			CHILD_STOPPED,
-			CHILD_SIGNALED,
-			CHILD_CALLBACK,
-			CHILD_CALLBACK_COMPLETED,
-			CHILD_HIT_BREAKPOINT,
-			CHILD_MEMORY_CHANGED,
-			CHILD_CREATED_THREAD,
-			CHILD_FORKED,
-			CHILD_EXECD,
-			CHILD_CALLED_EXIT,
-			CHILD_NOTIFICATION,
-			CHILD_INTERRUPTED,
-			RUNTIME_INVOKE_DONE,
-			INTERNAL_ERROR,
-
-			UNHANDLED_EXCEPTION	= 4001,
-			THROW_EXCEPTION,
-			HANDLE_EXCEPTION
-		}
-
-		internal enum HardwareBreakpointType {
-			NONE = 0,
-			EXECUTE,
-			READ,
-			WRITE
-		}
-
-		internal enum ServerType {
-			UNKNOWN = 0,
-			LINUX_PTRACE = 1,
-			DARWIN = 2,
-			WINDOWS = 3
-		}
-
-		internal enum ServerCapabilities {
-			NONE = 0,
-			THREAD_EVENTS = 1,
-			CAN_DETACH_ANY = 2
-		}
-
-		internal delegate void ChildEventHandler (ChildEventType message, int arg);
-
-		internal sealed class ChildEvent
-		{
-			public readonly ChildEventType Type;
-			public readonly long Argument;
-
-			public readonly long Data1;
-			public readonly long Data2;
-
-			public readonly byte[] CallbackData;
-
-			public ChildEvent (ChildEventType type, long arg, long data1, long data2)
-			{
-				this.Type = type;
-				this.Argument = arg;
-				this.Data1 = data1;
-				this.Data2 = data2;
-			}
-
-			public ChildEvent (ChildEventType type, long arg, long data1, long data2,
-					   byte[] callback_data)
-				: this (type, arg, data1, data2)
-			{
-				this.CallbackData = callback_data;
-			}
-
-			public override string ToString ()
-			{
-				return String.Format ("ChildEvent ({0}:{1}:{2:x}:{3:x})",
-						      Type, Argument, Data1, Data2);
-			}
-		}
-
-		[StructLayout(LayoutKind.Sequential)]
-		private struct SignalInfo
-		{
-			public int SIGKILL;
-			public int SIGSTOP;
-			public int SIGINT;
-			public int SIGCHLD;
-
-			public int SIGFPE;
-			public int SIGQUIT;
-			public int SIGABRT;
-			public int SIGSEGV;
-			public int SIGILL;
-			public int SIGBUS;
-			public int SIGWINCH;
-
-			public int Kernel_SIGRTMIN;
-			public int MonoThreadAbortSignal;
-
-			public override string ToString ()
-			{
-				return String.Format ("SignalInfo ({0}:{1}:{2}:{3}:{4} - {5})",
-						      SIGKILL, SIGSTOP, SIGINT, SIGCHLD, Kernel_SIGRTMIN,
-						      MonoThreadAbortSignal);
+		public DebuggerServer DebuggerServer {
+			get {
+				return server;
 			}
 		}
 
@@ -322,9 +80,8 @@ namespace Mono.Debugger.Backend
 			this.breakpoint_manager = bpm;
 			this.address_domain = address_domain;
 
-			server_handle = mono_debugger_server_create_inferior (breakpoint_manager.Manager);
-			if (server_handle == IntPtr.Zero)
-				throw new InternalError ("mono_debugger_server_initialize() failed.");
+			server = thread_manager.DebuggerServer;
+			inferior = server.CreateInferior (bpm);
 		}
 
 		public static Inferior CreateInferior (ThreadManager thread_manager,
@@ -377,9 +134,7 @@ namespace Mono.Debugger.Backend
 
 			TargetState old_state = change_target_state (TargetState.Busy);
 			try {
-				check_error (mono_debugger_server_call_method (
-					server_handle, method.Address, data1, data2,
-					callback_arg));
+				check_error (server.CallMethod (inferior, method.Address, data1, data2, callback_arg));
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -393,9 +148,7 @@ namespace Mono.Debugger.Backend
 
 			TargetState old_state = change_target_state (TargetState.Running);
 			try {
-				check_error (mono_debugger_server_call_method_1 (
-					server_handle, method.Address, arg1, arg2, arg3,
-					arg4, callback_arg));
+				check_error (server.CallMethod (inferior, method.Address, arg1, arg2, arg3, arg4, callback_arg));
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -408,24 +161,11 @@ namespace Mono.Debugger.Backend
 
 			TargetState old_state = change_target_state (TargetState.Running);
 
-			IntPtr data_ptr = IntPtr.Zero;
-			int data_size = data != null ? data.Length : 0;
-
 			try {
-				if (data != null) {
-					data_ptr = Marshal.AllocHGlobal (data_size);
-					Marshal.Copy (data, 0, data_ptr, data_size);
-				}
-
-				check_error (mono_debugger_server_call_method_2 (
-					server_handle, method.Address,
-					data_size, data_ptr, callback_arg));
+				check_error (server.CallMethod (inferior, method.Address, data, callback_arg));
 			} catch {
 				change_target_state (old_state);
 				throw;
-			} finally {
-				if (data_ptr != IntPtr.Zero)
-					Marshal.FreeHGlobal (data_ptr);
 			}
 		}
 
@@ -442,20 +182,8 @@ namespace Mono.Debugger.Backend
 			else
 				blob = obj.Location.ReadBuffer (this, obj.Type.Size);
 
-			IntPtr blob_data = IntPtr.Zero;
-			try {
-				if (blob != null) {
-					blob_data = Marshal.AllocHGlobal (blob.Length);
-					Marshal.Copy (blob, 0, blob_data, blob.Length);
-				}
-
-				check_error (mono_debugger_server_call_method_3 (
-					server_handle, method.Address, method_argument,
-					address, blob != null ? blob.Length : 0, blob_data, callback_arg));
-			} finally {
-				if (blob_data != IntPtr.Zero)
-					Marshal.FreeHGlobal (blob_data);
-			}
+			check_error (server.CallMethod (
+				inferior, method.Address, method_argument, address, blob, callback_arg));
 		}
 
 		public void RuntimeInvoke (TargetAddress invoke_method,
@@ -501,74 +229,41 @@ namespace Mono.Debugger.Backend
 				blob_size += blobs [i].Length;
 			}
 
-			IntPtr blob_data = IntPtr.Zero, param_data = IntPtr.Zero;
-			IntPtr offset_data = IntPtr.Zero;
-			try {
-				if (blob_size > 0) {
-					blob_data = Marshal.AllocHGlobal (blob_size);
-					Marshal.Copy (blob, 0, blob_data, blob_size);
-				}
-
-				param_data = Marshal.AllocHGlobal (length * 8);
-				Marshal.Copy (addresses, 0, param_data, length);
-
-				offset_data = Marshal.AllocHGlobal (length * 4);
-				Marshal.Copy (blob_offsets, 0, offset_data, length);
-
-				check_error (mono_debugger_server_call_method_invoke (
-					server_handle, invoke_method.Address, method_argument.Address,
-					length, blob_size, param_data, offset_data, blob_data,
-					callback_arg, debug));
-			} finally {
-				if (blob_data != IntPtr.Zero)
-					Marshal.FreeHGlobal (blob_data);
-				Marshal.FreeHGlobal (param_data);
-				Marshal.FreeHGlobal (offset_data);
-			}
+			check_error (server.RuntimeInvoke (
+				inferior, invoke_method.Address, method_argument.Address,
+				length, blob, blob_offsets, addresses, callback_arg, debug));
 		}
 
 		public void ExecuteInstruction (byte[] instruction, bool update_ip)
 		{
 			check_disposed ();
 
-			IntPtr data = IntPtr.Zero;
-			try {
-				data = Marshal.AllocHGlobal (instruction.Length);
-				Marshal.Copy (instruction, 0, data, instruction.Length);
-
-				check_error (mono_debugger_server_execute_instruction (
-					server_handle, data, instruction.Length, update_ip));
-			} finally {
-				Marshal.FreeHGlobal (data);
-			}
+			check_error (server.ExecuteInstruction (inferior, instruction, update_ip));
 		}
 
 		public void MarkRuntimeInvokeFrame ()
 		{
-			check_error (mono_debugger_server_mark_rti_frame (server_handle));
+			check_error (server.MarkRuntimeInvokeFrame (inferior));
 		}
 
 		public void AbortInvoke (long rti_id)
 		{
-			TargetError result = mono_debugger_server_abort_invoke (server_handle, rti_id);
-			check_error (result);
+			check_error (server.AbortInvoke (inferior, rti_id));
 		}
 
 		public int InsertBreakpoint (TargetAddress address)
 		{
 			int retval;
-			check_error (mono_debugger_server_insert_breakpoint (
-				server_handle, address.Address, out retval));
+			check_error (server.InsertBreakpoint (inferior, address.Address, out retval));
 			return retval;
 		}
 
-		public int InsertHardwareBreakpoint (TargetAddress address, bool fallback,
-						     out int index)
+		public int InsertHardwareBreakpoint (TargetAddress address, bool fallback, out int index)
 		{
 			int retval;
-			TargetError result = mono_debugger_server_insert_hw_breakpoint (
-				server_handle, HardwareBreakpointType.NONE, out index,
-				address.Address, out retval);
+			TargetError result = server.InsertHardwareBreakpoint (
+				inferior, DebuggerServer.HardwareBreakpointType.NONE,
+				out index, address.Address, out retval);
 			if (result == TargetError.None)
 				return retval;
 			else if (fallback &&
@@ -583,35 +278,31 @@ namespace Mono.Debugger.Backend
 
 		public void RemoveBreakpoint (int breakpoint)
 		{
-			check_error (mono_debugger_server_remove_breakpoint (
-				server_handle, breakpoint));
+			check_error (server.RemoveBreakpoint (inferior, breakpoint));
 		}
 
-		public int InsertHardwareWatchPoint (TargetAddress address,
-						     HardwareBreakpointType type,
+		public int InsertHardwareWatchPoint (TargetAddress address, DebuggerServer.HardwareBreakpointType type,
 						     out int index)
 		{
 			int retval;
-			check_error (mono_debugger_server_insert_hw_breakpoint (
-				server_handle, type, out index, address.Address, out retval));
+			check_error (server.InsertHardwareBreakpoint (
+				inferior, type, out index, address.Address, out retval));
 			return retval;
 		}
 
 		public void EnableBreakpoint (int breakpoint)
 		{
-			check_error (mono_debugger_server_enable_breakpoint (
-				server_handle, breakpoint));
+			check_error (server.EnableBreakpoint (inferior, breakpoint));
 		}
 
 		public void DisableBreakpoint (int breakpoint)
 		{
-			check_error (mono_debugger_server_disable_breakpoint (
-				server_handle, breakpoint));
+			check_error (server.DisableBreakpoint (inferior, breakpoint));
 		}
 
 		public void RestartNotification ()
 		{
-			check_error (mono_debugger_server_restart_notification (server_handle));
+			check_error (server.RestartNotification (inferior));
 		}
 
 		public ProcessStart ProcessStart {
@@ -626,11 +317,6 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		void io_thread_main ()
-		{
-			mono_debugger_server_io_thread_main (io_data, process.OnTargetOutput);
-		}
-
 		public int Run ()
 		{
 			if (has_target)
@@ -638,32 +324,26 @@ namespace Mono.Debugger.Backend
 
 			has_target = true;
 
-			IntPtr error;
+			string error;
 
 			string[] args = new string[start.CommandLineArguments.Length + 1];
 			Array.Copy(start.CommandLineArguments, args, start.CommandLineArguments.Length);
 			string[] env = new string[start.Environment.Length + 1];
 			Array.Copy(start.Environment, env, start.Environment.Length);
-			TargetError result = mono_debugger_server_spawn (
-				server_handle, start.WorkingDirectory, args,
-				env, start.RedirectOutput, out child_pid, out io_data, out error);
-			if (result != TargetError.None) {
-				string message = Marshal.PtrToStringAuto (error);
-				g_free (error);
 
-				throw new TargetException (
-					TargetError.CannotStartTarget, message);
-			}
+			TargetError result = server.Spawn (
+				inferior, start.WorkingDirectory, args, env, start.RedirectOutput,
+				out child_pid, out error,
+				delegate (bool is_stderr, string text) {
+					process.OnTargetOutput (is_stderr, text);
+				});
 
-			if (start.RedirectOutput) {
-				ST.Thread io_thread = new ST.Thread (new ST.ThreadStart (io_thread_main));
-				io_thread.IsBackground = true;
-				io_thread.Start ();
-			}
+			if (result != TargetError.None)
+				throw new TargetException (TargetError.CannotStartTarget, error);
 
 			initialized = true;
 
-			check_error (mono_debugger_server_initialize_process (server_handle));
+			check_error (server.InitializeProcess (inferior));
 
 			SetupInferior ();
 
@@ -681,7 +361,7 @@ namespace Mono.Debugger.Backend
 
 			bool pending_sigstop = process.ThreadManager.HasPendingSigstopForNewThread (pid);
 
-			check_error (mono_debugger_server_initialize_thread (server_handle, pid, !pending_sigstop));
+			check_error (server.InitializeThread (inferior, pid, !pending_sigstop));
 			this.child_pid = pid;
 
 			SetupInferior ();
@@ -696,7 +376,7 @@ namespace Mono.Debugger.Backend
 
 			initialized = true;
 
-			check_error (mono_debugger_server_initialize_thread (server_handle, pid, false));
+			check_error (server.InitializeThread (inferior, pid, false));
 			this.child_pid = pid;
 
 			string exe_file, cwd;
@@ -717,7 +397,7 @@ namespace Mono.Debugger.Backend
 
 			has_target = true;
 
-			check_error (mono_debugger_server_attach (server_handle, pid));
+			check_error (server.Attach (inferior, pid));
 			this.child_pid = pid;
 
 			string exe_file, cwd;
@@ -733,69 +413,41 @@ namespace Mono.Debugger.Backend
 			change_target_state (TargetState.Stopped, 0);
 		}
 
-		public ChildEvent ProcessEvent (int status)
+		public DebuggerServer.ChildEvent ProcessEvent (int status)
 		{
 			long arg, data1, data2;
-			ChildEventType message;
+			DebuggerServer.ChildEventType message;
 
 			int opt_data_size;
-			IntPtr opt_data;
+			byte[] opt_data;
 
-			message = mono_debugger_server_dispatch_event (
-				server_handle, status, out arg, out data1, out data2,
-				out opt_data_size, out opt_data);
+			message = server.DispatchEvent (
+				inferior, status, out arg, out data1, out data2, out opt_data);
 
 			switch (message) {
-			case ChildEventType.CHILD_EXITED:
-			case ChildEventType.CHILD_SIGNALED:
+			case DebuggerServer.ChildEventType.CHILD_EXITED:
+			case DebuggerServer.ChildEventType.CHILD_SIGNALED:
 				change_target_state (TargetState.Exited);
 				break;
 
-			case ChildEventType.CHILD_CALLBACK:
-			case ChildEventType.CHILD_CALLBACK_COMPLETED:
-			case ChildEventType.RUNTIME_INVOKE_DONE:
-			case ChildEventType.CHILD_STOPPED:
-			case ChildEventType.CHILD_INTERRUPTED:
-			case ChildEventType.CHILD_HIT_BREAKPOINT:
-			case ChildEventType.CHILD_NOTIFICATION:
+			case DebuggerServer.ChildEventType.CHILD_CALLBACK:
+			case DebuggerServer.ChildEventType.CHILD_CALLBACK_COMPLETED:
+			case DebuggerServer.ChildEventType.RUNTIME_INVOKE_DONE:
+			case DebuggerServer.ChildEventType.CHILD_STOPPED:
+			case DebuggerServer.ChildEventType.CHILD_INTERRUPTED:
+			case DebuggerServer.ChildEventType.CHILD_HIT_BREAKPOINT:
+			case DebuggerServer.ChildEventType.CHILD_NOTIFICATION:
 				change_target_state (TargetState.Stopped);
 				break;
 
-			case ChildEventType.CHILD_EXECD:
+			case DebuggerServer.ChildEventType.CHILD_EXECD:
 				break;
 			}
 
-			if (opt_data_size > 0) {
-				byte[] data = new byte [opt_data_size];
-				Marshal.Copy (opt_data, data, 0, opt_data_size);
-				g_free (opt_data);
+			if (opt_data != null)
+				return new DebuggerServer.ChildEvent (message, arg, data1, data2, opt_data);
 
-				return new ChildEvent (message, arg, data1, data2, data);
-			}
-
-			return new ChildEvent (message, arg, data1, data2);
-		}
-
-		public static TargetInfo GetTargetInfo ()
-		{
-			int target_int_size, target_long_size, target_addr_size, is_bigendian;
-			check_error (mono_debugger_server_get_target_info
-				(out target_int_size, out target_long_size,
-				 out target_addr_size, out is_bigendian));
-
-			return new TargetInfo (target_int_size, target_long_size,
-					       target_addr_size, is_bigendian != 0);
-		}
-
-		public static TargetMemoryInfo GetTargetMemoryInfo (AddressDomain domain)
-		{
-			int target_int_size, target_long_size, target_addr_size, is_bigendian;
-			check_error (mono_debugger_server_get_target_info
-				(out target_int_size, out target_long_size,
-				 out target_addr_size, out is_bigendian));
-
-			return new TargetMemoryInfo (target_int_size, target_long_size,
-						     target_addr_size, is_bigendian != 0, domain);
+			return new DebuggerServer.ChildEvent (message, arg, data1, data2);
 		}
 
 		public static string GetFileContents (string filename)
@@ -817,17 +469,13 @@ namespace Mono.Debugger.Backend
 		{
 			IntPtr data = IntPtr.Zero;
 			try {
-				check_error (mono_debugger_server_get_signal_info (
-						     server_handle, out data));
-
-				signal_info = (SignalInfo) Marshal.PtrToStructure (
-					data, typeof (SignalInfo));
+				check_error (server.GetSignalInfo (inferior, out signal_info));
 				has_signals = true;
 			} finally {
 				g_free (data);
 			}
 
-			target_info = GetTargetMemoryInfo (address_domain);
+			target_info = thread_manager.GetTargetMemoryInfo (address_domain);
 
 			try {
 				string cwd;
@@ -910,16 +558,13 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		IntPtr read_buffer (TargetAddress address, int size)
+		byte[] read_buffer (TargetAddress address, int size)
 		{
-			IntPtr data = Marshal.AllocHGlobal (size);
-			TargetError result = mono_debugger_server_read_memory (
-				server_handle, address.Address, size, data);
+			byte[] data;
+			TargetError result = server.ReadMemory (inferior, address.Address, size, out data);
 			if (result == TargetError.MemoryAccess) {
-				Marshal.FreeHGlobal (data);
 				throw new TargetMemoryException (address, size);
 			} else if (result != TargetError.None) {
-				Marshal.FreeHGlobal (data);
 				throw new TargetException (result);
 			}
 			return data;
@@ -930,51 +575,28 @@ namespace Mono.Debugger.Backend
 			check_disposed ();
 			if (size == 0)
 				return new byte [0];
-			IntPtr data = IntPtr.Zero;
-			try {
-				data = read_buffer (address, size);
-				byte[] retval = new byte [size];
-				Marshal.Copy (data, retval, 0, size);
-				return retval;
-			} finally {
-				Marshal.FreeHGlobal (data);
-			}
+			return read_buffer (address, size);
 		}
 
 		public override byte ReadByte (TargetAddress address)
 		{
 			check_disposed ();
-			IntPtr data = IntPtr.Zero;
-			try {
-				data = read_buffer (address, 1);
-				return Marshal.ReadByte (data);
-			} finally {
-				Marshal.FreeHGlobal (data);
-			}
+			var buffer = read_buffer (address, 1);
+			return buffer [0];
 		}
 
 		public override int ReadInteger (TargetAddress address)
 		{
 			check_disposed ();
-			IntPtr data = IntPtr.Zero;
-			try {
-				data = read_buffer (address, 4);
-				return Marshal.ReadInt32 (data);
-			} finally {
-				Marshal.FreeHGlobal (data);
-			}
+			var buffer = read_buffer (address, 4);
+			return BitConverter.ToInt32 (buffer, 0);
 		}
 
 		public override long ReadLongInteger (TargetAddress address)
 		{
 			check_disposed ();
-			IntPtr data = IntPtr.Zero;
-			try {
-				data = read_buffer (address, 8);
-				return Marshal.ReadInt64 (data);
-			} finally {
-				Marshal.FreeHGlobal (data);
-			}
+			var buffer = read_buffer (address, 8);
+			return BitConverter.ToInt64 (buffer, 0);
 		}
 
 		public override TargetAddress ReadAddress (TargetAddress address)
@@ -1033,66 +655,32 @@ namespace Mono.Debugger.Backend
 		public override void WriteBuffer (TargetAddress address, byte[] buffer)
 		{
 			check_disposed ();
-			IntPtr data = IntPtr.Zero;
-			try {
-				int size = buffer.Length;
-				data = Marshal.AllocHGlobal (size);
-				Marshal.Copy (buffer, 0, data, size);
-				check_error (mono_debugger_server_write_memory (
-					server_handle, address.Address, size, data));
-			} finally {
-				if (data != IntPtr.Zero)
-					Marshal.FreeHGlobal (data);
-				OnMemoryChanged ();
-			}
+			check_error (server.WriteMemory (inferior, address.Address, buffer));
+			OnMemoryChanged ();
 		}
 
 		public override void WriteByte (TargetAddress address, byte value)
 		{
 			check_disposed ();
-			IntPtr data = IntPtr.Zero;
-			try {
-				data = Marshal.AllocHGlobal (1);
-				Marshal.WriteByte (data, value);
-				check_error (mono_debugger_server_write_memory (
-					server_handle, address.Address, 1, data));
-			} finally {
-				if (data != IntPtr.Zero)
-					Marshal.FreeHGlobal (data);
-				OnMemoryChanged ();
-			}
+			var buffer = BitConverter.GetBytes (value);
+			check_error (server.WriteMemory (inferior, address.Address, buffer));
+			OnMemoryChanged ();
 		}
 
 		public override void WriteInteger (TargetAddress address, int value)
 		{
 			check_disposed ();
-			IntPtr data = IntPtr.Zero;
-			try {
-				data = Marshal.AllocHGlobal (4);
-				Marshal.WriteInt32 (data, value);
-				check_error (mono_debugger_server_write_memory (
-					server_handle, address.Address, 4, data));
-			} finally {
-				if (data != IntPtr.Zero)
-					Marshal.FreeHGlobal (data);
-				OnMemoryChanged ();
-			}
+			var buffer = BitConverter.GetBytes (value);
+			check_error (server.WriteMemory (inferior, address.Address, buffer));
+			OnMemoryChanged ();
 		}
 
 		public override void WriteLongInteger (TargetAddress address, long value)
 		{
 			check_disposed ();
-			IntPtr data = IntPtr.Zero;
-			try {
-				data = Marshal.AllocHGlobal (8);
-				Marshal.WriteInt64 (data, value);
-				check_error (mono_debugger_server_write_memory (
-					server_handle, address.Address, 8, data));
-			} finally {
-				if (data != IntPtr.Zero)
-					Marshal.FreeHGlobal (data);
-				OnMemoryChanged ();
-			}
+			var buffer = BitConverter.GetBytes (value);
+			check_error (server.WriteMemory (inferior, address.Address, buffer));
+			OnMemoryChanged ();
 		}
 
 		public override void WriteAddress (TargetAddress address, TargetAddress value)
@@ -1163,7 +751,7 @@ namespace Mono.Debugger.Backend
 
 			TargetState old_state = change_target_state (TargetState.Running);
 			try {
-				check_error (mono_debugger_server_step (server_handle));
+				check_error (server.Step (inferior));
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -1175,7 +763,7 @@ namespace Mono.Debugger.Backend
 			check_disposed ();
 			TargetState old_state = change_target_state (TargetState.Running);
 			try {
-				check_error (mono_debugger_server_continue (server_handle));
+				check_error (server.Continue (inferior));
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -1188,7 +776,7 @@ namespace Mono.Debugger.Backend
 
 			TargetState old_state = change_target_state (TargetState.Running);
 			try {
-				check_error (mono_debugger_server_resume (server_handle));
+				check_error (server.Resume (inferior));
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -1202,11 +790,11 @@ namespace Mono.Debugger.Backend
 		//   Note that the target may have stopped abnormally in the meantime, in
 		//   this case we return the corresponding ChildEvent.
 		// </summary>
-		public bool Stop (out ChildEvent new_event)
+		public bool Stop (out DebuggerServer.ChildEvent new_event)
 		{
 			check_disposed ();
 			int status;
-			TargetError error = mono_debugger_server_stop_and_wait (server_handle, out status);
+			TargetError error = server.StopAndWait (inferior, out status);
 			if (error != TargetError.None) {
 				new_event = null;
 				return false;
@@ -1227,7 +815,7 @@ namespace Mono.Debugger.Backend
 		public bool Stop ()
 		{
 			check_disposed ();
-			TargetError error = mono_debugger_server_stop (server_handle);
+			TargetError error = server.Stop (inferior);
 			if(error == TargetError.AlreadyStopped)
 				change_target_state (TargetState.Stopped);
 			return error == TargetError.None;
@@ -1237,14 +825,14 @@ namespace Mono.Debugger.Backend
 		{
 			check_disposed ();
 			int do_send = send_it ? 1 : 0;
-			check_error (mono_debugger_server_set_signal (server_handle, signal, do_send));
+			check_error (server.SetSignal (inferior, signal, do_send));
 		}
 
 		public int GetPendingSignal ()
 		{
 			int signal;
 			check_disposed ();
-			check_error (mono_debugger_server_get_pending_signal (server_handle, out signal));
+			check_error (server.GetPendingSignal (inferior, out signal));
 			return signal;
 		}
 
@@ -1252,24 +840,24 @@ namespace Mono.Debugger.Backend
 		{
 			check_disposed ();
 			if (pushed_regs)
-				mono_debugger_server_pop_registers (server_handle);
-			check_error (mono_debugger_server_detach (server_handle));
+				server.PopRegisters (inferior);
+			check_error (server.Detach (inferior));
 		}
 
 		public void Shutdown ()
 		{
-			mono_debugger_server_kill (server_handle);
+			server.Kill (inferior);
 		}
 
 		public void Kill ()
 		{
 			check_disposed ();
-			check_error (mono_debugger_server_kill (server_handle));
+			check_error (server.Kill (inferior));
 		}
 
 		public TargetAddress CurrentFrame {
 			get {
-				ServerStackFrame frame = get_current_frame ();
+				DebuggerServer.ServerStackFrame frame = get_current_frame ();
 				return new TargetAddress (AddressDomain, frame.Address);
 			}
 		}
@@ -1278,8 +866,7 @@ namespace Mono.Debugger.Backend
 			get {
 				check_disposed ();
 				int is_breakpoint;
-				TargetError result = mono_debugger_server_current_insn_is_bpt (
-					server_handle, out is_breakpoint);
+				TargetError result = server.CurrentInsnIsBpt (inferior, out is_breakpoint);
 				if (result != TargetError.None)
 					throw new TargetException (TargetError.NoStack);
 
@@ -1302,105 +889,50 @@ namespace Mono.Debugger.Backend
 
 		public override Registers GetRegisters ()
 		{
-			IntPtr buffer = IntPtr.Zero;
-			try {
-				int count = arch.CountRegisters;
-				int buffer_size = count * 8;
-				buffer = Marshal.AllocHGlobal (buffer_size);
-				TargetError result = mono_debugger_server_get_registers (
-					server_handle, buffer);
-				check_error (result);
-				long[] retval = new long [count];
-				Marshal.Copy (buffer, retval, 0, count);
-
-				return new Registers (arch, retval);
-			} finally {
-				if (buffer != IntPtr.Zero)
-					Marshal.FreeHGlobal (buffer);
-			}
+			long[] retval;
+			check_error (server.GetRegisters (inferior, out retval));
+			return new Registers (arch, retval);
 		}
 
 		public override void SetRegisters (Registers registers)
 		{
-			IntPtr buffer = IntPtr.Zero;
-			try {
-				int count = arch.CountRegisters;
+			int count = arch.CountRegisters;
 
-				Registers old_regs = GetRegisters ();
-				for (int i = 0; i < count; i++) {
-					if (registers [i] == null)
-						continue;
-					if (!registers [i].Valid)
-						registers [i].SetValue (old_regs [i].Value);
-				}
-
-				int buffer_size = count * 8;
-				buffer = Marshal.AllocHGlobal (buffer_size);
-				Marshal.Copy (registers.Values, 0, buffer, count);
-				TargetError result = mono_debugger_server_set_registers (
-					server_handle, buffer);
-				check_error (result);
-			} finally {
-				if (buffer != IntPtr.Zero)
-					Marshal.FreeHGlobal (buffer);
+			Registers old_regs = GetRegisters ();
+			for (int i = 0; i < count; i++) {
+				if (registers [i] == null)
+					continue;
+				if (!registers [i].Valid)
+					registers [i].SetValue (old_regs [i].Value);
 			}
+
+			check_error (server.SetRegisters (inferior, registers.Values));
 		}
 
 		public int[] GetThreads ()
 		{
-			IntPtr data = IntPtr.Zero;
-			try {
-				int count;
-				check_error (mono_debugger_server_get_threads (
-						     server_handle, out count, out data));
-
-				int[] threads = new int [count];
-				Marshal.Copy (data, threads, 0, count);
-				return threads;
-			} finally {
-				g_free (data);
-			}
+			int[] threads;
+			check_error (server.GetThreads (inferior, out threads));
+			return threads;
 		}
 
 		protected string GetApplication (out string cwd, out string[] cmdline_args)
 		{
-			IntPtr data = IntPtr.Zero;
-			IntPtr p_exe = IntPtr.Zero;
-			IntPtr p_cwd = IntPtr.Zero;
-			try {
-				int count;
-				string exe_file;
-				check_error (mono_debugger_server_get_application (
-						     server_handle, out p_exe, out p_cwd,
-						     out count, out data));
-
-				cmdline_args = new string [count];
-				exe_file = Marshal.PtrToStringAnsi (p_exe);
-				cwd = Marshal.PtrToStringAnsi (p_cwd);
-
-				for (int i = 0; i < count; i++) {
-					IntPtr ptr = Marshal.ReadIntPtr (data, i * IntPtr.Size);
-					cmdline_args [i] = Marshal.PtrToStringAnsi (ptr);
-				}
-
-				return exe_file;
-			} finally {
-				g_free (data);
-				g_free (p_exe);
-				g_free (p_cwd);
-			}
+			string exe_file;
+			check_error (server.GetApplication (inferior, out exe_file, out cwd, out cmdline_args));
+			return exe_file;
 		}
 
 		public void DetachAfterFork ()
 		{
-			mono_debugger_server_detach_after_fork (server_handle);
+			server.DetachAfterFork (inferior);
 			Dispose ();
 		}
 
 		public TargetAddress PushRegisters ()
 		{
 			long new_rsp;
-			check_error (mono_debugger_server_push_registers (server_handle, out new_rsp));
+			check_error (server.PushRegisters (inferior, out new_rsp));
 			pushed_regs = true;
 			return new TargetAddress (AddressDomain, new_rsp);
 		}
@@ -1408,27 +940,20 @@ namespace Mono.Debugger.Backend
 		public void PopRegisters ()
 		{
 			pushed_regs = false;
-			check_error (mono_debugger_server_pop_registers (server_handle));
+			check_error (server.PopRegisters (inferior));
 		}
 
 		internal CallbackFrame GetCallbackFrame (TargetAddress stack_pointer, bool exact_match)
 		{
-			IntPtr buffer = IntPtr.Zero;
-			try {
-				int count = arch.CountRegisters;
-				int buffer_size = 32 + count * 8;
-				buffer = Marshal.AllocHGlobal (buffer_size);
-				TargetError result = mono_debugger_server_get_callback_frame (
-					server_handle, stack_pointer.Address, exact_match, buffer);
-				if (result == TargetError.NoCallbackFrame)
-					return null;
-				check_error (result);
+			DebuggerServer.CallbackFrame cframe;
+			TargetError result = server.GetCallbackFrame (
+				inferior, stack_pointer.Address, exact_match, out cframe);
 
-				return new CallbackFrame (this, buffer);
-			} finally {
-				if (buffer != IntPtr.Zero)
-					Marshal.FreeHGlobal (buffer);
-			}
+			if (result == TargetError.NoCallbackFrame)
+				return null;
+			check_error (result);
+
+			return new CallbackFrame (this, cframe);
 		}
 
 		internal class CallbackFrame
@@ -1440,21 +965,16 @@ namespace Mono.Debugger.Backend
 			public readonly bool IsExactMatch;
 			public readonly Registers Registers;
 
-			public CallbackFrame (Inferior inferior, IntPtr data)
+			public CallbackFrame (Inferior inferior, DebuggerServer.CallbackFrame cframe)
 			{
-				ID = Marshal.ReadInt64 (data);
-				CallAddress = new TargetAddress (inferior.AddressDomain, Marshal.ReadInt64 (data, 8));
-				StackPointer = new TargetAddress (inferior.AddressDomain, Marshal.ReadInt64 (data, 16));
+				ID = cframe.ID;
+				CallAddress = new TargetAddress (inferior.AddressDomain, cframe.CallAddress);
+				StackPointer = new TargetAddress (inferior.AddressDomain, cframe.StackPointer);
 
-				int flags = Marshal.ReadInt32 (data, 24);
-				IsRuntimeInvokeFrame = (flags & 1) == 1;
-				IsExactMatch = (flags & 2) == 2;
+				IsRuntimeInvokeFrame = cframe.IsRuntimeInvokeFrame;
+				IsExactMatch = cframe.IsExactMatch;
 
-				long[] regs = new long [inferior.arch.CountRegisters];
-				for (int i = 0; i < regs.Length; i++)
-					regs [i] = Marshal.ReadInt64 (data, 32 + 8 * i);
-
-				Registers = new Registers (inferior.arch, regs);
+				Registers = new Registers (inferior.arch, cframe.Registers);
 			}
 
 			public override string ToString ()
@@ -1464,23 +984,16 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		internal void SetRuntimeInfo (IntPtr mono_runtime_info)
+		internal void SetRuntimeInfo (DebuggerServer.MonoRuntimeHandle runtime)
 		{
-			mono_debugger_server_set_runtime_info (server_handle, mono_runtime_info);
-		}
-
-		internal struct ServerStackFrame
-		{
-			public long Address;
-			public long StackPointer;
-			public long FrameAddress;
+			server.SetRuntimeInfo (inferior, runtime);
 		}
 
 		internal class StackFrame
 		{
 			TargetAddress address, stack, frame;
 
-			internal StackFrame (TargetMemoryInfo info, ServerStackFrame frame)
+			internal StackFrame (TargetMemoryInfo info, DebuggerServer.ServerStackFrame frame)
 			{
 				this.address = new TargetAddress (info.AddressDomain, frame.Address);
 				this.stack = new TargetAddress (info.AddressDomain, frame.StackPointer);
@@ -1514,20 +1027,19 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		ServerStackFrame get_current_frame ()
+		DebuggerServer.ServerStackFrame get_current_frame ()
 		{
 			check_disposed ();
-			ServerStackFrame frame;
-			TargetError result = mono_debugger_server_get_frame (server_handle, out frame);
-			check_error (result);
+			DebuggerServer.ServerStackFrame frame;
+			check_error (server.GetFrame (inferior, out frame));
 			return frame;
 		}
 
 		public StackFrame GetCurrentFrame (bool may_fail)
 		{
 			check_disposed ();
-			ServerStackFrame frame;
-			TargetError result = mono_debugger_server_get_frame (server_handle, out frame);
+			DebuggerServer.ServerStackFrame frame;
+			TargetError result = server.GetFrame (inferior, out frame);
 			if (result == TargetError.None)
 				return new StackFrame (target_info, frame);
 			else if (may_fail)
@@ -1699,44 +1211,6 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		public static bool HasThreadEvents {
-			get {
-				ServerCapabilities capabilities = mono_debugger_server_get_capabilities ();
-				return (capabilities & ServerCapabilities.THREAD_EVENTS) != 0;
-			}
-		}
-
-		//
-		// Whether we can detach from any target.
-		//
-		// Background:
-		//
-		// The Linux kernel allows detaching from any traced child, even if we did not
-		// previously attach to it.
-		//
-
-		public static bool CanDetachAny {
-			get {
-				ServerCapabilities capabilities = mono_debugger_server_get_capabilities ();
-				return (capabilities & ServerCapabilities.CAN_DETACH_ANY) != 0;
-			}
-		}
-
-		public static OperatingSystemBackend CreateOperatingSystemBackend (Process process)
-		{
-			ServerType type = mono_debugger_server_get_server_type ();
-			switch (type) {
-			case ServerType.LINUX_PTRACE:
-				return new LinuxOperatingSystem (process);
-			case ServerType.DARWIN:
-				return new DarwinOperatingSystem (process);
-			case ServerType.WINDOWS:
-				return new WindowsOperatingSystem (process);
-			default:
-				throw new NotSupportedException (String.Format ("Unknown server type {0}.", type));
-			}
-		}
-
 		//
 		// IDisposable
 		//
@@ -1759,9 +1233,9 @@ namespace Mono.Debugger.Backend
 
 				// Release unmanaged resources
 				lock (this) {
-					if (server_handle != IntPtr.Zero) {
-						mono_debugger_server_finalize (server_handle);
-						server_handle = IntPtr.Zero;
+					if (inferior != null) {
+						server.Finalize (inferior);
+						inferior = null;
 					}
 				}
 			}

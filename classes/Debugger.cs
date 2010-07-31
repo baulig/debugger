@@ -314,7 +314,7 @@ namespace Mono.Debugger
 				throw new InternalError ();
 
 			if ((model & ThreadingModel.ThreadingMode) == ThreadingModel.Default) {
-				if (Inferior.HasThreadEvents)
+				if (thread_manager.HasThreadEvents)
 					model |= ThreadingModel.Single;
 				else
 					model |= ThreadingModel.Process;

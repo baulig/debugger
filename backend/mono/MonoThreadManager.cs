@@ -12,6 +12,7 @@ using System.Collections.Specialized;
 using System.Runtime.InteropServices;
 
 using Mono.Debugger;
+using Mono.Debugger.Server;
 using Mono.Debugger.Languages;
 using Mono.Debugger.Languages.Mono;
 
@@ -104,7 +105,7 @@ namespace Mono.Debugger.Backend.Mono
 		}
 
 		AddressBreakpoint notification_bpt;
-		IntPtr mono_runtime_info;
+		DebuggerServer.MonoRuntimeHandle mono_runtime_info;
 		int debugger_version;
 		int thread_abort_signal;
 
@@ -113,28 +114,13 @@ namespace Mono.Debugger.Backend.Mono
 			private set;
 		}
 
-		[DllImport("monodebuggerserver")]
-		static extern IntPtr mono_debugger_server_initialize_mono_runtime (
-			int address_size, long notification_address,
-			long executable_code_buffer, int executable_code_buffer_size,
-			long breakpoint_info, long breakpoint_info_index,
-			int breakpoint_table_size);
-
-		[DllImport("monodebuggerserver")]
-		static extern void mono_debugger_server_finalize_mono_runtime (IntPtr handle);
-
-		[DllImport("monodebuggerserver")]
-		static extern void mono_debugger_server_initialize_code_buffer (
-			IntPtr runtime, long executable_code_buffer,
-			int executable_code_buffer_size);
-
 		protected void initialize_notifications (Inferior inferior)
 		{
 			TargetAddress executable_code_buffer = inferior.ReadAddress (
 				debugger_info.ExecutableCodeBuffer);
 			HasCodeBuffer = !executable_code_buffer.IsNull;
 
-			mono_runtime_info = mono_debugger_server_initialize_mono_runtime (
+			mono_runtime_info = inferior.DebuggerServer.InitializeMonoRuntime (
 				inferior.TargetAddressSize,
 				debugger_info.NotificationAddress.Address,
 				executable_code_buffer.Address,
@@ -160,7 +146,7 @@ namespace Mono.Debugger.Backend.Mono
 		internal void InitCodeBuffer (Inferior inferior, TargetAddress code_buffer)
 		{
 			HasCodeBuffer = true;
-			mono_debugger_server_initialize_code_buffer (
+			inferior.DebuggerServer.InitializeCodeBuffer (
 				mono_runtime_info, code_buffer.Address,
 				debugger_info.ExecutableCodeBufferSize);
 		}
@@ -232,7 +218,7 @@ namespace Mono.Debugger.Backend.Mono
 		Queue<ManagedCallbackData> managed_callbacks = new Queue<ManagedCallbackData> ();
 
 		internal bool CanExecuteCode {
-			get { return mono_runtime_info != IntPtr.Zero; }
+			get { return mono_runtime_info != null; }
 		}
 
 		internal MonoDebuggerInfo MonoDebuggerInfo {
@@ -242,7 +228,8 @@ namespace Mono.Debugger.Backend.Mono
 		int index;
 		internal void ThreadCreated (SingleSteppingEngine sse)
 		{
-			sse.Inferior.SetRuntimeInfo (mono_runtime_info);
+			if (mono_runtime_info != null)
+				sse.Inferior.SetRuntimeInfo (mono_runtime_info);
 			if (!MonoDebuggerInfo.CheckRuntimeVersion (81, 3) && !process.IsAttached) {
 				if (++index < 3)
 					sse.Thread.ThreadFlags |= Thread.Flags.Daemon | Thread.Flags.Immutable;
@@ -310,9 +297,9 @@ namespace Mono.Debugger.Backend.Mono
 		}
 
 		internal bool HandleChildEvent (SingleSteppingEngine engine, Inferior inferior,
-						ref Inferior.ChildEvent cevent, out bool resume_target)
+						ref DebuggerServer.ChildEvent cevent, out bool resume_target)
 		{
-			if (cevent.Type == Inferior.ChildEventType.CHILD_NOTIFICATION) {
+			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_NOTIFICATION) {
 				NotificationType type = (NotificationType) cevent.Argument;
 
 				Report.Debug (DebugFlags.EventLoop,
@@ -415,29 +402,29 @@ namespace Mono.Debugger.Backend.Mono
 					break;
 
 				case NotificationType.UnhandledException:
-					cevent = new Inferior.ChildEvent (
-						Inferior.ChildEventType.UNHANDLED_EXCEPTION,
+					cevent = new DebuggerServer.ChildEvent (
+						DebuggerServer.ChildEventType.UNHANDLED_EXCEPTION,
 						0, cevent.Data1, cevent.Data2);
 					resume_target = false;
 					return false;
 
 				case NotificationType.HandleException:
-					cevent = new Inferior.ChildEvent (
-						Inferior.ChildEventType.HANDLE_EXCEPTION,
+					cevent = new DebuggerServer.ChildEvent (
+						DebuggerServer.ChildEventType.HANDLE_EXCEPTION,
 						0, cevent.Data1, cevent.Data2);
 					resume_target = false;
 					return false;
 
 				case NotificationType.ThrowException:
-					cevent = new Inferior.ChildEvent (
-						Inferior.ChildEventType.THROW_EXCEPTION,
+					cevent = new DebuggerServer.ChildEvent (
+						DebuggerServer.ChildEventType.THROW_EXCEPTION,
 						0, cevent.Data1, cevent.Data2);
 					resume_target = false;
 					return false;
 
 				case NotificationType.FinalizeManagedCode:
-					mono_debugger_server_finalize_mono_runtime (mono_runtime_info);
-					mono_runtime_info = IntPtr.Zero;
+					inferior.DebuggerServer.FinalizeMonoRuntime (mono_runtime_info);
+					mono_runtime_info = null;
 					csharp_language = null;
 					break;
 
@@ -470,13 +457,13 @@ namespace Mono.Debugger.Backend.Mono
 				return true;
 			}
 
-			if ((cevent.Type == Inferior.ChildEventType.CHILD_STOPPED) &&
+			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) &&
 			    (cevent.Argument == thread_abort_signal)) {
 				resume_target = true;
 				return true;
 			}
 
-			if ((cevent.Type == Inferior.ChildEventType.CHILD_STOPPED) && (cevent.Argument != 0) && !
+			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) && (cevent.Argument != 0) && !
 			    engine.Process.Session.Config.StopOnManagedSignals) {
 				if (inferior.IsManagedSignal ((int) cevent.Argument)) {
 					resume_target = true;
