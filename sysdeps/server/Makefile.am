@@ -2,6 +2,8 @@ lib_LTLIBRARIES = libmonodebuggerserver.la
 
 noinst_LTLIBRARIES = libmonodebuggerbfdglue.la
 
+noinst_PROGRAMS = mdb-server
+
 libmonodebuggerbfdglue_la_SOURCES = \
 	bfdglue.c \
 	bfdglue.h
@@ -64,5 +66,16 @@ libmonodebuggerserver_la_SOURCES = \
 
 libmonodebuggerserver_la_LDFLAGS = \
 	 -no-undefined -export-dynamic -shared
+
+mdb_server_CPPFLAGS = @SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@
+
+mdb_server_SOURCES = \
+	mdb-server.c
+
+mdb_server_LDFLAGS = \
+	-static
+
+mdb_server_LDADD = \
+	libmonodebuggerserver.la
 
 CLEANFILES = lib*.a lib*.dll

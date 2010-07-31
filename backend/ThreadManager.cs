@@ -26,7 +26,8 @@ namespace Mono.Debugger.Backend
 		{
 			this.debugger = debugger;
 
-			debugger_server = new NativeDebuggerServer ();
+			// debugger_server = new NativeDebuggerServer ();
+			debugger_server = new RemoteDebuggerServer ();
 
 			thread_hash = Hashtable.Synchronized (new Hashtable ());
 			engine_hash = Hashtable.Synchronized (new Hashtable ());
