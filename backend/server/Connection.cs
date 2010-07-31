@@ -489,7 +489,7 @@ namespace Mono.Debugger.Server
 			return SendReceive (CommandSet.VM, (int)CmdVM.CREATE_INFERIOR, null).ReadInt ();
 		}
 
-		public void Spawn (int iid, string cwd, string[] argv)
+		public int Spawn (int iid, string cwd, string[] argv)
 		{
 			var writer = new PacketWriter ();
 			writer.WriteInt (iid);
@@ -503,6 +503,7 @@ namespace Mono.Debugger.Server
 				writer.WriteString (argv [i] ?? "dummy");
 			int pid = SendReceive (CommandSet.INFERIOR, (int)CmdInferior.SPAWN, writer).ReadInt ();
 			Console.WriteLine ("CHILD PID: {0}", pid);
+			return pid;
 		}
 
 		public void InitializeProcess (int iid)

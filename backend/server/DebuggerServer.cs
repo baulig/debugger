@@ -18,7 +18,7 @@ namespace Mono.Debugger.Server
 
 		public abstract InferiorHandle CreateInferior (BreakpointManager breakpoint_manager);
 
-		public abstract TargetError InitializeProcess (InferiorHandle inferior);
+		public abstract void InitializeProcess (InferiorHandle inferior);
 
 		public abstract TargetError InitializeThread (InferiorHandle inferior, int child_pid, bool wait);
 
@@ -138,9 +138,8 @@ namespace Mono.Debugger.Server
 
 		internal delegate void ChildOutputHandler (bool is_stderr, string output);
 
-		public abstract TargetError Spawn (InferiorHandle inferior, string working_dir, string[] argv, string[] envp,
-						   bool redirect_fds, out int child_pid, out string error,
-						   ChildOutputHandler output_handler);
+		public abstract int Spawn (InferiorHandle inferior, string working_dir, string[] argv, string[] envp,
+					   bool redirect_fds, ChildOutputHandler output_handler);
 
 		public abstract TargetError Attach (InferiorHandle inferior, int child_pid);
 
@@ -213,12 +212,12 @@ namespace Mono.Debugger.Server
 		public abstract ChildEventType DispatchEvent (InferiorHandle inferior, int status, out long arg,
 							      out long data1, out long data2, out byte[] opt_data);
 
-		public abstract TargetError GetSignalInfo (InferiorHandle inferior, out SignalInfo info);
+		public abstract SignalInfo GetSignalInfo (InferiorHandle inferior);
 
 		public abstract TargetError GetThreads (InferiorHandle inferior, out int[] threads);
 
-		public abstract TargetError GetApplication (InferiorHandle inferior, out string exe, out string cwd,
-							    out string[] cmdline_args);
+		public abstract string GetApplication (InferiorHandle inferior, out string cwd,
+						       out string[] cmdline_args);
 
 		public abstract TargetError DetachAfterFork (InferiorHandle inferior);
 

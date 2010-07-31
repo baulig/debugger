@@ -199,9 +199,9 @@ namespace Mono.Debugger.Server
 			return new NativeInferior (bpm, handle);
 		}
 
-		public override TargetError InitializeProcess (InferiorHandle inferior)
+		public override void InitializeProcess (InferiorHandle inferior)
 		{
-			return mono_debugger_server_initialize_process (((NativeInferior) inferior).Handle);
+			check_error (mono_debugger_server_initialize_process (((NativeInferior) inferior).Handle));
 		}
 
 		public override TargetError InitializeThread (InferiorHandle inferior, int child_pid, bool wait)
@@ -217,24 +217,22 @@ namespace Mono.Debugger.Server
 			throw new TargetException (error);
 		}
 
-		public override TargetError Spawn (InferiorHandle inferior, string working_dir, string[] argv, string[] envp,
-						   bool redirect_fds, out int child_pid, out string error,
-						   ChildOutputHandler output_handler)
+		public override int Spawn (InferiorHandle inferior, string working_dir, string[] argv, string[] envp,
+					   bool redirect_fds, ChildOutputHandler output_handler)
 		{
 			IntPtr error_ptr, io_data;
 
 			check_disposed ();
 
+			int child_pid;
 			TargetError result = mono_debugger_server_spawn (
 				((NativeInferior) inferior).Handle, working_dir, argv, envp, redirect_fds,
 				out child_pid, out io_data, out error_ptr);
 
 			if (result != TargetError.None) {
-				error = Marshal.PtrToStringAuto (error_ptr);
+				string error = Marshal.PtrToStringAuto (error_ptr);
 				g_free (error_ptr);
-				return result;
-			} else {
-				error = null;
+				throw new TargetException (result, error);
 			}
 
 			if (redirect_fds) {
@@ -245,7 +243,7 @@ namespace Mono.Debugger.Server
 				io_thread.Start ();
 			}
 
-			return result;
+			return child_pid;
 		}
 
 		public override TargetError Attach (InferiorHandle inferior, int child_pid)
@@ -609,15 +607,13 @@ namespace Mono.Debugger.Server
 			return message;
 		}
 
-		public override TargetError GetSignalInfo (InferiorHandle inferior, out SignalInfo info)
+		public override SignalInfo GetSignalInfo (InferiorHandle inferior)
 		{
 			check_disposed ();
 			IntPtr data = IntPtr.Zero;
 			try {
-				var result = mono_debugger_server_get_signal_info (((NativeInferior) inferior).Handle, out data);
-
-				info = (SignalInfo) Marshal.PtrToStructure (data, typeof (SignalInfo));
-				return result;
+				check_error (mono_debugger_server_get_signal_info (((NativeInferior) inferior).Handle, out data));
+				return (SignalInfo) Marshal.PtrToStructure (data, typeof (SignalInfo));
 			} finally {
 				g_free (data);
 			}
@@ -644,8 +640,8 @@ namespace Mono.Debugger.Server
 			}
 		}
 
-		public override TargetError GetApplication (InferiorHandle inferior, out string exe,
-							    out string cwd, out string[] cmdline_args)
+		public override string GetApplication (InferiorHandle inferior,
+						       out string cwd, out string[] cmdline_args)
 		{
 			check_disposed ();
 			IntPtr data = IntPtr.Zero;
@@ -654,18 +650,11 @@ namespace Mono.Debugger.Server
 			try {
 				int count;
 				string exe_file;
-				var result = mono_debugger_server_get_application (
-					((NativeInferior) inferior).Handle, out p_exe, out p_cwd, out count, out data);
-
-				if (result != TargetError.None) {
-					exe = null;
-					cwd = null;
-					cmdline_args = null;
-					return result;
-				}
+				check_error (mono_debugger_server_get_application (
+					((NativeInferior) inferior).Handle, out p_exe, out p_cwd, out count, out data));
 
 				cmdline_args = new string [count];
-				exe = Marshal.PtrToStringAnsi (p_exe);
+				exe_file = Marshal.PtrToStringAnsi (p_exe);
 				cwd = Marshal.PtrToStringAnsi (p_cwd);
 
 				for (int i = 0; i < count; i++) {
@@ -673,7 +662,7 @@ namespace Mono.Debugger.Server
 					cmdline_args [i] = Marshal.PtrToStringAnsi (ptr);
 				}
 
-				return result;
+				return exe_file;
 			} finally {
 				g_free (data);
 				g_free (p_exe);

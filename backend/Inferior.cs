@@ -331,19 +331,15 @@ namespace Mono.Debugger.Backend
 			string[] env = new string[start.Environment.Length + 1];
 			Array.Copy(start.Environment, env, start.Environment.Length);
 
-			TargetError result = server.Spawn (
+			child_pid = server.Spawn (
 				inferior, start.WorkingDirectory, args, env, start.RedirectOutput,
-				out child_pid, out error,
 				delegate (bool is_stderr, string text) {
 					process.OnTargetOutput (is_stderr, text);
 				});
 
-			if (result != TargetError.None)
-				throw new TargetException (TargetError.CannotStartTarget, error);
-
 			initialized = true;
 
-			check_error (server.InitializeProcess (inferior));
+			server.InitializeProcess (inferior);
 
 			SetupInferior ();
 
@@ -467,13 +463,8 @@ namespace Mono.Debugger.Backend
 
 		protected void SetupInferior ()
 		{
-			IntPtr data = IntPtr.Zero;
-			try {
-				check_error (server.GetSignalInfo (inferior, out signal_info));
-				has_signals = true;
-			} finally {
-				g_free (data);
-			}
+			signal_info = server.GetSignalInfo (inferior);
+			has_signals = true;
 
 			target_info = thread_manager.GetTargetMemoryInfo (address_domain);
 
@@ -918,9 +909,7 @@ namespace Mono.Debugger.Backend
 
 		protected string GetApplication (out string cwd, out string[] cmdline_args)
 		{
-			string exe_file;
-			check_error (server.GetApplication (inferior, out exe_file, out cwd, out cmdline_args));
-			return exe_file;
+			return server.GetApplication (inferior, out cwd, out cmdline_args);
 		}
 
 		public void DetachAfterFork ()

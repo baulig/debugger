@@ -36,10 +36,9 @@ namespace Mono.Debugger.Server
 			return new RemoteInferior (connection.CreateInferior ());
 		}
 
-		public override TargetError InitializeProcess (InferiorHandle inferior)
+		public override void InitializeProcess (InferiorHandle inferior)
 		{
 			connection.InitializeProcess (((RemoteInferior) inferior).IID);
-			return TargetError.None;
 		}
 
 		public override TargetError InitializeThread (InferiorHandle inferior, int child_pid, bool wait)
@@ -47,14 +46,10 @@ namespace Mono.Debugger.Server
 			throw new NotImplementedException ();
 		}
 
-		public override TargetError Spawn (InferiorHandle inferior, string working_dir, string[] argv, string[] envp,
-						   bool redirect_fds, out int child_pid, out string error,
-						   ChildOutputHandler output_handler)
+		public override int Spawn (InferiorHandle inferior, string working_dir, string[] argv, string[] envp,
+					   bool redirect_fds, ChildOutputHandler output_handler)
 		{
-			connection.Spawn (((RemoteInferior) inferior).IID, working_dir ?? Environment.CurrentDirectory, argv);
-			child_pid = -1;
-			error = null;
-			return TargetError.None;
+			return connection.Spawn (((RemoteInferior) inferior).IID, working_dir ?? Environment.CurrentDirectory, argv);
 		}
 
 		public override TargetError Attach (InferiorHandle inferior, int child_pid)
@@ -225,10 +220,9 @@ namespace Mono.Debugger.Server
 			throw new NotImplementedException ();
 		}
 
-		public override TargetError GetSignalInfo (InferiorHandle inferior, out SignalInfo info)
+		public override SignalInfo GetSignalInfo (InferiorHandle inferior)
 		{
-			info = connection.GetSignalInfo (((RemoteInferior) inferior).IID);
-			return TargetError.None;
+			return connection.GetSignalInfo (((RemoteInferior) inferior).IID);
 		}
 
 		public override TargetError GetThreads (InferiorHandle inferior, out int[] threads)
@@ -236,11 +230,10 @@ namespace Mono.Debugger.Server
 			throw new NotImplementedException ();
 		}
 
-		public override TargetError GetApplication (InferiorHandle inferior, out string exe, out string cwd,
-							    out string[] cmdline_args)
+		public override string GetApplication (InferiorHandle inferior, out string cwd,
+						       out string[] cmdline_args)
 		{
-			exe = connection.GetApplication (((RemoteInferior) inferior).IID, out cwd, out cmdline_args);
-			return TargetError.None;
+			return connection.GetApplication (((RemoteInferior) inferior).IID, out cwd, out cmdline_args);
 		}
 
 		public override TargetError DetachAfterFork (InferiorHandle inferior)
