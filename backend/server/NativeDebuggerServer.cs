@@ -252,10 +252,12 @@ namespace Mono.Debugger.Server
 			return mono_debugger_server_attach (((NativeInferior) inferior).Handle, child_pid);
 		}
 
-		public override TargetError GetFrame (InferiorHandle inferior, out ServerStackFrame frame)
+		public override ServerStackFrame GetFrame (InferiorHandle inferior)
 		{
 			check_disposed ();
-			return mono_debugger_server_get_frame (((NativeInferior) inferior).Handle, out frame);
+			ServerStackFrame frame;
+			check_error (mono_debugger_server_get_frame (((NativeInferior) inferior).Handle, out frame));
+			return frame;
 		}
 
 		public override TargetError CurrentInsnIsBpt (InferiorHandle inferior, out int is_breakpoint)

@@ -52,7 +52,8 @@ namespace Mono.Debugger.Server
 			SPAWN = 1,
 			INITIALIZE_PROCESS = 2,
 			GET_SIGNAL_INFO = 3,
-			GET_APPLICATION = 4
+			GET_APPLICATION = 4,
+			GET_FRAME = 5
 		}
 
 		class Header {
@@ -547,6 +548,17 @@ namespace Mono.Debugger.Server
 				cmdline_args [i] = reader.ReadString ();
 
 			return exe;
+		}
+
+		public DebuggerServer.ServerStackFrame GetFrame (int iid)
+		{
+			var reader = SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_FRAME, new PacketWriter ().WriteInt (iid));
+			DebuggerServer.ServerStackFrame frame;
+			frame.Address = reader.ReadLong ();
+			frame.StackPointer = reader.ReadLong ();
+			frame.FrameAddress = reader.ReadLong ();
+			Console.WriteLine ("GET FRAME: {0:x} {1:x} {2:x}", frame.Address, frame.StackPointer, frame.FrameAddress);
+			return frame;
 		}
 	}
 }

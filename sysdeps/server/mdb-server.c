@@ -30,7 +30,8 @@ typedef enum {
 	CMD_INFERIOR_SPAWN = 1,
 	CMD_INFERIOR_INIT_PROCESS = 2,
 	CMD_INFERIOR_GET_SIGNAL_INFO = 3,
-	CMD_INFERIOR_GET_APPLICATION = 4
+	CMD_INFERIOR_GET_APPLICATION = 4,
+	CMD_INFERIOR_GET_FRAME = 5
 } CmdInferior;
 
 typedef enum {
@@ -496,6 +497,21 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		g_free (exe_file);
 		g_free (cwd);
 		g_free (cmdline_args);
+
+		break;
+	}
+
+	case CMD_INFERIOR_GET_FRAME: {
+		ServerCommandError result;
+		StackFrame frame;
+
+		result = mono_debugger_server_get_frame (inferior, &frame);
+		if (result != COMMAND_ERROR_NONE)
+			return ERR_UNKNOWN_ERROR;
+
+		buffer_add_long (buf, frame.address);
+		buffer_add_long (buf, frame.stack_pointer);
+		buffer_add_long (buf, frame.frame_address);
 
 		break;
 	}

@@ -143,7 +143,7 @@ namespace Mono.Debugger.Server
 
 		public abstract TargetError Attach (InferiorHandle inferior, int child_pid);
 
-		public abstract TargetError GetFrame (InferiorHandle inferior, out ServerStackFrame frame);
+		public abstract ServerStackFrame GetFrame (InferiorHandle inferior);
 
 		public abstract TargetError CurrentInsnIsBpt (InferiorHandle inferior, out int is_breakpoint);
 

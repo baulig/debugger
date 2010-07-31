@@ -1019,22 +1019,20 @@ namespace Mono.Debugger.Backend
 		DebuggerServer.ServerStackFrame get_current_frame ()
 		{
 			check_disposed ();
-			DebuggerServer.ServerStackFrame frame;
-			check_error (server.GetFrame (inferior, out frame));
-			return frame;
+			return server.GetFrame (inferior);
 		}
 
 		public StackFrame GetCurrentFrame (bool may_fail)
 		{
 			check_disposed ();
-			DebuggerServer.ServerStackFrame frame;
-			TargetError result = server.GetFrame (inferior, out frame);
-			if (result == TargetError.None)
+			try {
+				var frame = server.GetFrame (inferior);
 				return new StackFrame (target_info, frame);
-			else if (may_fail)
-				return null;
-			else
-				throw new TargetException (result);
+			} catch {
+				if (may_fail)
+					return null;
+				throw;
+			}
 		}
 
 		public StackFrame GetCurrentFrame ()

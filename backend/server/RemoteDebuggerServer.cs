@@ -57,9 +57,9 @@ namespace Mono.Debugger.Server
 			throw new NotImplementedException ();
 		}
 
-		public override TargetError GetFrame (InferiorHandle inferior, out ServerStackFrame frame)
+		public override ServerStackFrame GetFrame (InferiorHandle inferior)
 		{
-			throw new NotImplementedException ();
+			return connection.GetFrame (((RemoteInferior) inferior).IID);
 		}
 
 		public override TargetError CurrentInsnIsBpt (InferiorHandle inferior, out int is_breakpoint)
@@ -161,7 +161,9 @@ namespace Mono.Debugger.Server
 		public override TargetError InsertHardwareBreakpoint (InferiorHandle inferior, HardwareBreakpointType type,
 								      out int index, long address, out int breakpoint)
 		{
-			throw new NotImplementedException ();
+			index = -1;
+			breakpoint = -1;
+			return TargetError.NotImplemented;
 		}
 
 		public override TargetError RemoveBreakpoint (InferiorHandle inferior, int breakpoint)
