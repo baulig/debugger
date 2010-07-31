@@ -209,6 +209,14 @@ namespace Mono.Debugger.Server
 			return mono_debugger_server_initialize_thread (((NativeInferior) inferior).Handle, child_pid, wait);
 		}
 
+		protected static void check_error (TargetError error)
+		{
+			if (error == TargetError.None)
+				return;
+
+			throw new TargetException (error);
+		}
+
 		public override TargetError Spawn (InferiorHandle inferior, string working_dir, string[] argv, string[] envp,
 						   bool redirect_fds, out int child_pid, out string error,
 						   ChildOutputHandler output_handler)
@@ -332,13 +340,16 @@ namespace Mono.Debugger.Server
 			}
 		}
 
-		public override TargetError GetTargetInfo (out int target_int_size, out int target_long_size,
-							   out int target_address_size, out int is_bigendian)
+		public override TargetInfo GetTargetInfo ()
 		{
 			check_disposed ();
-			return mono_debugger_server_get_target_info (
+			int target_int_size, target_long_size, target_addr_size, is_bigendian;
+			check_error (mono_debugger_server_get_target_info (
 				out target_int_size, out target_long_size,
-				 out target_address_size, out is_bigendian);
+				out target_addr_size, out is_bigendian));
+
+			return new TargetInfo (target_int_size, target_long_size,
+					       target_addr_size, is_bigendian != 0);
 		}
 
 		public override TargetError CallMethod (InferiorHandle inferior, long method_address,

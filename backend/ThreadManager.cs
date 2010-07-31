@@ -662,24 +662,12 @@ namespace Mono.Debugger.Backend
 
 		public TargetInfo GetTargetInfo ()
 		{
-			int target_int_size, target_long_size, target_addr_size, is_bigendian;
-			check_error (debugger_server.GetTargetInfo (
-				out target_int_size, out target_long_size,
-				out target_addr_size, out is_bigendian));
-
-			return new TargetInfo (target_int_size, target_long_size,
-					       target_addr_size, is_bigendian != 0);
+			return debugger_server.GetTargetInfo ();
 		}
 
 		public TargetMemoryInfo GetTargetMemoryInfo (AddressDomain domain)
 		{
-			int target_int_size, target_long_size, target_addr_size, is_bigendian;
-			check_error (debugger_server.GetTargetInfo (
-				out target_int_size, out target_long_size,
-				out target_addr_size, out is_bigendian));
-
-			return new TargetMemoryInfo (target_int_size, target_long_size,
-						     target_addr_size, is_bigendian != 0, domain);
+			return new TargetMemoryInfo (debugger_server.GetTargetInfo (), domain);
 		}
 
 		public bool HasThreadEvents {

@@ -41,7 +41,10 @@ namespace Mono.Debugger.Server
 		}
 
 		enum CmdVM {
-			SPAWN = 1,
+			GET_TARGET_INFO = 1,
+			GET_SERVER_TYPE = 2,
+			GET_CAPABILITIES = 3,
+			SPAWN = 4,
 		}
 
 		class Header {
@@ -466,5 +469,22 @@ namespace Mono.Debugger.Server
 			int pid = SendReceive (CommandSet.VM, (int)CmdVM.SPAWN, writer).ReadInt ();
 			Console.WriteLine ("CHILD PID: {0}", pid);
 		}
+
+		public TargetInfo GetTargetInfo ()
+		{
+			var reader = SendReceive (CommandSet.VM, (int)CmdVM.GET_TARGET_INFO, null);
+			return new TargetInfo (reader.ReadInt (), reader.ReadInt (), reader.ReadInt (), reader.ReadByte () != 0);
+		}
+
+		public DebuggerServer.ServerType GetServerType ()
+		{
+			return (DebuggerServer.ServerType) SendReceive (CommandSet.VM, (int)CmdVM.GET_SERVER_TYPE, null).ReadInt ();
+		}
+
+		public DebuggerServer.ServerCapabilities GetCapabilities ()
+		{
+			return (DebuggerServer.ServerCapabilities) SendReceive (CommandSet.VM, (int)CmdVM.GET_CAPABILITIES, null).ReadInt ();
+		}
+
 	}
 }

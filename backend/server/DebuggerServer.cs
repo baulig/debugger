@@ -162,8 +162,7 @@ namespace Mono.Debugger.Server
 
 		public abstract TargetError WriteMemory (InferiorHandle inferior, long start, byte[] buffer);
 
-		public abstract TargetError GetTargetInfo (out int target_int_size, out int target_long_size,
-							   out int target_address_size, out int is_bigendian);
+		public abstract TargetInfo GetTargetInfo ();
 
 		public abstract TargetError CallMethod (InferiorHandle inferior, long method_address, long arg1, long arg2,
 							long callback_arg);

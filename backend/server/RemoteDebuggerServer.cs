@@ -93,10 +93,10 @@ namespace Mono.Debugger.Server
 			throw new NotImplementedException ();
 		}
 
-		public override TargetError GetTargetInfo (out int target_int_size, out int target_long_size,
-							   out int target_address_size, out int is_bigendian)
+		public override TargetInfo GetTargetInfo ()
 		{
-			throw new NotImplementedException ();
+			check_disposed ();
+			return connection.GetTargetInfo ();
 		}
 
 		public override TargetError CallMethod (InferiorHandle inferior, long method_address, long arg1, long arg2,
@@ -250,12 +250,14 @@ namespace Mono.Debugger.Server
 
 		public override ServerType GetServerType ()
 		{
-			throw new NotImplementedException ();
+			check_disposed ();
+			return connection.GetServerType ();
 		}
 
 		public override ServerCapabilities GetCapabilities ()
 		{
-			throw new NotImplementedException ();
+			check_disposed ();
+			return connection.GetCapabilities ();
 		}
 
 		public override TargetError RestartNotification (InferiorHandle inferior)

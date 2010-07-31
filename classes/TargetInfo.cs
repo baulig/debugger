@@ -57,6 +57,13 @@ namespace Mono.Debugger
 			this.address_domain = domain;
 		}
 
+		internal TargetMemoryInfo (TargetInfo info, AddressDomain domain)
+			: base (info.TargetIntegerSize, info.TargetLongIntegerSize,
+				info.TargetAddressSize, info.IsBigEndian)
+		{
+			this.address_domain = domain;
+		}
+
 		AddressDomain address_domain;
 
 

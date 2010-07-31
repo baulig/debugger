@@ -19,7 +19,10 @@ typedef enum {
 } CommandSet;
 
 typedef enum {
-	CMD_VM_SPAWN = 1
+	CMD_VM_GET_TARGET_INFO = 1,
+	CMD_VM_GET_SERVER_TYPE = 2,
+	CMD_VM_GET_CAPABILITIES = 3,
+	CMD_VM_SPAWN = 4
 } CmdVM;
 
 typedef enum {
@@ -347,6 +350,33 @@ static ErrorCode
 vm_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 {
 	switch (command) {
+	case CMD_VM_GET_TARGET_INFO: {
+		ServerCommandError result;
+		guint32 int_size, long_size, addr_size, is_bigendian;
+
+		result = mono_debugger_server_get_target_info (
+			&int_size, &long_size, &addr_size, &is_bigendian);
+
+		if (result != COMMAND_ERROR_NONE)
+			return ERR_UNKNOWN_ERROR;
+
+		buffer_add_int (buf, int_size);
+		buffer_add_int (buf, long_size);
+		buffer_add_int (buf, addr_size);
+		buffer_add_byte (buf, is_bigendian != 0);
+		break;
+	}
+
+	case CMD_VM_GET_SERVER_TYPE: {
+		buffer_add_int (buf, mono_debugger_server_get_server_type ());
+		break;
+	}
+
+	case CMD_VM_GET_CAPABILITIES: {
+		buffer_add_int (buf, mono_debugger_server_get_capabilities ());
+		break;
+	}
+
 	case CMD_VM_SPAWN: {
 		ServerCommandError result;
 		char *cwd, **argv;
