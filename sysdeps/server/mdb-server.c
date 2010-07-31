@@ -15,20 +15,29 @@ static const char *handshake_msg = "9da91832-87f3-4cde-a92f-6384fec6536e";
 #define MINOR_VERSION
 
 typedef enum {
-	CMD_SET_VM = 1
+	CMD_SET_VM = 1,
+	CMD_SET_INFERIOR = 2
 } CommandSet;
 
 typedef enum {
 	CMD_VM_GET_TARGET_INFO = 1,
 	CMD_VM_GET_SERVER_TYPE = 2,
 	CMD_VM_GET_CAPABILITIES = 3,
-	CMD_VM_SPAWN = 4
+	CMD_VM_CREATE_INFERIOR = 4
 } CmdVM;
+
+typedef enum {
+	CMD_INFERIOR_SPAWN = 1,
+	CMD_INFERIOR_INIT_PROCESS = 2,
+	CMD_INFERIOR_GET_SIGNAL_INFO = 3,
+	CMD_INFERIOR_GET_APPLICATION = 4
+} CmdInferior;
 
 typedef enum {
 	ERR_NONE = 0,
 	ERR_UNKNOWN_ERROR = 1,
-	ERR_NOT_IMPLEMENTED = 2
+	ERR_NOT_IMPLEMENTED = 2,
+	ERR_NO_SUCH_INFERIOR = 3
 } ErrorCode;
 
 static gboolean main_loop_iteration (void);
@@ -37,7 +46,9 @@ volatile static int packet_id = 0;
 static int conn_fd = 0;
 
 static BreakpointManager *breakpoint_manager;
-static ServerHandle *server;
+
+static int next_unique_id = 0;
+static GHashTable *inferior_hash;
 
 /*
  * recv_length:
@@ -272,6 +283,8 @@ main (int argc, char *argv[])
 	socklen_t cli_len;
 	char buf[128];
 
+	inferior_hash = g_hash_table_new (NULL, NULL);
+
 	fd = socket (AF_INET, SOCK_STREAM, 0);
 	g_message (G_STRLOC ": %d", fd);
 
@@ -321,7 +334,6 @@ main (int argc, char *argv[])
 	g_message (G_STRLOC ": handshake ok");
 
 	breakpoint_manager = mono_debugger_breakpoint_manager_new ();
-	server = mono_debugger_server_create_inferior (breakpoint_manager);
 
 	/* 
 	 * Set TCP_NODELAY on the socket so the client receives events/command
@@ -377,9 +389,32 @@ vm_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 		break;
 	}
 
-	case CMD_VM_SPAWN: {
+	case CMD_VM_CREATE_INFERIOR: {
+		ServerHandle *inferior;
+		int iid;
+
+		iid = ++next_unique_id;
+		inferior = mono_debugger_server_create_inferior (breakpoint_manager);
+		g_hash_table_insert (inferior_hash, GUINT_TO_POINTER (iid), inferior);
+
+		buffer_add_int (buf, iid);
+		break;
+	}
+
+	default:
+		return ERR_NOT_IMPLEMENTED;
+	}
+
+	return ERR_NONE;
+}
+
+static ErrorCode
+inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint8 *end, Buffer *buf)
+{
+	switch (command) {
+	case CMD_INFERIOR_SPAWN: {
 		ServerCommandError result;
-		char *cwd, **argv;
+		char *cwd, **argv, *error;
 		int argc, i, child_pid;
 
 		cwd = decode_string (p, &p, end);
@@ -387,16 +422,15 @@ vm_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 
 		g_message (G_STRLOC ": spawn: %s - %d", cwd, argc);
 
-		argv = g_new0 (char *, argc);
-		for (i = 0; i < argc; i++) {
+		argv = g_new0 (char *, argc + 1);
+		for (i = 0; i < argc; i++)
 			argv [i] = decode_string (p, &p, end);
-			g_message (G_STRLOC ": arg[%d]: %s", i, argv [i]);
-		}
+		argv [argc] = NULL;
 
 		g_message (G_STRLOC);
 
-		result = mono_debugger_server_spawn (server, cwd, argv, NULL, FALSE, &child_pid, NULL, NULL);
-		g_message (G_STRLOC ": %d - %d", result, child_pid);
+		result = mono_debugger_server_spawn (inferior, cwd, argv, NULL, FALSE, &child_pid, NULL, &error);
+		g_message (G_STRLOC ": %d - %d - %s", result, child_pid, error);
 
 		if (result != COMMAND_ERROR_NONE)
 			return ERR_UNKNOWN_ERROR;
@@ -404,6 +438,68 @@ vm_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 		buffer_add_int (buf, child_pid);
 		break;
 	}
+
+	case CMD_INFERIOR_INIT_PROCESS: {
+		ServerCommandError result;
+
+		result = mono_debugger_server_initialize_process (inferior);
+		if (result != COMMAND_ERROR_NONE)
+			return ERR_UNKNOWN_ERROR;
+
+		break;
+	}
+
+	case CMD_INFERIOR_GET_SIGNAL_INFO: {
+		ServerCommandError result;
+		SignalInfo *sinfo;
+
+		result = mono_debugger_server_get_signal_info (inferior, &sinfo);
+		if (result != COMMAND_ERROR_NONE)
+			return ERR_UNKNOWN_ERROR;
+
+		buffer_add_int (buf, sinfo->sigkill);
+		buffer_add_int (buf, sinfo->sigstop);
+		buffer_add_int (buf, sinfo->sigint);
+		buffer_add_int (buf, sinfo->sigchld);
+		buffer_add_int (buf, sinfo->sigfpe);
+		buffer_add_int (buf, sinfo->sigquit);
+		buffer_add_int (buf, sinfo->sigabrt);
+		buffer_add_int (buf, sinfo->sigsegv);
+		buffer_add_int (buf, sinfo->sigill);
+		buffer_add_int (buf, sinfo->sigbus);
+		buffer_add_int (buf, sinfo->sigwinch);
+		buffer_add_int (buf, sinfo->kernel_sigrtmin);
+
+		g_free (sinfo);
+
+		break;
+	}
+
+	case CMD_INFERIOR_GET_APPLICATION: {
+		ServerCommandError result;
+		gchar *exe_file, *cwd, **cmdline_args;
+		guint32 nargs, i;
+
+		result = mono_debugger_server_get_application (
+			inferior, &exe_file, &cwd, &nargs, &cmdline_args);
+
+		if (result != COMMAND_ERROR_NONE)
+			return ERR_UNKNOWN_ERROR;
+
+		buffer_add_string (buf, exe_file);
+		buffer_add_string (buf, cwd);
+
+		buffer_add_int (buf, nargs);
+		for (i = 0; i < nargs; i++)
+			buffer_add_string (buf, cmdline_args [i]);
+
+		g_free (exe_file);
+		g_free (cwd);
+		g_free (cmdline_args);
+
+		break;
+	}
+
 
 	default:
 		return ERR_NOT_IMPLEMENTED;
@@ -461,6 +557,22 @@ main_loop_iteration (void)
 	case CMD_SET_VM:
 		err = vm_commands (command, id, p, end, &buf);
 		break;
+
+	case CMD_SET_INFERIOR: {
+		ServerHandle *inferior;
+		int iid;
+
+		iid = decode_int (p, &p, end);
+		inferior = g_hash_table_lookup (inferior_hash, GUINT_TO_POINTER (iid));
+
+		if (!inferior) {
+			err = ERR_NO_SUCH_INFERIOR;
+			break;
+		}
+
+		err = inferior_commands (command, id, inferior, p, end, &buf);
+		break;
+	}
 
 	default:
 		err = ERR_NOT_IMPLEMENTED;

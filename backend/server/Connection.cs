@@ -37,14 +37,22 @@ namespace Mono.Debugger.Server
 		}
 
 		enum CommandSet {
-			VM = 1
+			VM = 1,
+			INFERIOR = 2
 		}
 
 		enum CmdVM {
 			GET_TARGET_INFO = 1,
 			GET_SERVER_TYPE = 2,
 			GET_CAPABILITIES = 3,
-			SPAWN = 4,
+			CREATE_INFERIOR = 4
+		}
+
+		enum CmdInferior {
+			SPAWN = 1,
+			INITIALIZE_PROCESS = 2,
+			GET_SIGNAL_INFO = 3,
+			GET_APPLICATION = 4
 		}
 
 		class Header {
@@ -434,6 +442,7 @@ namespace Mono.Debugger.Server
 						reply_packets.Remove (packetId);
 						PacketReader r = new PacketReader (reply);
 						if (r.ErrorCode != 0) {
+							Console.WriteLine ("ERROR: {0}", r.ErrorCode);
 							throw new NotImplementedException ("No error handler set.");
 						} else {
 							return r;
@@ -459,17 +468,6 @@ namespace Mono.Debugger.Server
 			}
 		}
 
-		public void Spawn (string cwd, string[] argv)
-		{
-			var writer = new PacketWriter ();
-			writer.WriteString (cwd);
-			writer.WriteInt (argv.Length);
-			for (int i = 0; i < argv.Length; i++)
-				writer.WriteString (argv [i]);
-			int pid = SendReceive (CommandSet.VM, (int)CmdVM.SPAWN, writer).ReadInt ();
-			Console.WriteLine ("CHILD PID: {0}", pid);
-		}
-
 		public TargetInfo GetTargetInfo ()
 		{
 			var reader = SendReceive (CommandSet.VM, (int)CmdVM.GET_TARGET_INFO, null);
@@ -486,5 +484,68 @@ namespace Mono.Debugger.Server
 			return (DebuggerServer.ServerCapabilities) SendReceive (CommandSet.VM, (int)CmdVM.GET_CAPABILITIES, null).ReadInt ();
 		}
 
+		public int CreateInferior ()
+		{
+			return SendReceive (CommandSet.VM, (int)CmdVM.CREATE_INFERIOR, null).ReadInt ();
+		}
+
+		public void Spawn (int iid, string cwd, string[] argv)
+		{
+			var writer = new PacketWriter ();
+			writer.WriteInt (iid);
+			writer.WriteString (cwd);
+
+			int argc = argv.Length;
+			if (argv [argc-1] == null)
+				argc--;
+			writer.WriteInt (argc);
+			for (int i = 0; i < argc; i++)
+				writer.WriteString (argv [i] ?? "dummy");
+			int pid = SendReceive (CommandSet.INFERIOR, (int)CmdInferior.SPAWN, writer).ReadInt ();
+			Console.WriteLine ("CHILD PID: {0}", pid);
+		}
+
+		public void InitializeProcess (int iid)
+		{
+			SendReceive (CommandSet.VM, (int)CmdInferior.INITIALIZE_PROCESS, null);
+		}
+
+		public DebuggerServer.SignalInfo GetSignalInfo (int iid)
+		{
+			var reader = SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_SIGNAL_INFO, new PacketWriter ().WriteInt (iid));
+
+			DebuggerServer.SignalInfo sinfo;
+
+			sinfo.SIGKILL = reader.ReadInt();
+			sinfo.SIGSTOP = reader.ReadInt();
+			sinfo.SIGINT = reader.ReadInt();
+			sinfo.SIGCHLD = reader.ReadInt();
+			sinfo.SIGFPE = reader.ReadInt();
+			sinfo.SIGQUIT = reader.ReadInt();
+			sinfo.SIGABRT = reader.ReadInt();
+			sinfo.SIGSEGV = reader.ReadInt();
+			sinfo.SIGILL = reader.ReadInt();
+			sinfo.SIGBUS = reader.ReadInt();
+			sinfo.SIGWINCH = reader.ReadInt();
+			sinfo.Kernel_SIGRTMIN = reader.ReadInt();
+			sinfo.MonoThreadAbortSignal = -1;
+
+			return sinfo;
+		}
+
+		public string GetApplication (int iid, out string cwd, out string[] cmdline_args)
+		{
+			var reader = SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_APPLICATION, new PacketWriter ().WriteInt (iid));
+
+			string exe = reader.ReadString ();
+			cwd = reader.ReadString ();
+
+			int nargs = reader.ReadInt ();
+			cmdline_args = new string [nargs];
+			for (int i = 0; i < nargs; i++)
+				cmdline_args [i] = reader.ReadString ();
+
+			return exe;
+		}
 	}
 }

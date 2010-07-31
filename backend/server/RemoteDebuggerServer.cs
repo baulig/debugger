@@ -21,14 +21,25 @@ namespace Mono.Debugger.Server
 			connection.Connect ();
 		}
 
+		class RemoteInferior : InferiorHandle
+		{
+			public readonly int IID;
+
+			public RemoteInferior (int iid)
+			{
+				this.IID = iid;
+			}
+		}
+
 		public override InferiorHandle CreateInferior (BreakpointManager breakpoint_manager)
 		{
-			throw new NotImplementedException ();
+			return new RemoteInferior (connection.CreateInferior ());
 		}
 
 		public override TargetError InitializeProcess (InferiorHandle inferior)
 		{
-			throw new NotImplementedException ();
+			connection.InitializeProcess (((RemoteInferior) inferior).IID);
+			return TargetError.None;
 		}
 
 		public override TargetError InitializeThread (InferiorHandle inferior, int child_pid, bool wait)
@@ -40,7 +51,10 @@ namespace Mono.Debugger.Server
 						   bool redirect_fds, out int child_pid, out string error,
 						   ChildOutputHandler output_handler)
 		{
-			throw new NotImplementedException ();
+			connection.Spawn (((RemoteInferior) inferior).IID, working_dir ?? Environment.CurrentDirectory, argv);
+			child_pid = -1;
+			error = null;
+			return TargetError.None;
 		}
 
 		public override TargetError Attach (InferiorHandle inferior, int child_pid)
@@ -213,7 +227,8 @@ namespace Mono.Debugger.Server
 
 		public override TargetError GetSignalInfo (InferiorHandle inferior, out SignalInfo info)
 		{
-			throw new NotImplementedException ();
+			info = connection.GetSignalInfo (((RemoteInferior) inferior).IID);
+			return TargetError.None;
 		}
 
 		public override TargetError GetThreads (InferiorHandle inferior, out int[] threads)
@@ -224,7 +239,8 @@ namespace Mono.Debugger.Server
 		public override TargetError GetApplication (InferiorHandle inferior, out string exe, out string cwd,
 							    out string[] cmdline_args)
 		{
-			throw new NotImplementedException ();
+			exe = connection.GetApplication (((RemoteInferior) inferior).IID, out cwd, out cmdline_args);
+			return TargetError.None;
 		}
 
 		public override TargetError DetachAfterFork (InferiorHandle inferior)
