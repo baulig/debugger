@@ -1633,6 +1633,13 @@ static int resume_from_imports_table (int flag)
 }
 
 static ServerCommandError
+server_win32_count_registers (InferiorHandle *inferior, guint32 *out_count)
+{
+	*out_count = -1;
+	return COMMAND_ERROR_NOT_IMPLEMENTED;
+}
+
+static ServerCommandError
 server_win32_get_registers (ServerHandle *handle, guint64 *values) 
 {
 	return COMMAND_ERROR_NONE;
@@ -2416,6 +2423,7 @@ InferiorVTable i386_windows_inferior = {
 	NULL,					 			/*enable_breakpoint, */
 	NULL,					 			/*disable_breakpoint, */
 	server_win32_get_breakpoints,		/*get_breakpoints, */
+	server_win32_count_registers,								/*count_registers, */
 	server_win32_get_registers,					 			/*get_registers, */
 	server_win32_set_registers,					 			/*set_registers, */
 	NULL,					 			/*stop, */

@@ -366,6 +366,15 @@ mono_debugger_server_disable_breakpoint (ServerHandle *handle, guint32 breakpoin
 }
 
 ServerCommandError
+mono_debugger_server_count_registers (ServerHandle *handle, guint32 *out_count_regs)
+{
+	if (!global_vtable->count_registers)
+		return COMMAND_ERROR_NOT_IMPLEMENTED;
+
+	return (* global_vtable->count_registers) (handle, out_count_regs);
+}
+
+ServerCommandError
 mono_debugger_server_get_registers (ServerHandle *handle, guint64 *values)
 {
 	if (!global_vtable->get_registers)

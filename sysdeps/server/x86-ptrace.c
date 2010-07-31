@@ -350,7 +350,8 @@ server_ptrace_spawn (ServerHandle *handle, const gchar *working_directory,
 	int fd[2], ret, len, i;
 	ServerCommandError result;
 
-	*error = NULL;
+	if (error)
+		*error = NULL;
 	inferior->redirect_fds = redirect_fds;
 
 	if (redirect_fds) {
@@ -361,7 +362,8 @@ server_ptrace_spawn (ServerHandle *handle, const gchar *working_directory,
 		(*io_data)->output_fd = inferior->output_fd[0];
 		(*io_data)->error_fd = inferior->error_fd[0];
 	} else {
-		*io_data = NULL;
+		if (io_data)
+			*io_data = NULL;
 	}
 
 	pipe (fd);
@@ -400,7 +402,8 @@ server_ptrace_spawn (ServerHandle *handle, const gchar *working_directory,
 		close (fd [0]);
 		close (fd [1]);
 
-		*error = g_strdup_printf ("fork() failed: %s", g_strerror (errno));
+		if (error)
+			*error = g_strdup_printf ("fork() failed: %s", g_strerror (errno));
 		return COMMAND_ERROR_CANNOT_START_TARGET;
 	}
 
@@ -415,8 +418,10 @@ server_ptrace_spawn (ServerHandle *handle, const gchar *working_directory,
 	if (ret != 0) {
 		g_assert (ret == 4);
 
-		*error = g_malloc0 (len);
-		read (fd [0], *error, len);
+		if (error) {
+			*error = g_malloc0 (len);
+			read (fd [0], *error, len);
+		}
 		close (fd [0]);
 		if (redirect_fds) {
 			close (inferior->output_fd[0]);
@@ -597,6 +602,13 @@ extern void GC_end_blocking (void);
 #error "Unknown architecture"
 #endif
 
+static ServerCommandError
+server_ptrace_count_registers (InferiorHandle *inferior, guint32 *out_count)
+{
+	*out_count = DEBUGGER_REG_LAST;
+	return COMMAND_ERROR_NONE;
+}
+
 InferiorVTable i386_ptrace_inferior = {
 	server_ptrace_global_init,
 	server_ptrace_get_server_type,
@@ -637,6 +649,7 @@ InferiorVTable i386_ptrace_inferior = {
 	server_ptrace_enable_breakpoint,
 	server_ptrace_disable_breakpoint,
 	server_ptrace_get_breakpoints,
+	server_ptrace_count_registers,
 	server_ptrace_get_registers,
 	server_ptrace_set_registers,
 	server_ptrace_stop,

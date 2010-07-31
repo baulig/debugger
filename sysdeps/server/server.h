@@ -377,6 +377,10 @@ struct InferiorVTable {
 						       guint32          *count,
 						       guint32         **breakpoints);
 
+	ServerCommandError    (* count_registers)     (ServerHandle     *handle,
+						       guint32          *out_count_regs);
+
+
 	/*
 	 * Get processor registers.
 	 *
@@ -629,6 +633,10 @@ mono_debugger_server_enable_breakpoint   (ServerHandle        *handle,
 ServerCommandError
 mono_debugger_server_disable_breakpoint  (ServerHandle        *handle,
 					  guint32              breakpoint);
+
+ServerCommandError
+mono_debugger_server_count_registers     (ServerHandle        *handle,
+					  guint32             *out_count_regs);
 
 ServerCommandError
 mono_debugger_server_get_registers       (ServerHandle        *handle,
