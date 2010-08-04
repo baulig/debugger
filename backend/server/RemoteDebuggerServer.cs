@@ -14,11 +14,33 @@ namespace Mono.Debugger.Server
 	internal class RemoteDebuggerServer : DebuggerServer
 	{
 		Connection connection;
+		RemoteThreadManager manager;
 
-		public RemoteDebuggerServer ()
+		public RemoteDebuggerServer (Debugger debugger)
 		{
-			connection = new Connection ();
+			manager = new RemoteThreadManager (debugger, this);
+
+			connection = new Connection (handle_event);
+
 			connection.Connect ();
+		}
+
+		void handle_event (Connection.EventInfo e)
+		{
+			Console.WriteLine ("EVENT: {0} {1}", e.EventKind, e.ReqId);
+
+			switch (e.EventKind) {
+			case Connection.EventKind.TARGET_EVENT:
+				Console.WriteLine ("TARGET EVENT: {0}", e.ChildEvent);
+				manager.OnTargetEvent (e.ReqId, e.ChildEvent);
+				break;
+			default:
+				throw new InternalError ();
+			}
+		}
+
+		internal Connection Connection {
+			get { return connection; }
 		}
 
 		class RemoteInferior : InferiorHandle
@@ -31,9 +53,19 @@ namespace Mono.Debugger.Server
 			}
 		}
 
+		public override ThreadManager ThreadManager {
+			get { return manager; }
+		}
+
+		public override BreakpointManager CreateBreakpointManager ()
+		{
+			return new RemoteBreakpointManager (this);
+		}
+
 		public override InferiorHandle CreateInferior (BreakpointManager breakpoint_manager)
 		{
-			return new RemoteInferior (connection.CreateInferior ());
+			var bpm = (RemoteBreakpointManager) breakpoint_manager;
+			return new RemoteInferior (connection.CreateInferior (bpm.IID));
 		}
 
 		public override void InitializeProcess (InferiorHandle inferior)
@@ -67,19 +99,19 @@ namespace Mono.Debugger.Server
 			throw new NotImplementedException ();
 		}
 
-		public override TargetError Step (InferiorHandle inferior)
+		public override void Step (InferiorHandle inferior)
 		{
-			throw new NotImplementedException ();
+			connection.Step (((RemoteInferior) inferior).IID);
 		}
 
-		public override TargetError Continue (InferiorHandle inferior)
+		public override void Continue (InferiorHandle inferior)
 		{
-			throw new NotImplementedException ();
+			connection.Continue (((RemoteInferior) inferior).IID);
 		}
 
-		public override TargetError Resume (InferiorHandle inferior)
+		public override void Resume (InferiorHandle inferior)
 		{
-			throw new NotImplementedException ();
+			connection.Resume (((RemoteInferior) inferior).IID);
 		}
 
 		public override TargetError Detach (InferiorHandle inferior)
@@ -92,14 +124,14 @@ namespace Mono.Debugger.Server
 			throw new NotImplementedException ();
 		}
 
-		public override TargetError ReadMemory (InferiorHandle inferior, long address, int size, out byte[] buffer)
+		public override byte[] ReadMemory (InferiorHandle inferior, long address, int size)
 		{
-			throw new NotImplementedException ();
+			return connection.ReadMemory (((RemoteInferior) inferior).IID, address, size);
 		}
 
-		public override TargetError WriteMemory (InferiorHandle inferior, long start, byte[] buffer)
+		public override void WriteMemory (InferiorHandle inferior, long start, byte[] buffer)
 		{
-			throw new NotImplementedException ();
+			connection.WriteMemory (((RemoteInferior) inferior).IID, start, buffer);
 		}
 
 		public override TargetInfo GetTargetInfo ()
@@ -153,9 +185,9 @@ namespace Mono.Debugger.Server
 			throw new NotImplementedException ();
 		}
 
-		public override TargetError InsertBreakpoint (InferiorHandle inferior, long address, out int breakpoint)
+		public override int InsertBreakpoint (InferiorHandle inferior, long address)
 		{
-			throw new NotImplementedException ();
+			return connection.InsertBreakpoint (((RemoteInferior) inferior).IID, address);
 		}
 
 		public override TargetError InsertHardwareBreakpoint (InferiorHandle inferior, HardwareBreakpointType type,
@@ -166,24 +198,24 @@ namespace Mono.Debugger.Server
 			return TargetError.NotImplemented;
 		}
 
-		public override TargetError RemoveBreakpoint (InferiorHandle inferior, int breakpoint)
+		public override void RemoveBreakpoint (InferiorHandle inferior, int breakpoint)
 		{
-			throw new NotImplementedException ();
+			connection.RemoveBreakpoint (((RemoteInferior) inferior).IID, breakpoint);
 		}
 
-		public override TargetError EnableBreakpoint (InferiorHandle inferior, int breakpoint)
+		public override void EnableBreakpoint (InferiorHandle inferior, int breakpoint)
 		{
-			throw new NotImplementedException ();
+			connection.EnableBreakpoint (((RemoteInferior) inferior).IID, breakpoint);
 		}
 
-		public override TargetError DisableBreakpoint (InferiorHandle inferior, int breakpoint)
+		public override void DisableBreakpoint (InferiorHandle inferior, int breakpoint)
 		{
-			throw new NotImplementedException ();
+			connection.DisableBreakpoint (((RemoteInferior) inferior).IID, breakpoint);
 		}
 
-		public override TargetError GetRegisters (InferiorHandle inferior, out long[] registers)
+		public override long[] GetRegisters (InferiorHandle inferior)
 		{
-			throw new NotImplementedException ();
+			return connection.GetRegisters (((RemoteInferior) inferior).IID);
 		}
 
 		public override TargetError SetRegisters (InferiorHandle inferior, long[] registers)
@@ -201,14 +233,14 @@ namespace Mono.Debugger.Server
 			throw new NotImplementedException ();
 		}
 
-		public override TargetError SetSignal (InferiorHandle inferior, int signal, int send_it)
+		public override void SetSignal (InferiorHandle inferior, int signal, bool send_it)
 		{
-			throw new NotImplementedException ();
+			connection.SetSignal (((RemoteInferior) inferior).IID, signal, send_it);
 		}
 
-		public override TargetError GetPendingSignal (InferiorHandle inferior, out int signal)
+		public override int GetPendingSignal (InferiorHandle inferior)
 		{
-			throw new NotImplementedException ();
+			return connection.GetPendingSignal (((RemoteInferior) inferior).IID);
 		}
 
 		public override TargetError Kill (InferiorHandle inferior)
@@ -256,7 +288,8 @@ namespace Mono.Debugger.Server
 		public override TargetError GetCallbackFrame (InferiorHandle inferior, long stack_pointer, bool exact_match,
 							      out CallbackFrame info)
 		{
-			throw new NotImplementedException ();
+			info = null;
+			return TargetError.NoCallbackFrame;
 		}
 
 		public override ServerType GetServerType ()

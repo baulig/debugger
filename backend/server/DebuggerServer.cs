@@ -16,6 +16,12 @@ namespace Mono.Debugger.Server
 		internal abstract class InferiorHandle
 		{ }
 
+		public abstract ThreadManager ThreadManager {
+			get;
+		}
+
+		public abstract BreakpointManager CreateBreakpointManager ();
+
 		public abstract InferiorHandle CreateInferior (BreakpointManager breakpoint_manager);
 
 		public abstract void InitializeProcess (InferiorHandle inferior);
@@ -147,19 +153,19 @@ namespace Mono.Debugger.Server
 
 		public abstract TargetError CurrentInsnIsBpt (InferiorHandle inferior, out int is_breakpoint);
 
-		public abstract TargetError Step (InferiorHandle inferior);
+		public abstract void Step (InferiorHandle inferior);
 
-		public abstract TargetError Continue (InferiorHandle inferior);
+		public abstract void Continue (InferiorHandle inferior);
 
-		public abstract TargetError Resume (InferiorHandle inferior);
+		public abstract void Resume (InferiorHandle inferior);
 
 		public abstract TargetError Detach (InferiorHandle inferior);
 
 		public abstract TargetError Finalize (InferiorHandle inferior);
 
-		public abstract TargetError ReadMemory (InferiorHandle inferior, long address, int size, out byte[] buffer);
+		public abstract byte[] ReadMemory (InferiorHandle inferior, long address, int size);
 
-		public abstract TargetError WriteMemory (InferiorHandle inferior, long start, byte[] buffer);
+		public abstract void WriteMemory (InferiorHandle inferior, long start, byte[] buffer);
 
 		public abstract TargetInfo GetTargetInfo ();
 
@@ -184,18 +190,18 @@ namespace Mono.Debugger.Server
 
 		public abstract TargetError ExecuteInstruction (InferiorHandle inferior, byte[] instruction, bool update_ip);
 
-		public abstract TargetError InsertBreakpoint (InferiorHandle inferior, long address, out int breakpoint);
+		public abstract int InsertBreakpoint (InferiorHandle inferior, long address);
 
 		public abstract TargetError InsertHardwareBreakpoint (InferiorHandle inferior, HardwareBreakpointType type,
 								      out int index, long address, out int breakpoint);
 
-		public abstract TargetError RemoveBreakpoint (InferiorHandle inferior, int breakpoint);
+		public abstract void RemoveBreakpoint (InferiorHandle inferior, int breakpoint);
 
-		public abstract TargetError EnableBreakpoint (InferiorHandle inferior, int breakpoint);
+		public abstract void EnableBreakpoint (InferiorHandle inferior, int breakpoint);
 
-		public abstract TargetError DisableBreakpoint (InferiorHandle inferior, int breakpoint);
+		public abstract void DisableBreakpoint (InferiorHandle inferior, int breakpoint);
 
-		public abstract TargetError GetRegisters (InferiorHandle inferior, out long[] registers);
+		public abstract long[] GetRegisters (InferiorHandle inferior);
 
 		public abstract TargetError SetRegisters (InferiorHandle inferior, long[] registers);
 
@@ -203,9 +209,9 @@ namespace Mono.Debugger.Server
 
 		public abstract TargetError StopAndWait (InferiorHandle inferior, out int status);
 
-		public abstract TargetError SetSignal (InferiorHandle inferior, int signal, int send_it);
+		public abstract void SetSignal (InferiorHandle inferior, int signal, bool send_it);
 
-		public abstract TargetError GetPendingSignal (InferiorHandle inferior, out int signal);
+		public abstract int GetPendingSignal (InferiorHandle inferior);
 
 		public abstract TargetError Kill (InferiorHandle inferior);
 

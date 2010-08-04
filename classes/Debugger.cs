@@ -11,6 +11,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Remoting;
 
 using Mono.Debugger.Backend;
+using Mono.Debugger.Server;
 using Mono.Debugger.Languages;
 using Mono.Debugger.Languages.Mono;
 
@@ -24,6 +25,7 @@ namespace Mono.Debugger
 	{
 		ManualResetEvent kill_event;
 		DebuggerConfiguration config;
+		DebuggerServer server;
 		ThreadManager thread_manager;
 		Hashtable process_hash;
 		Process main_process;
@@ -39,7 +41,10 @@ namespace Mono.Debugger
 
 			kill_event = new ManualResetEvent (false);
 
-			thread_manager = new ThreadManager (this);
+			// server = new NativeDebuggerServer ();
+			server = new RemoteDebuggerServer (this);
+
+			thread_manager = server.ThreadManager;
 			process_hash = Hashtable.Synchronized (new Hashtable ());
 			stopped_event = new ManualResetEvent (false);
 			operation_host = new MyOperationHost (this);

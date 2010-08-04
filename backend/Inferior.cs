@@ -116,9 +116,6 @@ namespace Mono.Debugger.Backend
 			return inferior;
 		}
 
-		[DllImport("libglib-2.0-0.dll")]
-		protected extern static void g_free (IntPtr data);
-
 		protected static void check_error (TargetError error)
 		{
 			if (error == TargetError.None)
@@ -253,9 +250,7 @@ namespace Mono.Debugger.Backend
 
 		public int InsertBreakpoint (TargetAddress address)
 		{
-			int retval;
-			check_error (server.InsertBreakpoint (inferior, address.Address, out retval));
-			return retval;
+			return server.InsertBreakpoint (inferior, address.Address);
 		}
 
 		public int InsertHardwareBreakpoint (TargetAddress address, bool fallback, out int index)
@@ -278,7 +273,7 @@ namespace Mono.Debugger.Backend
 
 		public void RemoveBreakpoint (int breakpoint)
 		{
-			check_error (server.RemoveBreakpoint (inferior, breakpoint));
+			server.RemoveBreakpoint (inferior, breakpoint);
 		}
 
 		public int InsertHardwareWatchPoint (TargetAddress address, DebuggerServer.HardwareBreakpointType type,
@@ -292,12 +287,12 @@ namespace Mono.Debugger.Backend
 
 		public void EnableBreakpoint (int breakpoint)
 		{
-			check_error (server.EnableBreakpoint (inferior, breakpoint));
+			server.EnableBreakpoint (inferior, breakpoint);
 		}
 
 		public void DisableBreakpoint (int breakpoint)
 		{
-			check_error (server.DisableBreakpoint (inferior, breakpoint));
+			server.DisableBreakpoint (inferior, breakpoint);
 		}
 
 		public void RestartNotification ()
@@ -355,7 +350,7 @@ namespace Mono.Debugger.Backend
 
 			initialized = true;
 
-			bool pending_sigstop = process.ThreadManager.HasPendingSigstopForNewThread (pid);
+			bool pending_sigstop = process.ThreadManager.GetPendingSigstopForNewThread (pid);
 
 			check_error (server.InitializeThread (inferior, pid, !pending_sigstop));
 			this.child_pid = pid;
@@ -551,14 +546,7 @@ namespace Mono.Debugger.Backend
 
 		byte[] read_buffer (TargetAddress address, int size)
 		{
-			byte[] data;
-			TargetError result = server.ReadMemory (inferior, address.Address, size, out data);
-			if (result == TargetError.MemoryAccess) {
-				throw new TargetMemoryException (address, size);
-			} else if (result != TargetError.None) {
-				throw new TargetException (result);
-			}
-			return data;
+			return server.ReadMemory (inferior, address.Address, size);
 		}
 
 		public override byte[] ReadBuffer (TargetAddress address, int size)
@@ -646,7 +634,7 @@ namespace Mono.Debugger.Backend
 		public override void WriteBuffer (TargetAddress address, byte[] buffer)
 		{
 			check_disposed ();
-			check_error (server.WriteMemory (inferior, address.Address, buffer));
+			server.WriteMemory (inferior, address.Address, buffer);
 			OnMemoryChanged ();
 		}
 
@@ -654,7 +642,7 @@ namespace Mono.Debugger.Backend
 		{
 			check_disposed ();
 			var buffer = BitConverter.GetBytes (value);
-			check_error (server.WriteMemory (inferior, address.Address, buffer));
+			server.WriteMemory (inferior, address.Address, buffer);
 			OnMemoryChanged ();
 		}
 
@@ -662,7 +650,7 @@ namespace Mono.Debugger.Backend
 		{
 			check_disposed ();
 			var buffer = BitConverter.GetBytes (value);
-			check_error (server.WriteMemory (inferior, address.Address, buffer));
+			server.WriteMemory (inferior, address.Address, buffer);
 			OnMemoryChanged ();
 		}
 
@@ -670,7 +658,7 @@ namespace Mono.Debugger.Backend
 		{
 			check_disposed ();
 			var buffer = BitConverter.GetBytes (value);
-			check_error (server.WriteMemory (inferior, address.Address, buffer));
+			server.WriteMemory (inferior, address.Address, buffer);
 			OnMemoryChanged ();
 		}
 
@@ -742,7 +730,7 @@ namespace Mono.Debugger.Backend
 
 			TargetState old_state = change_target_state (TargetState.Running);
 			try {
-				check_error (server.Step (inferior));
+				server.Step (inferior);
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -754,7 +742,7 @@ namespace Mono.Debugger.Backend
 			check_disposed ();
 			TargetState old_state = change_target_state (TargetState.Running);
 			try {
-				check_error (server.Continue (inferior));
+				server.Continue (inferior);
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -767,7 +755,7 @@ namespace Mono.Debugger.Backend
 
 			TargetState old_state = change_target_state (TargetState.Running);
 			try {
-				check_error (server.Resume (inferior));
+				server.Resume (inferior);
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -815,16 +803,13 @@ namespace Mono.Debugger.Backend
 		public void SetSignal (int signal, bool send_it)
 		{
 			check_disposed ();
-			int do_send = send_it ? 1 : 0;
-			check_error (server.SetSignal (inferior, signal, do_send));
+			server.SetSignal (inferior, signal, send_it);
 		}
 
 		public int GetPendingSignal ()
 		{
-			int signal;
 			check_disposed ();
-			check_error (server.GetPendingSignal (inferior, out signal));
-			return signal;
+			return server.GetPendingSignal (inferior);
 		}
 
 		public void Detach ()
@@ -880,9 +865,7 @@ namespace Mono.Debugger.Backend
 
 		public override Registers GetRegisters ()
 		{
-			long[] retval;
-			check_error (server.GetRegisters (inferior, out retval));
-			return new Registers (arch, retval);
+			return new Registers (arch, server.GetRegisters (inferior));
 		}
 
 		public override void SetRegisters (Registers registers)

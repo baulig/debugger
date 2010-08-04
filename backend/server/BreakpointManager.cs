@@ -1,128 +1,57 @@
 using System;
 using System.Threading;
 using System.Collections;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-using Mono.Debugger.Server;
+using Mono.Debugger.Backend;
 
-namespace Mono.Debugger.Backend
+namespace Mono.Debugger.Server
 {
-	internal class BreakpointManager : IDisposable
+	internal abstract class BreakpointManager : IDisposable
 	{
-		IntPtr _manager;
-		Hashtable index_hash;
+		protected Dictionary<int,BreakpointEntry> bpt_by_index;
 
-		[DllImport("monodebuggerserver")]
-		static extern IntPtr mono_debugger_breakpoint_manager_new ();
-
-		[DllImport("monodebuggerserver")]
-		static extern IntPtr mono_debugger_breakpoint_manager_clone (IntPtr manager);
-
-		[DllImport("monodebuggerserver")]
-		static extern void mono_debugger_breakpoint_manager_free (IntPtr manager);
-
-		[DllImport("monodebuggerserver")]
-		static extern IntPtr mono_debugger_breakpoint_manager_lookup (IntPtr manager, long address);
-
-		[DllImport("monodebuggerserver")]
-		static extern IntPtr mono_debugger_breakpoint_manager_lookup_by_id (IntPtr manager, int id);
-
-		[DllImport("monodebuggerserver")]
-		static extern void mono_debugger_breakpoint_manager_lock ();
-
-		[DllImport("monodebuggerserver")]
-		static extern void mono_debugger_breakpoint_manager_unlock ();
-
-		[DllImport("monodebuggerserver")]
-		static extern int mono_debugger_breakpoint_info_get_id (IntPtr info);
-
-		[DllImport("monodebuggerserver")]
-		static extern bool mono_debugger_breakpoint_info_get_is_enabled (IntPtr info);
-
-		public BreakpointManager ()
+		protected BreakpointManager ()
 		{
-			index_hash = new Hashtable ();
-			_manager = mono_debugger_breakpoint_manager_new ();
+			bpt_by_index = new Dictionary<int,BreakpointEntry> ();
 		}
 
-		public BreakpointManager (BreakpointManager old)
+		protected BreakpointManager (BreakpointManager old)
 		{
-			Lock ();
-
-			index_hash = new Hashtable ();
-			_manager = mono_debugger_breakpoint_manager_clone (old.Manager);
-
-			foreach (int index in old.index_hash.Keys) {
-				BreakpointEntry entry = (BreakpointEntry) old.index_hash [index];
-				index_hash.Add (index, entry);
-			}
-
-			Unlock ();
-		}
-
-		protected void Lock ()
-		{
-			mono_debugger_breakpoint_manager_lock ();
-		}
-
-		protected void Unlock ()
-		{
-			mono_debugger_breakpoint_manager_unlock ();
-		}
-
-		internal IntPtr Manager {
-			get { return _manager; }
-		}
-
-		public BreakpointHandle LookupBreakpoint (TargetAddress address,
-							  out int index, out bool is_enabled)
-		{
-			Lock ();
-			try {
-				IntPtr info = mono_debugger_breakpoint_manager_lookup (
-					_manager, address.Address);
-				if (info == IntPtr.Zero) {
-					index = 0;
-					is_enabled = false;
-					return null;
-				}
-
-				index = mono_debugger_breakpoint_info_get_id (info);
-				is_enabled = mono_debugger_breakpoint_info_get_is_enabled (info);
-				if (!index_hash.Contains (index))
-					return null;
-				return ((BreakpointEntry) index_hash [index]).Handle;
-			} finally {
-				Unlock ();
+			foreach (int index in old.bpt_by_index.Keys) {
+				bpt_by_index.Add (index, old.bpt_by_index [index]);
 			}
 		}
+
+		protected virtual void Lock ()
+		{
+			Monitor.Enter (this);
+		}
+
+		protected virtual void Unlock ()
+		{
+			Monitor.Exit (this);
+		}
+
+		public abstract BreakpointManager Clone ();
+
+		public abstract BreakpointHandle LookupBreakpoint (TargetAddress address,
+								  out int index, out bool is_enabled);
 
 		public BreakpointHandle LookupBreakpoint (int index)
 		{
 			Lock ();
 			try {
-				if (!index_hash.Contains (index))
+				if (!bpt_by_index.ContainsKey (index))
 					return null;
-				return ((BreakpointEntry) index_hash [index]).Handle;
+				return bpt_by_index [index].Handle;
 			} finally {
 				Unlock ();
 			}
 		}
 
-		public bool IsBreakpointEnabled (int breakpoint)
-		{
-			Lock ();
-			try {
-				IntPtr info = mono_debugger_breakpoint_manager_lookup_by_id (
-					_manager, breakpoint);
-				if (info == IntPtr.Zero)
-					return false;
-
-				return mono_debugger_breakpoint_info_get_is_enabled (info);
-			} finally {
-				Unlock ();
-			}
-		}
+		public abstract bool IsBreakpointEnabled (int breakpoint);
 
 		public int InsertBreakpoint (Inferior inferior, BreakpointHandle handle,
 					     TargetAddress address, int domain)
@@ -161,7 +90,7 @@ namespace Mono.Debugger.Backend
 					throw new InternalError ();
 				}
 
-				index_hash.Add (index, new BreakpointEntry (handle, domain));
+				bpt_by_index.Add (index, new BreakpointEntry (handle, domain));
 				return index;
 			} finally {
 				Unlock ();
@@ -172,15 +101,15 @@ namespace Mono.Debugger.Backend
 		{
 			Lock ();
 			try {
-				int[] indices = new int [index_hash.Count];
-				index_hash.Keys.CopyTo (indices, 0);
+				int[] indices = new int [bpt_by_index.Count];
+				bpt_by_index.Keys.CopyTo (indices, 0);
 
 				for (int i = 0; i < indices.Length; i++) {
-					BreakpointEntry entry = (BreakpointEntry) index_hash [indices [i]];
+					BreakpointEntry entry = bpt_by_index [indices [i]];
 					if (entry.Handle != handle)
 						continue;
 					inferior.RemoveBreakpoint (indices [i]);
-					index_hash.Remove (indices [i]);
+					bpt_by_index.Remove (indices [i]);
 				}
 			} finally {
 				Unlock ();
@@ -191,12 +120,12 @@ namespace Mono.Debugger.Backend
 		{
 			Lock ();
 			try {
-				int[] indices = new int [index_hash.Count];
-				index_hash.Keys.CopyTo (indices, 0);
+				int[] indices = new int [bpt_by_index.Count];
+				bpt_by_index.Keys.CopyTo (indices, 0);
 
 				for (int i = 0; i < indices.Length; i++) {
 					int idx = indices [i];
-					BreakpointEntry entry = (BreakpointEntry) index_hash [idx];
+					BreakpointEntry entry = bpt_by_index [idx];
 					SourceBreakpoint bpt = entry.Handle.Breakpoint as SourceBreakpoint;
 
 					if (!entry.Handle.Breakpoint.ThreadGroup.IsGlobal) {
@@ -217,8 +146,8 @@ namespace Mono.Debugger.Backend
 		{
 			Lock ();
 			try {
-				int[] indices = new int [index_hash.Count];
-				index_hash.Keys.CopyTo (indices, 0);
+				int[] indices = new int [bpt_by_index.Count];
+				bpt_by_index.Keys.CopyTo (indices, 0);
 
 				for (int i = 0; i < indices.Length; i++) {
 					try {
@@ -237,15 +166,15 @@ namespace Mono.Debugger.Backend
 		{
 			Lock ();
 			try {
-				int[] indices = new int [index_hash.Count];
-				index_hash.Keys.CopyTo (indices, 0);
+				int[] indices = new int [bpt_by_index.Count];
+				bpt_by_index.Keys.CopyTo (indices, 0);
 
 				for (int i = 0; i < indices.Length; i++) {
-					BreakpointEntry entry = (BreakpointEntry) index_hash [indices [i]];
+					BreakpointEntry entry = bpt_by_index [indices [i]];
 					if (entry.Domain != domain)
 						continue;
 					inferior.RemoveBreakpoint (indices [i]);
-					index_hash.Remove (indices [i]);
+					bpt_by_index.Remove (indices [i]);
 				}
 			} finally {
 				Unlock ();
@@ -264,6 +193,9 @@ namespace Mono.Debugger.Backend
 				throw new ObjectDisposedException ("BreakpointManager");
 		}
 
+		protected virtual void DoDispose ()
+		{ }
+
 		protected virtual void Dispose (bool disposing)
 		{
 			// Check to see if Dispose has already been called.
@@ -275,9 +207,7 @@ namespace Mono.Debugger.Backend
 					return;
 
 				disposed = true;
-
-				mono_debugger_breakpoint_manager_free (_manager);
-				_manager = IntPtr.Zero;
+				DoDispose ();
 			}
 		}
 

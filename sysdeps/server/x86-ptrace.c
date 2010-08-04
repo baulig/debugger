@@ -2,6 +2,8 @@
 #define _GNU_SOURCE
 #endif
 
+#define DEBUG_WAIT 1
+
 #include <config.h>
 #include <server.h>
 #include <breakpoints.h>

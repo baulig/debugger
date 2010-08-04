@@ -190,9 +190,25 @@ namespace Mono.Debugger.Server
 			}
 		}
 
+		NativeThreadManager manager;
+
+		public NativeDebuggerServer (Debugger debugger)
+		{
+			manager = new NativeThreadManager (debugger, this);
+		}
+
+		public override ThreadManager ThreadManager {
+			get { return manager; }
+		}
+
+		public override BreakpointManager CreateBreakpointManager ()
+		{
+			return new NativeBreakpointManager ();
+		}
+
 		public override InferiorHandle CreateInferior (BreakpointManager bpm)
 		{
-			var handle = mono_debugger_server_create_inferior (bpm.Manager);
+			var handle = mono_debugger_server_create_inferior (((NativeBreakpointManager) bpm).Manager);
 			if (handle == IntPtr.Zero)
 				throw new InternalError ("mono_debugger_server_initialize() failed.");
 
@@ -266,22 +282,22 @@ namespace Mono.Debugger.Server
 			return mono_debugger_server_current_insn_is_bpt (((NativeInferior) inferior).Handle, out is_breakpoint);
 		}
 
-		public override TargetError Step (InferiorHandle inferior)
+		public override void Step (InferiorHandle inferior)
 		{
 			check_disposed ();
-			return mono_debugger_server_step (((NativeInferior) inferior).Handle);
+			check_error (mono_debugger_server_step (((NativeInferior) inferior).Handle));
 		}
 
-		public override TargetError Continue (InferiorHandle inferior)
+		public override void Continue (InferiorHandle inferior)
 		{
 			check_disposed ();
-			return mono_debugger_server_continue (((NativeInferior) inferior).Handle);
+			check_error (mono_debugger_server_continue (((NativeInferior) inferior).Handle));
 		}
 
-		public override TargetError Resume (InferiorHandle inferior)
+		public override void Resume (InferiorHandle inferior)
 		{
 			check_disposed ();
-			return mono_debugger_server_resume (((NativeInferior) inferior).Handle);
+			check_error (mono_debugger_server_resume (((NativeInferior) inferior).Handle));
 		}
 
 		public override TargetError Detach (InferiorHandle inferior)
@@ -299,32 +315,26 @@ namespace Mono.Debugger.Server
 			return result;
 		}
 
-		public override TargetError ReadMemory (InferiorHandle inferior, long address, int size, out byte[] buffer)
+		public override byte[] ReadMemory (InferiorHandle inferior, long address, int size)
 		{
 			check_disposed ();
-			if (size == 0) {
-				buffer = new byte [0];
-				return TargetError.None;
-			}
+			if (size == 0)
+				return new byte [0];
 			IntPtr data = IntPtr.Zero;
 			try {
 				data = Marshal.AllocHGlobal (size);
-				var result = mono_debugger_server_read_memory (
-					((NativeInferior) inferior).Handle, address, size, data);
-				if (result == TargetError.None) {
-					buffer = new byte [size];
-					Marshal.Copy (data, buffer, 0, size);
-				} else {
-					buffer = null;
-				}
-				return result;
+				check_error (mono_debugger_server_read_memory (
+					((NativeInferior) inferior).Handle, address, size, data));
+				var buffer = new byte [size];
+				Marshal.Copy (data, buffer, 0, size);
+				return buffer;
 			} finally {
 				if (data != IntPtr.Zero)
 					Marshal.FreeHGlobal (data);
 			}
 		}
 
-		public override TargetError WriteMemory (InferiorHandle inferior, long address, byte[] buffer)
+		public override void WriteMemory (InferiorHandle inferior, long address, byte[] buffer)
 		{
 			check_disposed ();
 			IntPtr data = IntPtr.Zero;
@@ -332,8 +342,8 @@ namespace Mono.Debugger.Server
 				int size = buffer.Length;
 				data = Marshal.AllocHGlobal (size);
 				Marshal.Copy (buffer, 0, data, size);
-				return mono_debugger_server_write_memory (
-					((NativeInferior) inferior).Handle, address, size, data);
+				check_error (mono_debugger_server_write_memory (
+					((NativeInferior) inferior).Handle, address, size, data));
 			} finally {
 				if (data != IntPtr.Zero)
 					Marshal.FreeHGlobal (data);
@@ -474,10 +484,13 @@ namespace Mono.Debugger.Server
 			return mono_debugger_server_abort_invoke (((NativeInferior) inferior).Handle, rti_id);
 		}
 
-		public override TargetError InsertBreakpoint (InferiorHandle inferior, long address, out int breakpoint)
+		public override int InsertBreakpoint (InferiorHandle inferior, long address)
 		{
 			check_disposed ();
-			return mono_debugger_server_insert_breakpoint (((NativeInferior) inferior).Handle, address, out breakpoint);
+			int breakpoint;
+			check_error (mono_debugger_server_insert_breakpoint (
+				((NativeInferior) inferior).Handle, address, out breakpoint));
+			return breakpoint;
 		}
 
 		public override TargetError InsertHardwareBreakpoint (InferiorHandle inferior, HardwareBreakpointType type,
@@ -488,44 +501,39 @@ namespace Mono.Debugger.Server
 				((NativeInferior) inferior).Handle, type, out index, address, out breakpoint);
 		}
 
-		public override TargetError RemoveBreakpoint (InferiorHandle inferior, int breakpoint)
+		public override void RemoveBreakpoint (InferiorHandle inferior, int breakpoint)
 		{
 			check_disposed ();
-			return mono_debugger_server_remove_breakpoint (((NativeInferior) inferior).Handle, breakpoint);
+			check_error (mono_debugger_server_remove_breakpoint (((NativeInferior) inferior).Handle, breakpoint));
 		}
 
-		public override TargetError EnableBreakpoint (InferiorHandle inferior, int breakpoint)
+		public override void EnableBreakpoint (InferiorHandle inferior, int breakpoint)
 		{
 			check_disposed ();
-			return mono_debugger_server_enable_breakpoint (((NativeInferior) inferior).Handle, breakpoint);
+			check_error (mono_debugger_server_enable_breakpoint (((NativeInferior) inferior).Handle, breakpoint));
 		}
 
-		public override TargetError DisableBreakpoint (InferiorHandle inferior, int breakpoint)
+		public override void DisableBreakpoint (InferiorHandle inferior, int breakpoint)
 		{
 			check_disposed ();
-			return mono_debugger_server_disable_breakpoint (((NativeInferior) inferior).Handle, breakpoint);
+			check_error (mono_debugger_server_disable_breakpoint (((NativeInferior) inferior).Handle, breakpoint));
 		}
 
-		public override TargetError GetRegisters (InferiorHandle inferior, out long[] registers)
+		public override long[] GetRegisters (InferiorHandle inferior)
 		{
-			registers = null;
 			check_disposed ();
 
 			int count;
-			var result = mono_debugger_server_count_registers (((NativeInferior) inferior).Handle, out count);
-			if (result != TargetError.None)
-				return result;
+			check_error (mono_debugger_server_count_registers (((NativeInferior) inferior).Handle, out count));
 
 			IntPtr buffer = IntPtr.Zero;
 			try {
 				int buffer_size = count * 8;
 				buffer = Marshal.AllocHGlobal (buffer_size);
-				result = mono_debugger_server_get_registers (((NativeInferior) inferior).Handle, buffer);
-				if (result == TargetError.None) {
-					registers = new long [count];
-					Marshal.Copy (buffer, registers, 0, count);
-				}
-				return result;
+				check_error (mono_debugger_server_get_registers (((NativeInferior) inferior).Handle, buffer));
+				var registers = new long [count];
+				Marshal.Copy (buffer, registers, 0, count);
+				return registers;
 			} finally {
 				if (buffer != IntPtr.Zero)
 					Marshal.FreeHGlobal (buffer);
@@ -568,16 +576,18 @@ namespace Mono.Debugger.Server
 			return mono_debugger_server_stop_and_wait (((NativeInferior) inferior).Handle, out status);
 		}
 
-		public override TargetError SetSignal (InferiorHandle inferior, int signal, int send_it)
+		public override void SetSignal (InferiorHandle inferior, int signal, bool send_it)
 		{
 			check_disposed ();
-			return mono_debugger_server_set_signal (((NativeInferior) inferior).Handle, signal, send_it);
+			check_error (mono_debugger_server_set_signal (((NativeInferior) inferior).Handle, signal, send_it ? 1 : 0));
 		}
 
-		public override TargetError GetPendingSignal (InferiorHandle inferior, out int signal)
+		public override int GetPendingSignal (InferiorHandle inferior)
 		{
+			int signal;
 			check_disposed ();
-			return mono_debugger_server_get_pending_signal (((NativeInferior) inferior).Handle, out signal);
+			check_error (mono_debugger_server_get_pending_signal (((NativeInferior) inferior).Handle, out signal));
+			return signal;
 		}
 
 		public override TargetError Kill (InferiorHandle inferior)

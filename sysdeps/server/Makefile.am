@@ -70,12 +70,15 @@ libmonodebuggerserver_la_LDFLAGS = \
 mdb_server_CPPFLAGS = @SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@
 
 mdb_server_SOURCES = \
-	mdb-server.c
+	mdb-server.c \
+	mdb-server.h \
+	mdb-server-linux.c
 
 mdb_server_LDFLAGS = \
 	-static
 
 mdb_server_LDADD = \
+	-lpthread \
 	libmonodebuggerserver.la
 
 CLEANFILES = lib*.a lib*.dll

@@ -8,6 +8,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 
 using Mono.Debugger.Backend;
 using Mono.Debugger.Backend.Mono;
+using Mono.Debugger.Server;
 using Mono.Debugger.Architectures;
 using Mono.Debugger.Languages;
 using Mono.Debugger.Languages.Mono;
@@ -203,7 +204,7 @@ namespace Mono.Debugger
 
 			is_attached = start.PID != 0;
 
-			breakpoint_manager = new BreakpointManager ();
+			breakpoint_manager = manager.DebuggerServer.CreateBreakpointManager ();
 
 			exception_handlers = new Dictionary<int,ExceptionCatchPoint> ();
 
@@ -225,7 +226,7 @@ namespace Mono.Debugger
 
 			this.parent = parent;
 
-			breakpoint_manager = new BreakpointManager (parent.breakpoint_manager);
+			breakpoint_manager = parent.breakpoint_manager.Clone ();
 
 			exception_handlers = new Dictionary<int,ExceptionCatchPoint> ();
 			foreach (KeyValuePair<int,ExceptionCatchPoint> catchpoint in parent.exception_handlers)
@@ -398,7 +399,7 @@ namespace Mono.Debugger
 
 			session.OnProcessExecd (this);
 
-			breakpoint_manager = new BreakpointManager ();
+			breakpoint_manager = manager.DebuggerServer.CreateBreakpointManager ();
 
 			exception_handlers = new Dictionary<int,ExceptionCatchPoint> ();
 

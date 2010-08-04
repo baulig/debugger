@@ -10,6 +10,11 @@ namespace Mono.Debugger.Server
 {
 	internal class Connection
 	{
+		public Connection (IEventHandler handler)
+		{
+			this.EventHandler = handler;
+		}
+
 		const string HANDSHAKE_STRING = "9da91832-87f3-4cde-a92f-6384fec6536e";
 		const int HEADER_LENGTH = 11;
 
@@ -37,15 +42,18 @@ namespace Mono.Debugger.Server
 		}
 
 		enum CommandSet {
-			VM = 1,
-			INFERIOR = 2
+			SERVER = 1,
+			INFERIOR = 2,
+			EVENT = 3,
+			BPM = 4
 		}
 
-		enum CmdVM {
+		enum CmdServer {
 			GET_TARGET_INFO = 1,
 			GET_SERVER_TYPE = 2,
 			GET_CAPABILITIES = 3,
-			CREATE_INFERIOR = 4
+			CREATE_INFERIOR = 4,
+			CREATE_BPM = 5
 		}
 
 		enum CmdInferior {
@@ -53,8 +61,62 @@ namespace Mono.Debugger.Server
 			INITIALIZE_PROCESS = 2,
 			GET_SIGNAL_INFO = 3,
 			GET_APPLICATION = 4,
-			GET_FRAME = 5
+			GET_FRAME = 5,
+			INSERT_BREAKPOINT = 6,
+			ENABLE_BREAKPOINT = 7,
+			DISABLE_BREAKPOINT = 8,
+			REMOVE_BREAKPOINT = 9,
+			STEP = 10,
+			CONTINUE = 11,
+			RESUME = 12,
+			GET_REGISTERS = 13,
+			READ_MEMORY = 14,
+			WRITE_MEMORY = 15,
+			GET_PENDING_SIGNAL = 16,
+			SET_SIGNAL = 17
 		}
+
+		enum CmdBpm {
+			LOOKUP_BY_ADDR = 1,
+			LOOKUP_BY_ID = 2
+		}
+
+		enum CmdEvent {
+			COMPOSITE = 100
+		}
+
+		#region Events
+
+		internal enum EventKind {
+			TARGET_EVENT = 1
+		}
+
+		internal class EventInfo {
+			public EventKind EventKind {
+				get; set;
+			}
+
+			public int ReqId {
+				get; set;
+			}
+
+			public DebuggerServer.ChildEvent ChildEvent {
+				get; set;
+			}
+
+			public EventInfo (EventKind kind, int req_id) {
+				EventKind = kind;
+				ReqId = req_id;
+			}
+		}
+
+		internal IEventHandler EventHandler {
+			get; private set;
+		}
+
+		internal delegate void IEventHandler (EventInfo e);
+
+		#endregion
 
 		class Header {
 			public int id;
@@ -222,6 +284,12 @@ namespace Mono.Debugger.Server
 				offset += len;
 				return res;
 			}
+
+			public byte[] ReadData (int len) {
+				byte[] retval = new byte [len];
+				Array.Copy (packet, offset, retval, 0, len);
+				return retval;
+			}
 		}
 
 		class PacketWriter {
@@ -276,6 +344,12 @@ namespace Mono.Debugger.Server
 
 			public PacketWriter WriteBool (bool val) {
 				WriteByte (val ? (byte)1 : (byte)0);
+				return this;
+			}
+
+			public PacketWriter WriteData (byte[] buffer) {
+				Buffer.BlockCopy (buffer, 0, data, offset, buffer.Length);
+				offset += buffer.Length;
 				return this;
 			}
 
@@ -400,6 +474,41 @@ namespace Mono.Debugger.Server
 					cb.Invoke (id, packet);
 			} else {
 				PacketReader r = new PacketReader (packet);
+
+				if (r.CommandSet == CommandSet.EVENT && r.Command == (int)CmdEvent.COMPOSITE) {
+					EventKind kind = (EventKind)r.ReadByte ();
+					int req_id = r.ReadInt ();
+
+					EventInfo e;
+
+					if (kind == EventKind.TARGET_EVENT) {
+						var type = (DebuggerServer.ChildEventType) r.ReadByte ();
+						var arg = r.ReadLong ();
+						var data1 = r.ReadLong ();
+						var data2 = r.ReadLong ();
+						var opt_data_size = r.ReadInt ();
+						byte[] opt_data = null;
+						if (opt_data_size > 0)
+							opt_data = r.ReadData (opt_data_size);
+
+						Console.WriteLine ("EVENT: {0} {1} {2:x} {3:x} {4:x} {5}",
+								   type, req_id, arg, data1, data2, opt_data_size);
+
+						DebuggerServer.ChildEvent ev;
+						if (opt_data != null)
+							ev = new DebuggerServer.ChildEvent (type, arg, data1, data2, opt_data);
+						else
+							ev = new DebuggerServer.ChildEvent (type, arg, data1, data2);
+
+						e = new EventInfo (kind, req_id) { ChildEvent = ev };
+					} else {
+						throw new InternalError ("Unknown event: {0}", kind);
+					}
+
+					ST.ThreadPool.QueueUserWorkItem (delegate {
+						EventHandler (e);
+					});
+				}
 			}
 
 			return true;
@@ -442,11 +551,13 @@ namespace Mono.Debugger.Server
 						byte[] reply = reply_packets [packetId];
 						reply_packets.Remove (packetId);
 						PacketReader r = new PacketReader (reply);
-						if (r.ErrorCode != 0) {
+						if (r.ErrorCode == 0)
+							return r;
+						else if (r.ErrorCode < 0x1000)
+							throw new TargetException ((TargetError) r.ErrorCode);
+						else {
 							Console.WriteLine ("ERROR: {0}", r.ErrorCode);
 							throw new NotImplementedException ("No error handler set.");
-						} else {
-							return r;
 						}
 					} else {
 						if (disconnected)
@@ -471,23 +582,23 @@ namespace Mono.Debugger.Server
 
 		public TargetInfo GetTargetInfo ()
 		{
-			var reader = SendReceive (CommandSet.VM, (int)CmdVM.GET_TARGET_INFO, null);
+			var reader = SendReceive (CommandSet.SERVER, (int)CmdServer.GET_TARGET_INFO, null);
 			return new TargetInfo (reader.ReadInt (), reader.ReadInt (), reader.ReadInt (), reader.ReadByte () != 0);
 		}
 
 		public DebuggerServer.ServerType GetServerType ()
 		{
-			return (DebuggerServer.ServerType) SendReceive (CommandSet.VM, (int)CmdVM.GET_SERVER_TYPE, null).ReadInt ();
+			return (DebuggerServer.ServerType) SendReceive (CommandSet.SERVER, (int)CmdServer.GET_SERVER_TYPE, null).ReadInt ();
 		}
 
 		public DebuggerServer.ServerCapabilities GetCapabilities ()
 		{
-			return (DebuggerServer.ServerCapabilities) SendReceive (CommandSet.VM, (int)CmdVM.GET_CAPABILITIES, null).ReadInt ();
+			return (DebuggerServer.ServerCapabilities) SendReceive (CommandSet.SERVER, (int)CmdServer.GET_CAPABILITIES, null).ReadInt ();
 		}
 
-		public int CreateInferior ()
+		public int CreateInferior (int bpm_iid)
 		{
-			return SendReceive (CommandSet.VM, (int)CmdVM.CREATE_INFERIOR, null).ReadInt ();
+			return SendReceive (CommandSet.SERVER, (int)CmdServer.CREATE_INFERIOR, new PacketWriter ().WriteInt (bpm_iid)).ReadInt ();
 		}
 
 		public int Spawn (int iid, string cwd, string[] argv)
@@ -509,7 +620,12 @@ namespace Mono.Debugger.Server
 
 		public void InitializeProcess (int iid)
 		{
-			SendReceive (CommandSet.VM, (int)CmdInferior.INITIALIZE_PROCESS, null);
+			SendReceive (CommandSet.SERVER, (int)CmdInferior.INITIALIZE_PROCESS, null);
+		}
+
+		public int CreateBreakpointManager ()
+		{
+			return SendReceive (CommandSet.SERVER, (int)CmdServer.CREATE_BPM, null).ReadInt ();
 		}
 
 		public DebuggerServer.SignalInfo GetSignalInfo (int iid)
@@ -557,8 +673,99 @@ namespace Mono.Debugger.Server
 			frame.Address = reader.ReadLong ();
 			frame.StackPointer = reader.ReadLong ();
 			frame.FrameAddress = reader.ReadLong ();
-			Console.WriteLine ("GET FRAME: {0:x} {1:x} {2:x}", frame.Address, frame.StackPointer, frame.FrameAddress);
 			return frame;
+		}
+
+		public int InsertBreakpoint (int iid, long address)
+		{
+			return SendReceive (CommandSet.INFERIOR, (int)CmdInferior.INSERT_BREAKPOINT,
+					    new PacketWriter ().WriteInt (iid).WriteLong (address)).ReadInt ();
+		}
+
+		public void EnableBreakpoint (int iid, int breakpoint)
+		{
+			SendReceive (CommandSet.INFERIOR, (int)CmdInferior.ENABLE_BREAKPOINT,
+				     new PacketWriter ().WriteInt (iid).WriteInt (breakpoint));
+		}
+
+		public void DisableBreakpoint (int iid, int breakpoint)
+		{
+			SendReceive (CommandSet.INFERIOR, (int)CmdInferior.DISABLE_BREAKPOINT,
+				     new PacketWriter ().WriteInt (iid).WriteInt (breakpoint));
+		}
+
+		public void RemoveBreakpoint (int iid, int breakpoint)
+		{
+			SendReceive (CommandSet.INFERIOR, (int)CmdInferior.REMOVE_BREAKPOINT,
+				     new PacketWriter ().WriteInt (iid).WriteInt (breakpoint));
+		}
+
+		public void Step (int iid)
+		{
+			SendReceive (CommandSet.INFERIOR, (int)CmdInferior.STEP, new PacketWriter ().WriteInt (iid));
+		}
+
+		public void Continue (int iid)
+		{
+			SendReceive (CommandSet.INFERIOR, (int)CmdInferior.CONTINUE, new PacketWriter ().WriteInt (iid));
+		}
+
+		public void Resume (int iid)
+		{
+			SendReceive (CommandSet.INFERIOR, (int)CmdInferior.RESUME, new PacketWriter ().WriteInt (iid));
+		}
+
+		public long[] GetRegisters (int iid)
+		{
+			var reader = SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_REGISTERS, new PacketWriter ().WriteInt (iid));
+			int count = reader.ReadInt ();
+			long[] regs = new long [count];
+			for (int i = 0; i < count; i++)
+				regs [i] = reader.ReadLong ();
+
+			return regs;
+		}
+
+		public byte[] ReadMemory (int iid, long address, int size)
+		{
+			var reader = SendReceive (CommandSet.INFERIOR, (int)CmdInferior.READ_MEMORY, new PacketWriter ().WriteInt (iid).WriteLong (address).WriteInt (size));
+			return reader.ReadData (size);
+		}
+
+		public void WriteMemory (int iid, long address, byte[] data)
+		{
+			SendReceive (CommandSet.INFERIOR, (int)CmdInferior.WRITE_MEMORY, new PacketWriter ().WriteInt (iid).WriteLong (address).WriteInt (data.Length).WriteData (data));
+		}
+
+		public int GetPendingSignal (int iid)
+		{
+			return SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_PENDING_SIGNAL, new PacketWriter ().WriteInt (iid)).ReadInt ();
+		}
+
+		public void SetSignal (int iid, int sig, bool send_it)
+		{
+			SendReceive (CommandSet.INFERIOR, (int)CmdInferior.SET_SIGNAL, new PacketWriter ().WriteInt (iid).WriteInt (sig).WriteByte (send_it ? (byte)1 : (byte)0));
+		}
+
+		public int LookupBreakpointByAddr (int iid, long address, out bool enabled)
+		{
+			var reader = SendReceive (CommandSet.BPM, (int)CmdBpm.LOOKUP_BY_ADDR, new PacketWriter ().WriteInt (iid).WriteLong (address));
+			var index = reader.ReadInt ();
+			enabled = reader.ReadByte () != 0;
+			return index;
+		}
+
+		public bool LookupBreakpointById (int iid, int id, out bool enabled)
+		{
+			var reader = SendReceive (CommandSet.BPM, (int)CmdBpm.LOOKUP_BY_ID, new PacketWriter ().WriteInt (iid).WriteInt (id));
+			var success = reader.ReadByte () != 0;
+			if (!success) {
+				enabled = false;
+				return false;
+			}
+
+			enabled = reader.ReadByte () != 0;
+			return true;
 		}
 	}
 }
