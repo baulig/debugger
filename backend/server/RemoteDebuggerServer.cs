@@ -333,6 +333,12 @@ namespace Mono.Debugger.Server
 		{
 			throw new NotImplementedException ();
 		}
+
+		internal long ReadDynamicInfo (Inferior inferior, int bfd_iid)
+		{
+			var handle = (RemoteInferior) inferior.InferiorHandle;
+			return connection.BfdGetDynamicInfo (handle.IID, bfd_iid);
+		}
 	}
 }
 

@@ -20,7 +20,8 @@ typedef enum {
 	CMD_SET_SERVER = 1,
 	CMD_SET_INFERIOR = 2,
 	CMD_SET_EVENT = 3,
-	CMD_SET_BPM = 4
+	CMD_SET_BPM = 4,
+	CMD_SET_EXE_READER = 5
 } CommandSet;
 
 typedef enum {
@@ -28,7 +29,8 @@ typedef enum {
 	CMD_SERVER_GET_SERVER_TYPE = 2,
 	CMD_SERVER_GET_CAPABILITIES = 3,
 	CMD_SERVER_CREATE_INFERIOR = 4,
-	CMD_SERVER_CREATE_BPM = 5
+	CMD_SERVER_CREATE_BPM = 5,
+	CMD_SERVER_CREATE_EXE_READER = 6
 } CmdServer;
 
 typedef enum {
@@ -48,13 +50,23 @@ typedef enum {
 	CMD_INFERIOR_READ_MEMORY = 14,
 	CMD_INFERIOR_WRITE_MEMORY = 15,
 	CMD_INFERIOR_GET_PENDING_SIGNAL = 16,
-	CMD_INFERIOR_SET_SIGNAL = 17
+	CMD_INFERIOR_SET_SIGNAL = 17,
+	CMD_INFERIOR_GET_DYNAMIC_INFO = 18
 } CmdInferior;
 
 typedef enum {
 	CMD_BPM_LOOKUP_BY_ADDR = 1,
 	CMD_BPM_LOOKUP_BY_ID = 2,
 } CmdBpm;
+
+typedef enum {
+	CMD_EXE_READER_GET_START_ADDRESS = 1,
+	CMD_EXE_READER_LOOKUP_SYMBOL = 2,
+	CMD_EXE_READER_GET_TARGET_NAME = 3,
+	CMD_EXE_READER_HAS_SECTION = 4,
+	CMD_EXE_READER_GET_SECTION_ADDRESS = 5,
+	CMD_EXE_READER_GET_SECTION_CONTENTS = 6
+} CmdExeReader;
 
 typedef enum {
 	CMD_COMPOSITE = 100
@@ -67,6 +79,7 @@ static int next_unique_id = 0;
 static GHashTable *inferior_hash = NULL;
 static GHashTable *inferior_by_pid = NULL;
 static GHashTable *bpm_hash = NULL;
+static GHashTable *exe_reader_hash = NULL;
 
 static pthread_mutex_t main_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -336,6 +349,7 @@ main (int argc, char *argv[])
 	inferior_hash = g_hash_table_new (NULL, NULL);
 	inferior_by_pid = g_hash_table_new (NULL, NULL);
 	bpm_hash = g_hash_table_new (NULL, NULL);
+	exe_reader_hash = g_hash_table_new (NULL, NULL);
 
 	fd = socket (AF_INET, SOCK_STREAM, 0);
 	g_message (G_STRLOC ": %d", fd);
@@ -474,6 +488,27 @@ server_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 		g_hash_table_insert (bpm_hash, GUINT_TO_POINTER (iid), bpm);
 
 		g_message (G_STRLOC ": new bpm: %d - %p", iid, bpm);
+
+		buffer_add_int (buf, iid);
+		break;
+	}
+
+	case CMD_SERVER_CREATE_EXE_READER: {
+		MdbExeReader *reader;
+		gchar *filename;
+		int iid;
+
+		filename = decode_string (p, &p, end);
+		g_message (G_STRLOC ": %s", filename);
+
+		reader = mdb_server_create_exe_reader (filename);
+		if (!reader)
+			return ERR_CANNOT_OPEN_EXE;
+
+		iid = ++next_unique_id;
+		g_hash_table_insert (exe_reader_hash, GUINT_TO_POINTER (iid), reader);
+
+		g_message (G_STRLOC ": exe reader: %s - %d - %p", filename, iid, reader);
 
 		buffer_add_int (buf, iid);
 		break;
@@ -715,6 +750,24 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		break;
 	}
 
+	case CMD_INFERIOR_GET_DYNAMIC_INFO: {
+		MdbExeReader *reader;
+		guint32 reader_iid;
+		guint64 dynamic_info;
+
+		reader_iid = decode_int (p, &p, end);
+
+		reader = g_hash_table_lookup (exe_reader_hash, GUINT_TO_POINTER (reader_iid));
+
+		if (!reader)
+			return ERR_NO_SUCH_EXE_READER;
+
+		dynamic_info = mdb_exe_reader_get_dynamic_info (inferior, reader);
+
+		buffer_add_long (buf, dynamic_info);
+		break;
+	}
+
 	default:
 		return ERR_NOT_IMPLEMENTED;
 	}
@@ -759,6 +812,88 @@ bpm_commands (int command, int id, BreakpointManager *bpm, guint8 *p, guint8 *en
 
 		buffer_add_byte (buf, 1);
 		buffer_add_byte (buf, info->enabled != 0);
+		break;
+	}
+
+	default:
+		return ERR_NOT_IMPLEMENTED;
+	}
+
+	return ERR_NONE;
+}
+
+static ErrorCode
+exe_reader_commands (int command, int id, MdbExeReader *reader, guint8 *p, guint8 *end, Buffer *buf)
+{
+	switch (command) {
+	case CMD_EXE_READER_GET_START_ADDRESS: {
+		guint64 address;
+
+		address = mdb_exe_reader_get_start_address (reader);
+		buffer_add_long (buf, address);
+		break;
+	}
+
+	case CMD_EXE_READER_LOOKUP_SYMBOL: {
+		guint64 address;
+		gchar *name;
+
+		name = decode_string (p, &p, end);
+		address = mdb_exe_reader_lookup_symbol (reader, name);
+		buffer_add_long (buf, address);
+		g_free (name);
+		break;
+	}
+
+	case CMD_EXE_READER_GET_TARGET_NAME: {
+		gchar *target_name;
+
+		target_name = mdb_exe_reader_get_target_name (reader);
+		buffer_add_string (buf, target_name);
+		g_free (target_name);
+		break;
+	}
+
+	case CMD_EXE_READER_HAS_SECTION: {
+		gchar *section_name;
+		gboolean has_section;
+
+		section_name = decode_string (p, &p, end);
+		has_section = mdb_exe_reader_has_section (reader, section_name);
+		buffer_add_byte (buf, has_section ? 1 : 0);
+		g_free (section_name);
+		break;
+	}
+
+
+	case CMD_EXE_READER_GET_SECTION_ADDRESS: {
+		gchar *section_name;
+		guint64 address;
+
+		section_name = decode_string (p, &p, end);
+		address = mdb_exe_reader_get_section_address (reader, section_name);
+		g_message (G_STRLOC ": %s - %Lx", section_name, address);
+		buffer_add_long (buf, address);
+		g_free (section_name);
+		break;
+	}
+
+	case CMD_EXE_READER_GET_SECTION_CONTENTS: {
+		gchar *section_name;
+		gpointer contents;
+		guint32 size;
+
+		section_name = decode_string (p, &p, end);
+
+		contents = mdb_exe_reader_get_section_contents (reader, section_name, &size);
+		buffer_add_int (buf, size);
+
+		if (contents) {
+			buffer_add_data (buf, contents, size);
+			g_free (contents);
+		}
+
+		g_free (section_name);
 		break;
 	}
 
@@ -848,6 +983,22 @@ mdb_server_main_loop_iteration (void)
 		}
 
 		err = bpm_commands (command, id, bpm, p, end, &buf);
+		break;
+	}
+
+	case CMD_SET_EXE_READER: {
+		MdbExeReader *reader;
+		int iid;
+
+		iid = decode_int (p, &p, end);
+		reader = g_hash_table_lookup (exe_reader_hash, GUINT_TO_POINTER (iid));
+
+		if (!reader) {
+			err = ERR_NO_SUCH_EXE_READER;
+			break;
+		}
+
+		err = exe_reader_commands (command, id, reader, p, end, &buf);
 		break;
 	}
 

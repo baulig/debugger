@@ -382,7 +382,7 @@ namespace Mono.Debugger.Backend
 			return simple_symbols;
 		}
 
-		internal TargetAddress ReadDynamicInfo (Inferior inferior)
+		internal override TargetAddress ReadDynamicInfo (Inferior inferior)
 		{
 			Section section = GetSectionByName (".dynamic", false);
 			if (section == null)
@@ -408,7 +408,7 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		public TargetAddress BaseAddress {
+		public override TargetAddress BaseAddress {
 			get {
 				return base_address;
 			}
@@ -430,19 +430,19 @@ namespace Mono.Debugger.Backend
 					info.AddressDomain, BaseAddress.Address + address);
 		}
 
-		public TargetMemoryInfo TargetMemoryInfo {
+		public override TargetMemoryInfo TargetMemoryInfo {
 			get {
 				return info;
 			}
 		}
 
-		public string FileName {
+		public override string FileName {
 			get {
 				return filename;
 			}
 		}
 
-		public string Target {
+		public override string TargetName {
 			get {
 				return target;
 			}
@@ -533,7 +533,7 @@ namespace Mono.Debugger.Backend
 				byte[] contents = GetSectionContents (section.section);
 				TargetBlob blob = new TargetBlob (contents, info);
 				frame_reader = new DwarfFrameReader (
-					this, blob, vma_base + section.vma, false);
+					os, this, blob, vma_base + section.vma, false);
 			}
 
 			section = GetSectionByName (".eh_frame", false);
@@ -541,7 +541,7 @@ namespace Mono.Debugger.Backend
 				byte[] contents = GetSectionContents (section.section);
 				TargetBlob blob = new TargetBlob (contents, info);
 				eh_frame_reader = new DwarfFrameReader (
-					this, blob, vma_base + section.vma, true);
+					os, this, blob, vma_base + section.vma, true);
 			}
 		}
 
@@ -566,7 +566,7 @@ namespace Mono.Debugger.Backend
 				return;
 
 			try {
-				dwarf = new DwarfReader (this, module);
+				dwarf = new DwarfReader (os, this, module);
 			} catch (Exception ex) {
 				Console.WriteLine ("Cannot read DWARF debugging info from " +
 						   "symbol file `{0}': {1}", FileName, ex);
@@ -717,15 +717,6 @@ namespace Mono.Debugger.Backend
 				filename);
 		}
 
-		public override TargetReader GetReader (TargetAddress address)
-		{
-			Section section = FindSection (address.Address);
-			if (section != null)
-				return section.GetReader (address);
-
-			return null;
-		}
-
 		public override TargetAddress GetSectionAddress (string name)
 		{
 			IntPtr section;
@@ -738,7 +729,7 @@ namespace Mono.Debugger.Backend
 			return GetAddress (vma);
 		}
 
-		public byte[] GetSectionContents (string name)
+		public override byte[] GetSectionContents (string name)
 		{
 			IntPtr section;
 
@@ -781,7 +772,7 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		public bool HasSection (string name)
+		public override bool HasSection (string name)
 		{
 			return GetSectionByName (name, false) != null;
 		}
@@ -835,7 +826,7 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		public bool IsLoaded {
+		public override bool IsLoaded {
 			get {
 				return is_loaded || !base_address.IsNull;
 			}
@@ -845,13 +836,13 @@ namespace Mono.Debugger.Backend
 		// ISymbolContainer
 		//
 
-		public bool IsContinuous {
+		public override bool IsContinuous {
 			get {
 				return !is_coredump && !end_address.IsNull;
 			}
 		}
 
-		public TargetAddress StartAddress {
+		public override TargetAddress StartAddress {
 			get {
 				if (!IsContinuous)
 					throw new InvalidOperationException ();
@@ -860,7 +851,7 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		public TargetAddress EndAddress {
+		public override TargetAddress EndAddress {
 			get {
 				if (!IsContinuous)
 					throw new InvalidOperationException ();
@@ -937,7 +928,7 @@ namespace Mono.Debugger.Backend
 			return null;
 		}
 
-		public void ReadTypes ()
+		public override void ReadDebuggingInfo ()
 		{
 			if (dwarf != null)
 				dwarf.ReadTypes ();

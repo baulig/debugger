@@ -1,3 +1,4 @@
+#if FIXME
 using System;
 using Mono.Debugger;
 using Mono.Debugger.Architectures;
@@ -46,3 +47,4 @@ namespace Mono.Debugger.Backend
 		}
 	}
 }
+#endif

@@ -14,31 +14,40 @@ namespace Mono.Debugger.Backend
 {
 	internal class DwarfException : Exception
 	{
-		public DwarfException (Bfd bfd, string message, params object[] args)
+		public DwarfException (NativeExecutableReader bfd, string message, params object[] args)
 			: base (String.Format ("{0}: {1}", bfd.FileName,
 					       String.Format (message, args)))
 		{ }
 
-		public DwarfException (Bfd bfd, string message, Exception inner)
+		public DwarfException (NativeExecutableReader bfd, string message, Exception inner)
 			: base (String.Format ("{0}: {1}", bfd.FileName, message), inner)
 		{ }
 	}
 
 	internal class DwarfBinaryReader : TargetBinaryReader
 	{
-		Bfd bfd;
+		NativeExecutableReader bfd;
+		OperatingSystemBackend os;
 		bool is64bit;
 
-		public DwarfBinaryReader (Bfd bfd, TargetBlob blob, bool is64bit)
+		public DwarfBinaryReader (OperatingSystemBackend os, NativeExecutableReader bfd,
+					  TargetBlob blob, bool is64bit)
 			: base (blob)
 		{
+			this.os = os;
 			this.bfd = bfd;
 			this.is64bit = is64bit;
 		}
 
-		public Bfd Bfd {
+		public NativeExecutableReader ExecutableReader {
 			get {
 				return bfd;
+			}
+		}
+
+		public OperatingSystemBackend OperatingSystem {
+			get {
+				return os;
 			}
 		}
 
@@ -94,7 +103,8 @@ namespace Mono.Debugger.Backend
 
 	internal class DwarfReader : DebuggerMarshalByRefObject
 	{
-		protected Bfd bfd;
+		protected readonly OperatingSystemBackend os;
+		protected NativeExecutableReader bfd;
 		protected Module module;
 		protected string filename;
 		bool is64bit;
@@ -120,8 +130,9 @@ namespace Mono.Debugger.Backend
 		// Hashtable pubtypes;
 		TargetMemoryInfo target_info;
 
-		public DwarfReader (Bfd bfd, Module module)
+		public DwarfReader (OperatingSystemBackend os, NativeExecutableReader bfd, Module module)
 		{
+			this.os = os;
 			this.bfd = bfd;
 			this.module = module;
 			this.filename = bfd.FileName;
@@ -185,9 +196,9 @@ namespace Mono.Debugger.Backend
 			// pubtypes = read_pubtypes ();
 		}
 
-		public static bool IsSupported (Bfd bfd)
+		public static bool IsSupported (NativeExecutableReader bfd)
 		{
-			if ((bfd.Target == "elf32-i386") || (bfd.Target == "elf64-x86-64"))
+			if ((bfd.TargetName == "elf32-i386") || (bfd.TargetName == "elf64-x86-64"))
 				return bfd.HasSection (".debug_info");
 			else
 				return false;
@@ -206,7 +217,12 @@ namespace Mono.Debugger.Backend
 					"Trying to get an address from not-loaded " +
 					"symbol file `" + bfd.FileName + "'");
 
-			return bfd.GetAddress (address);
+			if (bfd.BaseAddress.IsNull)
+				return new TargetAddress (
+					bfd.TargetMemoryInfo.AddressDomain, address);
+			else
+				return new TargetAddress (
+					bfd.TargetMemoryInfo.AddressDomain, bfd.BaseAddress.Address + address);
 		}
 
 		protected ISymbolTable get_symtab_at_offset (long offset)
@@ -293,8 +309,7 @@ namespace Mono.Debugger.Backend
 		{
 			SourceFile file = (SourceFile) source_file_hash [filename];
 			if (file == null) {
-				file = new DwarfSourceFile (
-					bfd.NativeLanguage.Process.Session, module, filename);
+				file = new DwarfSourceFile (os.Process.Session, module, filename);
 				source_file_hash.Add (filename, file);
 			}
 			return file;
@@ -302,7 +317,7 @@ namespace Mono.Debugger.Backend
 
 		protected void AddType (DieType type)
 		{
-			bfd.NativeLanguage.AddType (type);
+			((NativeLanguage) os.Process.NativeLanguage).AddType (type);
 		}
 
 		bool types_initialized;
@@ -584,7 +599,7 @@ namespace Mono.Debugger.Backend
 				return ranges;
 
 			DwarfBinaryReader reader = new DwarfBinaryReader (
-				bfd, (TargetBlob) debug_aranges_reader.Data, Is64Bit);
+				os, bfd, (TargetBlob) debug_aranges_reader.Data, Is64Bit);
 
 			while (!reader.IsEof) {
 				long length = reader.ReadInitialLength ();
@@ -654,7 +669,7 @@ namespace Mono.Debugger.Backend
 				return null;
 
 			DwarfBinaryReader reader = new DwarfBinaryReader (
-				bfd, (TargetBlob) debug_pubnames_reader.Data, Is64Bit);
+				os, bfd, (TargetBlob) debug_pubnames_reader.Data, Is64Bit);
 
 			Hashtable names = Hashtable.Synchronized (new Hashtable ());
 
@@ -690,7 +705,7 @@ namespace Mono.Debugger.Backend
 				return null;
 
 			DwarfBinaryReader reader = new DwarfBinaryReader (
-				bfd, (TargetBlob) debug_pubtypes_reader.Data, Is64Bit);
+				os, bfd, (TargetBlob) debug_pubtypes_reader.Data, Is64Bit);
 
 			Hashtable names = Hashtable.Synchronized (new Hashtable ());
 
@@ -755,21 +770,21 @@ namespace Mono.Debugger.Backend
 		public DwarfBinaryReader DebugInfoReader {
 			get {
 				return new DwarfBinaryReader (
-					bfd, (TargetBlob) debug_info_reader.Data, Is64Bit);
+					os, bfd, (TargetBlob) debug_info_reader.Data, Is64Bit);
 			}
 		}
 
 		public DwarfBinaryReader DebugAbbrevReader {
 			get {
 				return new DwarfBinaryReader (
-					bfd, (TargetBlob) debug_abbrev_reader.Data, Is64Bit);
+					os, bfd, (TargetBlob) debug_abbrev_reader.Data, Is64Bit);
 			}
 		}
 
 		public DwarfBinaryReader DebugLineReader {
 			get {
 				return new DwarfBinaryReader (
-					bfd, (TargetBlob) debug_line_reader.Data, Is64Bit);
+					os, bfd, (TargetBlob) debug_line_reader.Data, Is64Bit);
 			}
 		}
 
@@ -778,21 +793,21 @@ namespace Mono.Debugger.Backend
 				if (debug_str_reader == null)
 					return null;
 				return new DwarfBinaryReader (
-					bfd, (TargetBlob) debug_str_reader.Data, Is64Bit);
+					os, bfd, (TargetBlob) debug_str_reader.Data, Is64Bit);
 			}
 		}
 
 		public DwarfBinaryReader DebugLocationReader {
 			get {
 				return new DwarfBinaryReader (
-					bfd, (TargetBlob) debug_loc_reader.Data, Is64Bit);
+					os, bfd, (TargetBlob) debug_loc_reader.Data, Is64Bit);
 			}
 		}
 
 		public DwarfBinaryReader DebugRangesReader {
 			get {
 				return new DwarfBinaryReader (
-					bfd, (TargetBlob) debug_ranges_reader.Data, Is64Bit);
+					os, bfd, (TargetBlob) debug_ranges_reader.Data, Is64Bit);
 			}
 		}
 
@@ -2968,7 +2983,7 @@ namespace Mono.Debugger.Backend
 					return null;
 				}
 
-				reg = comp_unit.DwarfReader.bfd.Architecture.DwarfFrameRegisterMap [reg];
+				reg = comp_unit.DwarfReader.os.Process.Architecture.DwarfFrameRegisterMap [reg];
 
 				MonoVariableLocation loc = MonoVariableLocation.Create (
 					memory, is_regoffset, frame.Registers [reg],
@@ -3202,7 +3217,7 @@ namespace Mono.Debugger.Backend
 				: base (reader, comp_unit, abbrev)
 			{
 				this.offset = offset;
-				this.language = reader.Bfd.NativeLanguage;
+				this.language = reader.OperatingSystem.Process.NativeLanguage;
 				comp_unit.AddType (offset, this);
 
 				if (specification != null) {

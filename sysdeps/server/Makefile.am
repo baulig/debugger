@@ -67,7 +67,11 @@ libmonodebuggerserver_la_SOURCES = \
 libmonodebuggerserver_la_LDFLAGS = \
 	 -no-undefined -export-dynamic -shared
 
-mdb_server_CPPFLAGS = @SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@
+mdb_server_CPPFLAGS = \
+	-I$(top_srcdir)/sysdeps/bfd \
+	-I$(top_srcdir)/sysdeps/bfd/include \
+	-I$(top_srcdir)/sysdeps/bfd/opcodes \
+	@SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@
 
 mdb_server_SOURCES = \
 	mdb-server.c \

@@ -5,15 +5,17 @@ namespace Mono.Debugger.Backend
 {
 	internal class DwarfFrameReader
 	{
-		protected readonly Bfd bfd;
+		protected readonly OperatingSystemBackend os;
+		protected readonly NativeExecutableReader bfd;
 		protected readonly TargetBlob blob;
 		protected readonly bool is_ehframe;
 		protected readonly long vma;
 		protected CIE cie_list;
 
-		public DwarfFrameReader (Bfd bfd, TargetBlob blob, long vma,
-					 bool is_ehframe)
+		public DwarfFrameReader (OperatingSystemBackend os, NativeExecutableReader bfd,
+					 TargetBlob blob, long vma, bool is_ehframe)
 		{
+			this.os = os;
 			this.bfd = bfd;
 			this.blob = blob;
 			this.vma = vma;
@@ -40,7 +42,7 @@ namespace Mono.Debugger.Backend
 
 			TargetAddress address = frame.TargetAddress;
 
-			DwarfBinaryReader reader = new DwarfBinaryReader (bfd, blob, false);
+			DwarfBinaryReader reader = new DwarfBinaryReader (os, bfd, blob, false);
 
 			while (reader.Position < reader.Size) {
 				long length = reader.ReadInitialLength ();
@@ -102,7 +104,7 @@ namespace Mono.Debugger.Backend
 				break;
 			default:
 				throw new DwarfException (
-					reader.Bfd, "Unknown encoding `{0:x}' in CIE",
+					reader.ExecutableReader, "Unknown encoding `{0:x}' in CIE",
 					encoding);
 			}
 
@@ -116,7 +118,7 @@ namespace Mono.Debugger.Backend
 				break;
 			default:
 				throw new DwarfException (
-					reader.Bfd, "Unknown encoding `{0:x}' in CIE",
+					reader.ExecutableReader, "Unknown encoding `{0:x}' in CIE",
 					encoding);
 			}
 
@@ -396,7 +398,7 @@ namespace Mono.Debugger.Backend
 				this.next = next;
 
 				DwarfBinaryReader reader = new DwarfBinaryReader (
-					frame.bfd, frame.blob, false);
+					frame.os, frame.bfd, frame.blob, false);
 				read_cie (reader);
 			}
 
@@ -405,7 +407,7 @@ namespace Mono.Debugger.Backend
 			}
 
 			public Architecture Architecture {
-				get { return frame.bfd.Architecture; }
+				get { return frame.os.Process.Architecture; }
 			}
 
 			public long Offset {
@@ -449,7 +451,7 @@ namespace Mono.Debugger.Backend
 				int version = reader.ReadByte ();
 				if (version != 1)
 					throw new DwarfException (
-						reader.Bfd, "Unknown version {0} in CIE",
+						reader.ExecutableReader, "Unknown version {0} in CIE",
 						version);
 
 				string augmentation = reader.ReadString ();
@@ -481,7 +483,7 @@ namespace Mono.Debugger.Backend
 					}
 
 					throw new DwarfException (
-						reader.Bfd, "Unknown augmentation `{0}' in CIE",
+						reader.ExecutableReader, "Unknown augmentation `{0}' in CIE",
 						augmentation[pos]);
 				}
 

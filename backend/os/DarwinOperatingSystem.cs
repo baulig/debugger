@@ -23,7 +23,7 @@ namespace Mono.Debugger.Backend
 			foreach (Bfd bfd in bfd_hash.Values) {
 				if (bfd == null)
 					continue;
-				bfd.ReadTypes ();
+				bfd.ReadDebuggingInfo ();
 			}
 		}
 

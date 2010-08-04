@@ -67,6 +67,13 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
+		internal DebuggerServer.InferiorHandle InferiorHandle {
+			get {
+				check_disposed ();
+				return inferior;
+			}
+		}
+
 		protected Inferior (ThreadManager thread_manager, Process process,
 				    ProcessStart start, BreakpointManager bpm,
 				    DebuggerErrorHandler error_handler,

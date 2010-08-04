@@ -7,7 +7,39 @@ namespace Mono.Debugger.Backend
 {
 	internal abstract class NativeExecutableReader : DebuggerMarshalByRefObject, IDisposable
 	{
+		public abstract TargetMemoryInfo TargetMemoryInfo {
+			get;
+		}
+
 		public abstract Module Module {
+			get;
+		}
+
+		public abstract string FileName {
+			get;
+		}
+
+		public abstract bool IsLoaded {
+			get;
+		}
+
+		public abstract string TargetName {
+			get;
+		}
+
+		public abstract bool IsContinuous {
+			get;
+		}
+
+		public abstract TargetAddress StartAddress {
+			get;
+		}
+
+		public abstract TargetAddress EndAddress {
+			get;
+		}
+
+		public abstract TargetAddress BaseAddress {
 			get;
 		}
 
@@ -15,13 +47,19 @@ namespace Mono.Debugger.Backend
 
 		public abstract TargetAddress LookupLocalSymbol (string name);
 
+		public abstract bool HasSection (string name);
+
 		public abstract TargetAddress GetSectionAddress (string name);
+
+		public abstract byte[] GetSectionContents (string name);
 
 		public abstract TargetAddress EntryPoint {
 			get;
 		}
 
-		public abstract TargetReader GetReader (TargetAddress address);
+		public abstract void ReadDebuggingInfo ();
+
+		internal abstract TargetAddress ReadDynamicInfo (Inferior inferior);
 
 		//
 		// IDisposable

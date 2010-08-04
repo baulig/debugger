@@ -45,7 +45,8 @@ namespace Mono.Debugger.Server
 			SERVER = 1,
 			INFERIOR = 2,
 			EVENT = 3,
-			BPM = 4
+			BPM = 4,
+			EXE_READER = 5
 		}
 
 		enum CmdServer {
@@ -53,7 +54,8 @@ namespace Mono.Debugger.Server
 			GET_SERVER_TYPE = 2,
 			GET_CAPABILITIES = 3,
 			CREATE_INFERIOR = 4,
-			CREATE_BPM = 5
+			CREATE_BPM = 5,
+			CREATE_EXE_READER = 6
 		}
 
 		enum CmdInferior {
@@ -73,12 +75,22 @@ namespace Mono.Debugger.Server
 			READ_MEMORY = 14,
 			WRITE_MEMORY = 15,
 			GET_PENDING_SIGNAL = 16,
-			SET_SIGNAL = 17
+			SET_SIGNAL = 17,
+			GET_DYNAMIC_INFO = 18
 		}
 
 		enum CmdBpm {
 			LOOKUP_BY_ADDR = 1,
 			LOOKUP_BY_ID = 2
+		}
+
+		enum CmdExeReader {
+			GET_START_ADDRESS = 1,
+			LOOKUP_SYMBOL = 2,
+			GET_TARGET_NAME = 3,
+			HAS_SECTION = 4,
+			GET_SECTION_ADDRESS = 5,
+			GET_SECTION_CONTENTS = 6
 		}
 
 		enum CmdEvent {
@@ -626,6 +638,50 @@ namespace Mono.Debugger.Server
 		public int CreateBreakpointManager ()
 		{
 			return SendReceive (CommandSet.SERVER, (int)CmdServer.CREATE_BPM, null).ReadInt ();
+		}
+
+		public int CreateExeReader (string filename)
+		{
+			return SendReceive (CommandSet.SERVER, (int)CmdServer.CREATE_EXE_READER, new PacketWriter ().WriteString (filename)).ReadInt ();
+		}
+
+		public long BfdGetStartAddress (int iid)
+		{
+			return SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_START_ADDRESS, new PacketWriter ().WriteInt (iid)).ReadLong ();
+		}
+
+		public long BfdLookupSymbol (int iid, string name)
+		{
+			return SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.LOOKUP_SYMBOL, new PacketWriter ().WriteInt (iid).WriteString (name)).ReadLong ();
+		}
+
+		public string BfdGetTargetName (int iid)
+		{
+			return SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_TARGET_NAME, new PacketWriter ().WriteInt (iid)).ReadString ();
+		}
+
+		public bool BfdHasSection (int iid, string name)
+		{
+			return SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.HAS_SECTION, new PacketWriter ().WriteInt (iid).WriteString (name)).ReadByte () != 0;
+		}
+
+		public long BfdGetSectionAddress (int iid, string name)
+		{
+			return SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_SECTION_ADDRESS, new PacketWriter ().WriteInt (iid).WriteString (name)).ReadLong ();
+		}
+
+		public byte[] BfdGetSectionContents (int iid, string name)
+		{
+			var reader = SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_SECTION_CONTENTS, new PacketWriter ().WriteInt (iid).WriteString (name));
+			int size = reader.ReadInt ();
+			if (size < 0)
+				return null;
+			return reader.ReadData (size);
+		}
+
+		public long BfdGetDynamicInfo (int inferior_iid, int bfd_iid)
+		{
+			return SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_DYNAMIC_INFO, new PacketWriter ().WriteInt (inferior_iid).WriteInt (bfd_iid)).ReadLong ();
 		}
 
 		public DebuggerServer.SignalInfo GetSignalInfo (int iid)
