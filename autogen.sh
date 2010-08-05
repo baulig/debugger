@@ -56,13 +56,6 @@ if test "$DIE" -eq 1; then
   exit 1
 fi
 
-if test -z "$*"; then
-  echo "**Warning**: I am going to run \`configure' with no arguments."
-  echo "If you wish to pass any to it, please specify them on the"
-  echo \`$0\'" command line."
-  echo
-fi
-
 case $CC in
 xlc )
   am_opt=--include-deps;;
@@ -99,9 +92,22 @@ echo "Running autoconf ..."
 autoconf || { echo "**Error**: autoconf failed."; exit 1; }
 
 
+if test -d $srcdir/sysdeps/eglib; then
+  echo Running sysdeps/eglib/autogen.sh ...
+  (cd $srcdir/sysdeps/eglib ; NOCONFIGURE=1 ./autogen.sh "$@")
+  echo Done running sysdeps/eglib/autogen.sh ...
+fi
+
 conf_flags="--enable-maintainer-mode --enable-build-warnings" #--enable-iso-c
 
 if test x$NOCONFIGURE = x; then
+  if test -z "$*"; then
+    echo "**Warning**: I am going to run \`configure' with no arguments."
+    echo "If you wish to pass any to it, please specify them on the"
+    echo \`$0\'" command line."
+    echo
+  fi
+
   echo Running $srcdir/configure $conf_flags "$@" ...
   $srcdir/configure $conf_flags "$@" \
   && echo Now type \`make\' to compile $PKG_NAME || exit 1

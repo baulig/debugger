@@ -11,10 +11,10 @@ G_BEGIN_DECLS
 #include <sys/user.h>
 #endif
 
+#ifndef WINDOWS
 #define INFERIOR_REGS_TYPE	struct user_regs_struct
 #define INFERIOR_FPREGS_TYPE	struct user_fpregs_struct
 
-#ifndef _WINDOWS
 #define INFERIOR_REG_EIP(r)	r.eip
 #define INFERIOR_REG_ESP(r)	r.esp
 #define INFERIOR_REG_EBP(r)	r.ebp

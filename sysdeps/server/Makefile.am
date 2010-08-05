@@ -1,8 +1,28 @@
-lib_LTLIBRARIES = libmonodebuggerserver.la
+bin_PROGRAMS = mdb-server
 
-noinst_LTLIBRARIES = libmonodebuggerbfdglue.la
+if USING_EGLIB
+eglib_cflags = -I$(top_srcdir)/sysdeps/eglib/src -I../eglib/src
+eglib_libs = ../eglib/src/libeglib.la libmonodebuggerbfdglue.la
+if SERVER_ONLY
+bfdglue_lib =
+else
+bfdglue_lib = libmonodebuggerbfdglue.la
+endif
+else
+eglib_cflags =
+eglib_libs = libmonodebuggerbfdglue.la
+bfdglue_lib = libmonodebuggerbfdglue.la
+endif
 
-noinst_PROGRAMS = mdb-server
+if SERVER_ONLY
+server_libraries =
+else
+server_libraries = libmonodebuggerserver.la
+endif
+
+lib_LTLIBRARIES = $(server_libraries)
+
+noinst_LTLIBRARIES = $(bfdglue_lib)
 
 libmonodebuggerbfdglue_la_SOURCES = \
 	bfdglue.c \
@@ -17,7 +37,8 @@ libmonodebuggerbfdglue_la_CPPFLAGS = \
 	-I$(top_srcdir)/sysdeps/bfd \
 	-I$(top_srcdir)/sysdeps/bfd/include \
 	-I$(top_srcdir)/sysdeps/bfd/opcodes \
-	@SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@
+	@SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@ \
+	$(eglib_cflags)
 
 EXTRA_libmonodebuggerserver_la_SOURCES = \
 	i386-arch.c			\
@@ -31,33 +52,48 @@ EXTRA_libmonodebuggerserver_la_SOURCES = \
 	x86-ptrace.h
 if PLATFORM_POWERPC
 platform_sources =
+platform_server =
+platform_libs =
 else
 if PLATFORM_X86_DARWIN
 platform_sources = \
 	x86-ptrace.c \
 	darwin-thread-db.c \
 	thread-db.h
-libmonodebuggerserver_la_LIBADD = \
-	@SERVER_DEPENDENCIES_LIBS@ \
-	../../sysdeps/bfd/libbfd.la
+platform_server =
+platform_libs =
+else
+if PLATFORM_X86_WINDOWS
+platform_sources = \
+	x86-windows.c
+platform_server = \
+	mdb-server-windows.c
+platform_libs = \
+	-lmswsock -lws2_32 -lpsapi -lkernel32
 else
 platform_sources = \
 	x86-ptrace.c \
 	thread-db.c	\
 	thread-db.h
-libmonodebuggerserver_la_LIBADD = \
-	@SERVER_DEPENDENCIES_LIBS@ -lthread_db \
-	libmonodebuggerbfdglue.la
-
+platform_server = \
+	mdb-server-linux.c
+platform_libs = \
+	-lpthread \
+	-lthread_db
 endif
 endif
+endif
 
-libmonodebuggerserver_la_CPPFLAGS = @SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@
+libmonodebuggerserver_la_CPPFLAGS = \
+	@SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@ \
+	$(eglib_cflags)
 
 libmonodebuggerserver_la_SOURCES = \
 	server.h		\
 	library.c		\
 	$(platform_sources)	\
+	debugger-mutex.c	\
+	debugger-mutex.h	\
 	breakpoints.c		\
 	breakpoints.h		\
 	libgtop-glue.c		\
@@ -67,22 +103,46 @@ libmonodebuggerserver_la_SOURCES = \
 libmonodebuggerserver_la_LDFLAGS = \
 	 -no-undefined -export-dynamic -shared
 
+libmonodebuggerserver_la_LIBADD = \
+	@SERVER_DEPENDENCIES_LIBS@ \
+	$(eglib_libs) $(platform_libs)
+
 mdb_server_CPPFLAGS = \
 	-I$(top_srcdir)/sysdeps/bfd \
 	-I$(top_srcdir)/sysdeps/bfd/include \
 	-I$(top_srcdir)/sysdeps/bfd/opcodes \
-	@SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@
+	@SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@ \
+	$(eglib_cflags)
+
+EXTRA_mdb_server_SOURCES = \
+	i386-arch.c			\
+	i386-arch.h			\
+	x86-arch.h			\
+	x86_64-arch.h			\
+	x86_64-arch.c			\
+	x86-linux-ptrace.c		\
+	x86-linux-ptrace.h		\
+	x86-ptrace.c			\
+	x86-ptrace.h
+	mdb-server-linux.c \
+	mdb-server-window.c
+
+if SERVER_ONLY
+platform_server_sources = $(platform_sources)
+else
+platform_server_sources =
+endif
 
 mdb_server_SOURCES = \
 	mdb-server.c \
 	mdb-server.h \
-	mdb-server-linux.c
+	$(platform_server) \
+	$(platform_server_sources)
 
 mdb_server_LDFLAGS = \
 	-static
 
 mdb_server_LDADD = \
-	-lpthread \
 	libmonodebuggerserver.la
 
 CLEANFILES = lib*.a lib*.dll

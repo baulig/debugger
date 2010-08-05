@@ -22,6 +22,9 @@ x86_64_linux_vec_defines = -DHAVE_bfd_elf64_x86_64_vec -DHAVE_bfd_elf32_i386_vec
 i386_mach_backend = mach-o.c pef.c xsym.c cpu-i386.c
 i386_mach_vec_defines = -DHAVE_mach_o_be_vec -DHAVE_mach_o_le_vec -DHAVE_mach_o_fat_vec -DHAVE_pef_vec -DHAVE_pef_xlib_vec -DHAVE_sym_vec
 
+i386_windows_backend = pe-i386.c pei-i386.c xsym.c cpu-i386.c peigen.c cofflink.c
+i386_windows_vec_defines = -DHAVE_i386pe_vec -DHAVE_sym_vec
+
 if BFD_TARGET_POWERPC
 BFD_BACKEND = $(powerpc_backend) $(i386_linux_backend)
 TDEFAULTS =  -DDEFAULT_VECTOR=mach_o_be_vec -DSELECT_VECS='&mach_o_be_vec,&mach_o_le_vec,&mach_o_fat_vec,&pef_vec,&pef_xlib_vec,&sym_vec,&bfd_elf32_i386_vec,&i386linux_vec,&bfd_efi_app_ia32_vec,&bfd_elf32_little_generic_vec,&bfd_elf32_big_generic_vec,&i386pe_vec,&i386pei_vec' -DSELECT_ARCHITECTURES='&bfd_powerpc_arch,&bfd_rs6000_arch,&bfd_i386_arch' $(powerpc_vec_defines) $(i386_linux_vec_defines)
@@ -37,9 +40,15 @@ BFD_BACKEND = $(i386_mach_backend)
 TDEFAULTS =  -DDEFAULT_VECTOR=mach_o_be_vec -DSELECT_VECS='&mach_o_be_vec,&mach_o_le_vec,&mach_o_fat_vec,&pef_vec,&pef_xlib_vec,&sym_vec' -DSELECT_ARCHITECTURES='&bfd_i386_arch' $(i386_mach_vec_defines)
 bfd_cflags =
 else
+if BFD_TARGET_X86_WINDOWS
+BFD_BACKEND = $(i386_windows_backend)
+TDEFAULTS =  -DDEFAULT_VECTOR=i386pe_vec -DSELECT_VECS='&i386pe_vec,&i386pei_vec' -DSELECT_ARCHITECTURES='&bfd_i386_arch' $(i386_windows_vec_defines)
+bfd_cflags =
+else
 BFD_BACKEND = $(i386_linux_backend)
 TDEFAULTS =  -DDEFAULT_VECTOR=bfd_elf32_i386_vec -DSELECT_VECS='&bfd_elf32_i386_vec,&i386linux_vec,&bfd_efi_app_ia32_vec,&bfd_elf32_little_generic_vec,&bfd_elf32_big_generic_vec,&i386pe_vec,&i386pei_vec' -DSELECT_ARCHITECTURES='&bfd_i386_arch' $(i386_linux_vec_defines)
 bfd_cflags = -DTRAD_CORE
+endif
 endif
 endif
 endif

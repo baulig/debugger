@@ -1,13 +1,42 @@
 #include <mdb-server.h>
+#include <debugger-mutex.h>
 #include <errno.h>
 #include <unistd.h>
 #include <string.h>
+#ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
-#include <sys/socket.h>
+#endif
+#ifdef HAVE_SYS_SELECT_H
 #include <sys/select.h>
-#include <netinet/in.h>
+#endif
+#ifdef HAVE_SYS_SOCKET_H
+#include <sys/socket.h>
+#endif
+#ifdef HAVE_NETINET_TCP_H
 #include <netinet/tcp.h>
-#include <pthread.h>
+#endif
+#ifdef HAVE_NETINET_IN_H
+#include <netinet/in.h>
+#endif
+#ifdef HAVE_NETDB_H
+#include <netdb.h>
+#endif
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+
+#ifdef WINDOWS
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#ifdef __GNUC__
+/* cygwin's headers do not seem to define these */
+void WSAAPI freeaddrinfo (struct addrinfo*);
+int WSAAPI getaddrinfo (const char*,const char*,const struct addrinfo*,
+                        struct addrinfo**);
+int WSAAPI getnameinfo(const struct sockaddr*,socklen_t,char*,DWORD,
+                       char*,DWORD,int);
+#endif
+#endif
 
 static const char *handshake_msg = "9da91832-87f3-4cde-a92f-6384fec6536e";
 
@@ -81,7 +110,7 @@ static GHashTable *inferior_by_pid = NULL;
 static GHashTable *bpm_hash = NULL;
 static GHashTable *exe_reader_hash = NULL;
 
-static pthread_mutex_t main_mutex = PTHREAD_MUTEX_INITIALIZER;
+static DebuggerMutex *main_mutex;
 
 /*
  * recv_length:
@@ -267,7 +296,7 @@ send_packet (int command_set, int command, Buffer *data)
 	int len, id;
 	gboolean res;
 
-	id = g_atomic_int_exchange_and_add (&packet_id, 1);
+	id = ++packet_id;
 
 	len = data->p - data->buf + 11;
 	buffer_init (&buf, len);
@@ -291,6 +320,8 @@ send_reply_packet (int id, int error, Buffer *data)
 	Buffer buf;
 	int len;
 	gboolean res;
+
+	g_message (G_STRLOC);
 	
 	len = data->p - data->buf + 11;
 	buffer_init (&buf, len);
@@ -331,9 +362,9 @@ mdb_server_process_child_event (ServerStatusMessageType message, guint32 pid, gu
 	if (opt_data)
 		buffer_add_data (&buf, opt_data, opt_data_size);
 
-	pthread_mutex_lock (&main_mutex);
+	debugger_mutex_lock (main_mutex);
 	send_packet (CMD_SET_EVENT, CMD_COMPOSITE, &buf);
-	pthread_mutex_unlock (&main_mutex);
+	debugger_mutex_unlock (main_mutex);
 
 	buffer_free (&buf);
 }
@@ -350,6 +381,13 @@ main (int argc, char *argv[])
 	inferior_by_pid = g_hash_table_new (NULL, NULL);
 	bpm_hash = g_hash_table_new (NULL, NULL);
 	exe_reader_hash = g_hash_table_new (NULL, NULL);
+
+	main_mutex = debugger_mutex_new ();
+
+	if (mdb_server_init_os ()) {
+		g_warning (G_STRLOC ": Failed to initialize OS backend.");
+		return -1;
+	}
 
 	fd = socket (AF_INET, SOCK_STREAM, 0);
 	g_message (G_STRLOC ": %d", fd);
@@ -412,11 +450,7 @@ main (int argc, char *argv[])
 		flag = 1;
 	}
 
-	if (mdb_server_init_os ()) {
-		close (conn_fd);
-		close (fd);
-		return -1;
-	}
+	mono_debugger_breakpoint_manager_init ();
 
 	mdb_server_main_loop (conn_fd);
 
@@ -438,7 +472,7 @@ server_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 			&int_size, &long_size, &addr_size, &is_bigendian);
 
 		if (result != COMMAND_ERROR_NONE)
-		  return result;
+			return result;
 
 		buffer_add_int (buf, int_size);
 		buffer_add_int (buf, long_size);
@@ -542,6 +576,9 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		argv [argc] = NULL;
 
 		g_message (G_STRLOC);
+
+		argv [0] = g_strdup_printf ("X:\\Work\\Martin\\mdb\\testnativetypes.exe");
+		cwd = g_get_current_dir (); // FIXME
 
 		result = mono_debugger_server_spawn (inferior, cwd, argv, NULL, FALSE, &child_pid, NULL, &error);
 		g_message (G_STRLOC ": %d - %d - %s", result, child_pid, error);
@@ -1011,9 +1048,9 @@ mdb_server_main_loop_iteration (void)
 
 
 	if (!no_reply) {
-		pthread_mutex_lock (&main_mutex);
+		debugger_mutex_lock (main_mutex);
 		send_reply_packet (id, err, &buf);
-		pthread_mutex_unlock (&main_mutex);
+		debugger_mutex_unlock (main_mutex);
 	}
 
 	g_free (data);

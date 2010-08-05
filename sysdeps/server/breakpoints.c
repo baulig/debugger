@@ -1,6 +1,6 @@
 #include <server.h>
 #include <breakpoints.h>
-#include <glib/gthread.h>
+#include <debugger-mutex.h>
 #include <sys/stat.h>
 #include <signal.h>
 #ifdef HAVE_UNISTD_H
@@ -10,9 +10,15 @@
 #include <fcntl.h>
 #include <errno.h>
 
-static GStaticRecMutex bpm_mutex = G_STATIC_REC_MUTEX_INIT;
+static DebuggerMutex *bpm_mutex;
 
 static int last_breakpoint_id = 0;
+
+void
+mono_debugger_breakpoint_manager_init (void)
+{
+	bpm_mutex = debugger_mutex_new ();
+}
 
 BreakpointManager *
 mono_debugger_breakpoint_manager_new (void)
@@ -54,33 +60,33 @@ mono_debugger_breakpoint_manager_free (BreakpointManager *bpm)
 void
 mono_debugger_breakpoint_manager_lock (void)
 {
-	g_static_rec_mutex_lock (&bpm_mutex);
+	debugger_mutex_lock (bpm_mutex);
 }
 
 void
 mono_debugger_breakpoint_manager_unlock (void)
 {
-	g_static_rec_mutex_unlock (&bpm_mutex);
+	debugger_mutex_unlock (bpm_mutex);
 }
 
 void
 mono_debugger_breakpoint_manager_insert (BreakpointManager *bpm, BreakpointInfo *breakpoint)
 {
 	g_ptr_array_add (bpm->breakpoints, breakpoint);
-	g_hash_table_insert (bpm->breakpoint_hash, GSIZE_TO_POINTER (breakpoint->id), breakpoint);
-	g_hash_table_insert (bpm->breakpoint_by_addr, GSIZE_TO_POINTER (breakpoint->address), breakpoint);
+	g_hash_table_insert (bpm->breakpoint_hash, GINT_TO_POINTER ((gsize) breakpoint->id), breakpoint);
+	g_hash_table_insert (bpm->breakpoint_by_addr, GINT_TO_POINTER ((gsize) breakpoint->address), breakpoint);
 }
 
 BreakpointInfo *
 mono_debugger_breakpoint_manager_lookup (BreakpointManager *bpm, guint64 address)
 {
-	return g_hash_table_lookup (bpm->breakpoint_by_addr, GSIZE_TO_POINTER (address));
+	return g_hash_table_lookup (bpm->breakpoint_by_addr, GINT_TO_POINTER ((gsize) address));
 }
 
 BreakpointInfo *
 mono_debugger_breakpoint_manager_lookup_by_id (BreakpointManager *bpm, guint32 id)
 {
-	return g_hash_table_lookup (bpm->breakpoint_hash, GSIZE_TO_POINTER (id));
+	return g_hash_table_lookup (bpm->breakpoint_hash, GINT_TO_POINTER ((gsize) id));
 }
 
 GPtrArray *
@@ -100,8 +106,8 @@ mono_debugger_breakpoint_manager_remove (BreakpointManager *bpm, BreakpointInfo 
 	if (--breakpoint->refcount > 0)
 		return;
 
-	g_hash_table_remove (bpm->breakpoint_hash, GSIZE_TO_POINTER (breakpoint->id));
-	g_hash_table_remove (bpm->breakpoint_by_addr, GSIZE_TO_POINTER (breakpoint->address));
+	g_hash_table_remove (bpm->breakpoint_hash, GINT_TO_POINTER ((gsize)breakpoint->id));
+	g_hash_table_remove (bpm->breakpoint_by_addr, GINT_TO_POINTER ((gsize)breakpoint->address));
 	g_ptr_array_remove_fast (bpm->breakpoints, breakpoint);
 	g_free (breakpoint);
 }

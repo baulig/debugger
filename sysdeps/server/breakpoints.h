@@ -30,6 +30,9 @@ typedef struct {
 	guint64 address;
 } BreakpointInfo;
 
+void
+mono_debugger_breakpoint_manager_init                (void);
+
 BreakpointManager *
 mono_debugger_breakpoint_manager_new                 (void);
 

@@ -419,7 +419,7 @@ namespace Mono.Debugger.Server
 		public void Connect ()
 		{
 			socket = new Socket (AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-			socket.Connect (IPAddress.Loopback, 8888);
+			socket.Connect (IPAddress.Parse ("192.168.8.1"), 8888);
 
 			byte[] buf = new byte [HANDSHAKE_STRING.Length];
 			char[] cbuf = new char [buf.Length];

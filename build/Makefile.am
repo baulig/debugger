@@ -10,6 +10,10 @@ if MONO_TRUNK
 MCS_FLAGS += -define:MONO_TRUNK
 endif
 
+if REMOTE_ONLY
+MCS_FLAGS += -define:REMOTE_ONLY
+endif
+
 if MARTIN_PRIVATE
 # Enable some more stuff for me.
 if ATTACHING_SUPPORTED

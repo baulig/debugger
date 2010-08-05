@@ -1,4 +1,16 @@
-SUBDIRS = sysdeps interface languages classes backend symbolwriter frontend test build
+if SERVER_ONLY
+csharp_dirs =
+else
+csharp_dirs = interface languages classes backend symbolwriter frontend test
+endif
+
+if REMOTE_ONLY
+sysdeps_dir =
+else
+sysdeps_dir = sysdeps
+endif
+
+SUBDIRS = $(sysdeps_dir) $(csharp_dirs)
 
 DIST_SUBDIRS= doc $(SUBDIRS)
 

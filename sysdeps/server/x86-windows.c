@@ -1,9 +1,10 @@
 #include <server.h>
 #include "x86-arch.h"
+#include <string.h>
 #include <assert.h>
 #include <windows.h>
-#include <Psapi.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <glib.h>
 #define BREAKPOINT_HIT_DEBUG_EVENT	0x10000
 /* REMARKS 
@@ -307,23 +308,22 @@ but how and which information should be placed there is not yet clear. To shield
 internal changes accessor function will be used. This accessor functions are yet to be written and 
 one must expect them to change over time */
 static DEBUG_INFO m_debug_info;
+#if FIXME
 static GAsyncQueue *bridge;
-
-
-
+#endif
 
 /* Prototypes */
 /* preparing a debugger thread and starting the process to be debugged */
 static int start_debugging (DEBUG_INFO *); 
 /* Event loop for the debugger thread */
-DWORD debugging_thread (LPVOID);
+DWORD debugging_thread (DEBUG_INFO *);
 /* creation of the debuggee */
 static int launch_debuggee (void);
 /* Format error message to a more readable form */
 static void format_windows_error_message (DWORD error_code);
 /* events initialization */
 static int initialize_events (void);
-static int get_set_registers (CONTEXT *context,  enum READ_FLAG flag);
+static int get_set_registers (CONTEXT *context,  enum RW_FLAG flag);
 static int single_step_checks (guint32 eip);
 static BOOL decrement_ip (HANDLE debuggee_thread_handle);
 static int resume_from_imports_table (int flag);
@@ -382,7 +382,8 @@ void set_debuggee_process_id (DWORD pid)
 static int initialize_events (void) 
 {
 	int result = 1;
-	enum Event ev;
+	// enum Event ev;
+	int ev;
 
   /* only EVENT_RUNNING uses manual reset */
   m_command_events [EVENT_RUNNING] = CreateEvent (NULL, TRUE, FALSE, NULL);
@@ -817,6 +818,7 @@ static int add_dll_to_dll_list (DEBUG_EVENT *debug_event, char * dll_name)
 }
 static void add_to_bridge (int status)
 {
+#if FIXME
 	if (! bridge) {
 		bridge =  g_async_queue_new ();
 	}
@@ -825,6 +827,9 @@ static void add_to_bridge (int status)
 
 	g_async_queue_push_unlocked (bridge, GINT_TO_POINTER (status));
 	g_async_queue_unlock (bridge);
+#else
+	g_warning (G_STRLOC ": %x", status);
+#endif
 }
 
 static void check_for_debug_event (HANDLE debuggee_handle) 
@@ -1066,8 +1071,8 @@ static int start_debugging (DEBUG_INFO *dbg_info)
 	}
 	/* create a thread to wait for debugging events */
 	dbg_handle = CreateThread (NULL, 0,
-			 (LPTHREAD_START_ROUTINE)debugging_thread,
-			 (LPVOID)dbg_info, 0, &dwThreadId);
+				   (LPTHREAD_START_ROUTINE)debugging_thread,
+				   (LPVOID)dbg_info, 0, &dwThreadId);
 	if (! dbg_handle) {
 		format_windows_error_message (GetLastError ());
 		dbg_info->debugger_handle = dbg_handle;
@@ -1100,15 +1105,20 @@ DWORD debugging_thread (DEBUG_INFO *dbg_info)
 		/* output ? where */
 		
 	 } else {
-			g_attached = ATTACHED; /* creation succeeded */
+		g_attached = ATTACHED; /* creation succeeded */
 	        SetEvent (m_command_events [EVENT_RUNNING]);
 	}
-	
+
 	while (g_attached == ATTACHED) {
+
+	g_message (G_STRLOC ": waiting for event");
+
         /* proceed only when a command event permits it */
-        iCmdEvent = WaitForMultipleObjects (
-			                     G_COMMAND_EVENTS_MAX, (PHANDLE) & m_command_events,
-                                 FALSE, INFINITE);
+        iCmdEvent = WaitForMultipleObjects (G_COMMAND_EVENTS_MAX, (PHANDLE) & m_command_events,
+					    FALSE, INFINITE);
+
+	g_message (G_STRLOC ": got event - %d", iCmdEvent);
+
         switch (iCmdEvent) {
         case EVENT_RUNNING:
 			check_for_debug_event (m_debug_info.debuggee.process_handle);
@@ -1183,10 +1193,13 @@ static void format_windows_error_message (DWORD error_code)
 {
 	DWORD dw_rval;
 	dw_rval = FormatMessage (FORMAT_MESSAGE_FROM_SYSTEM, NULL,
-						   error_code, 0, windows_error_message, 
-						   windows_error_message_len, NULL);
+				 error_code, 0, windows_error_message,
+				 windows_error_message_len, NULL);
+
 	if (FALSE == dw_rval) {
 		fprintf (stderr, "Could not get error message from windows\n");
+	} else {
+		fwprintf (stderr, L"WINDOWS ERROR (code=%x): %s\n", error_code, windows_error_message);
 	}
 }
 
@@ -1764,8 +1777,10 @@ static BreakpointInfo* on_breakpoint_exception (DWORD address,int *b_continue)
     
     /* has the debuggee stopped on a known breakpoint? */
     if (breakpoint) {
+#if FIXME
 		flags = breakpoint->flags;
 		uLine = breakpoint->line;
+#endif
 		if (flags & BPFLAG_FNCALL) {
 			// SetEvent (EventCallFn); /* where is it used ? */
 			return NULL;
@@ -1818,9 +1833,11 @@ static BreakpointInfo* on_breakpoint_exception (DWORD address,int *b_continue)
 			set_step_flag (TRUE);
 			if (single_step_checks (debuggee->context.Eip))
 				*b_continue = TRUE;
+#if FIXME
 		} else if (flags & BPFLAG_HASCOUNT && breakpoint->count > 0) {
 			breakpoint->count--;
 			*b_continue = TRUE;
+#endif
 		} else if (*b_continue == FALSE) {
 			/* CHECK */
 			// int midx;
@@ -1981,7 +1998,7 @@ server_win32_remove_breakpoint (ServerHandle *handle, guint32 bhandle)
 static int launch_debuggee (void)
 {
 	STARTUPINFO si = {0};
-    BOOL b_ret;
+	BOOL b_ret;
 	int result = 1;
 	
 	SECURITY_ATTRIBUTES sa;
@@ -2010,16 +2027,16 @@ static int launch_debuggee (void)
 	lpsa = &sa;
 
 	b_ret = CreateProcess (NULL, m_debug_info.w_argv_flattened,
-                             lpsa, lpsa, FALSE, 
-							 DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS|CREATE_NEW_PROCESS_GROUP|CREATE_UNICODE_ENVIRONMENT, 
-							 m_debug_info.w_envp_flattened,
-							 m_debug_info.w_working_directory, &si, &pi);
-	
+			       lpsa, lpsa, FALSE, 
+			       DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS|CREATE_NEW_PROCESS_GROUP|CREATE_UNICODE_ENVIRONMENT,
+			       m_debug_info.w_envp_flattened,
+			       m_debug_info.w_working_directory, &si, &pi);
+
 	if (!b_ret)
 	{
 		/* cleanup code where to place here or one function above REMIND */
 		format_windows_error_message (GetLastError ());
-	    /* this should find it's way to the proper glib error mesage handler */
+		/* this should find it's way to the proper glib error mesage handler */
 		fwprintf (stderr, windows_error_message);
 		return 0;
 	}
@@ -2035,14 +2052,15 @@ static int launch_debuggee (void)
 	inferior->pid = m_debug_info.debuggee.process_id; 
 	inferior->process_handle = m_debug_info.debuggee.process_handle;
 	inferior->thread_handle = m_debug_info.debuggee.thread_handle;
+	g_message (G_STRLOC);
 	SetEvent (m_command_events [EVENT_RESULT]);
 	return 1;
 }
 
 static ServerCommandError
 server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
-		     const gchar **argv, const gchar **envp, gboolean redirect_fds,
-			 gint *child_pid, IOThreadData **io_data, gchar **error)
+		    const gchar **argv, const gchar **envp, gboolean redirect_fds,
+		    gint *child_pid, IOThreadData **io_data, gchar **error)
 {	
 	
 	int i_ret;
@@ -2052,12 +2070,15 @@ server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
 	gunichar2* utf16_working_directory = NULL;
 	InferiorHandle *inferior;
 	g_assert (handle != NULL);
-	
-	
+
 	inferior = handle->inferior;
 	g_assert (inferior != NULL);
 
-	
+	if (io_data)
+		*io_data = NULL;
+	if (error)
+		*error = NULL;
+
 	if (working_directory) {
 		utf16_working_directory = g_utf8_to_utf16 (working_directory, -1, NULL, NULL, NULL);
 	}
@@ -2077,13 +2098,13 @@ server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
 		envp_temp = envp;
 		while (*envp_temp) {
 			gunichar2* utf16_envp_temp = g_utf8_to_utf16 (*envp_temp, -1, NULL, NULL, NULL);
-			int written = swprintf (envp_concat, len, L"%s%s", utf16_envp_temp, L"\0");
+			int written = snwprintf (envp_concat, len, L"%s%s", utf16_envp_temp, L"\0");
 			g_free (utf16_envp_temp);
 			envp_concat += written + 1;
 			len -= written;
 			envp_temp++;
 		}
-		swprintf (envp_concat, len, L"%s", L"\0"); /* double NULL at end */
+		snwprintf (envp_concat, len, L"%s", L"\0"); /* double NULL at end */
 	}
 
 	if (argv) {
@@ -2105,7 +2126,7 @@ server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
 		argv_temp = argv;
 		while (*argv_temp) {
 			gunichar2* utf16_argv_temp = g_utf8_to_utf16 (*argv_temp, -1, NULL, NULL, NULL);
-			int written = swprintf (argv_concat, len, L"%s ", utf16_argv_temp);
+			int written = snwprintf (argv_concat, len, L"%s ", utf16_argv_temp);
 			inferior->argv [index++] = g_strdup (*argv_temp);
 			g_free (utf16_argv_temp);
 			argv_concat += written;
@@ -2126,7 +2147,6 @@ server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
 
 	ResetEvent (m_command_events [EVENT_RESULT]);
 
-
 	/* get the debugger thread up and running */
 	i_ret = start_debugging (&m_debug_info);
 	if (! i_ret) {
@@ -2134,7 +2154,6 @@ server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
 	}
 	WaitForSingleObject (m_command_events [EVENT_RESULT], INFINITE);
 	*child_pid = m_debug_info.debuggee.process_id;
-
 
 	return COMMAND_ERROR_NONE;
 }
@@ -2159,7 +2178,9 @@ server_win32_global_wait (guint32 *status_ret)
 	g_assert (GetCurrentThread () != m_debug_info.debugger_handle);
 	
 
-    m_windows_event_code = -1;
+	m_windows_event_code = -1;
+
+#if FIXME
 	if (! bridge) {
 		bridge = g_async_queue_new ();
 	}
@@ -2167,6 +2188,7 @@ server_win32_global_wait (guint32 *status_ret)
 	val_data = g_async_queue_pop (bridge);
 	val = GPOINTER_TO_INT (val_data);
 	*status_ret = val;
+#endif
 
 	/* correct return value`? */
 	return m_debug_info.debuggee.process_id;

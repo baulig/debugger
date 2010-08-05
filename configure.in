@@ -8,6 +8,7 @@ AM_MAINTAINER_MODE
 AC_CHECK_TOOL(CC, gcc, gcc)
 AC_PROG_CC
 AM_PROG_CC_STDC
+AM_PROG_CC_C_O
 AC_PROG_INSTALL
 
 build_warnings="-W -Wall -Wstrict-prototypes -Wmissing-prototypes"
@@ -31,8 +32,34 @@ if test "x${build_warnings}" != x && test "x$GCC" = xyes ; then
 fi
 AC_SUBST(WARN_CFLAGS)
 
-AC_MSG_CHECKING([host platform characteristics])
-case "$host" in
+AC_ARG_WITH(backend,
+[  --backend Select backend (EXPERIMENTAL).],
+[case "${withval}" in
+ server-only)
+   server_only=yes
+   remote_only=no
+   ;;
+ remote-only)
+   server_only=no
+   remote_only=yes
+   ;;
+ *)
+ AC_MSG_ERROR([Invalid --backend argument])
+esac])
+
+CC_FOR_BUILD=$CC
+BUILD_EXEEXT=
+if test "x$cross_compiling" = "xyes"; then
+	CC_FOR_BUILD=cc
+	BUILD_EXEEXT=""
+fi
+AC_SUBST(CC_FOR_BUILD)
+AC_SUBST(HOST_CC)
+AC_SUBST(BUILD_EXEEXT)
+
+if test x$remote_only != xyes; then
+	AC_MSG_CHECKING([host platform characteristics])
+	case "$host" in
 	x86_64-*-linux*)
 		glue_cflags=-D_GNU_SOURCE
 		server_cflags=-D_GNU_SOURCE
@@ -54,45 +81,48 @@ case "$host" in
 	*86-apple-darwin*)
 		glue_flags=
 		server_cflags=
-		server_only=yes
 		bfd_target=i386darwin
 		platform=i386darwin
+		;;
+	i386-pc-mingw32*)
+		if test x$server_only != xyes; then
+			AC_MSG_ERROR([*** This platform is not yet supported.])
+		fi
+		glue_flags=
+		server_cflags="-DWINDOWS -DUNICODE"
+		bfd_target=i386windows
+		platform=i386windows
 		;;
 	*)
 		AC_MSG_ERROR([*** This platform is not yet supported.])
 		;;
-esac
-AC_MSG_RESULT(ok)
+	esac
+	AC_MSG_RESULT(ok)
 
-AC_ARG_WITH(bfd-target,
-[  --with-bfd-target       Manually override the BFD target],
-	if test x$with_bfd_target != "x"; then
-	   bfd_target=$with_bfd_target
-	fi
-)
+	AC_ARG_WITH(bfd-target,
+	[  --with-bfd-target       Manually override the BFD target],
+		if test x$with_bfd_target != "x"; then
+		   bfd_target=$with_bfd_target
+		fi
+	)
+else
+	glue_cflags=
+	server_cflags=
+	bfd_target=none
+	platform=none
+fi
 
 AM_CONDITIONAL(BFD_TARGET_X86_MACH, test x$bfd_target = xi386darwin)
 AM_CONDITIONAL(BFD_TARGET_POWERPC, test x$bfd_target = xpowerpc)
 AM_CONDITIONAL(BFD_TARGET_X86_64, test x$bfd_target = xx86_64)
+AM_CONDITIONAL(BFD_TARGET_X86_WINDOWS, test x$bfd_target = xi386windows)
 AM_CONDITIONAL(PLATFORM_X86_DARWIN, test x$platform = xi386darwin)
 AM_CONDITIONAL(PLATFORM_POWERPC, test x$platform = xpowerpc)
 AM_CONDITIONAL(PLATFORM_X86_64, test x$platform = xx86_64)
+AM_CONDITIONAL(PLATFORM_X86_WINDOWS, test x$platform = xi386windows)
 
 AC_SUBST(glue_cflags)
 AC_SUBST(server_cflags)
-
-dnl may require a specific autoconf version
-dnl AC_PROG_CC_FOR_BUILD
-dnl CC_FOR_BUILD not automatically detected
-CC_FOR_BUILD=$CC
-BUILD_EXEEXT=
-if test "x$cross_compiling" = "xyes"; then
-	CC_FOR_BUILD=cc
-	BUILD_EXEEXT=""
-fi
-AC_SUBST(CC_FOR_BUILD)
-AC_SUBST(HOST_CC)
-AC_SUBST(BUILD_EXEEXT)
 
 dnl These must be called before AM_PROG_LIBTOOL, because it may want
 dnl to call AC_CHECK_PROG.
@@ -140,25 +170,42 @@ min_debugger_minor_version=0
 symfile_major_version=50
 min_symfile_minor_version=0
 
-AC_MSG_CHECKING([Whether we're using Mono from trunk])
-## Check for Mono from trunk
-if pkg-config --modversion mono-2>/dev/null; then
-	have_mono_trunk=true
-	mono_pc=mono-2
-	min_debugger_minor_version=6
-	server_deps="glib-2.0 >= $GLIB_REQUIRED_VERSION $martin_deps"
-	AC_MSG_RESULT([yes])
-else
-	have_mono_trunk=false
-	mono_pc=mono
-	server_deps="$mono_pc >= $MONO_REQUIRED_VERSION glib-2.0 >= $GLIB_REQUIRED_VERSION $martin_deps"
-	AC_MSG_RESULT([no])
-fi
+if test x$server_only != xyes; then
+	AC_MSG_CHECKING([Whether we're using Mono from trunk])
+	## Check for Mono from trunk
+	if pkg-config --modversion mono-2>/dev/null; then
+		have_mono_trunk=true
+		mono_pc=mono-2
+		min_debugger_minor_version=6
+		server_deps="glib-2.0 >= $GLIB_REQUIRED_VERSION $martin_deps"
+		AC_MSG_RESULT([yes])
+	else
+		have_mono_trunk=false
+		mono_pc=mono
+		server_deps="$mono_pc >= $MONO_REQUIRED_VERSION glib-2.0 >= $GLIB_REQUIRED_VERSION $martin_deps"
+		AC_MSG_RESULT([no])
+	fi
 
-## Versions of dependencies
-PKG_CHECK_MODULES(SERVER_DEPENDENCIES, $server_deps)
+	## Versions of dependencies
+	PKG_CHECK_MODULES(SERVER_DEPENDENCIES, $server_deps)
+
+	GACUTIL_FLAGS='/package $(PACKAGE) /gacdir $(prefix)/lib /root $(DESTDIR)$(prefix)/lib'
+	AC_PATH_PROG(GACUTIL, gacutil, no)
+	if test "x$GACUTIL" = "xno" ; then
+	   AC_MSG_ERROR([No gacutil tool found])
+	fi
+fi
 AC_SUBST(SERVER_DEPENDENCIES_CFLAGS)
 AC_SUBST(SERVER_DEPENDENCIES_LIBS)
+AC_SUBST(GACUTIL)
+AC_SUBST(GACUTIL_FLAGS)
+
+if test x$server_only = xyes; then
+	ac_configure_args="$ac_configure_args \"CPPFLAGS_FOR_EGLIB=$EGLIB_CPPFLAGS\" \"CFLAGS_FOR_EGLIB=$CFLAGS_FOR_EGLIB\""
+	AC_CONFIG_SUBDIRS(sysdeps/eglib)
+	AC_DEFINE([USING_EGLIB], [1], [Whether we're using eglib])
+fi
+AM_CONDITIONAL(USING_EGLIB, test x$server_only = xyes)
 
 ## Check Cecil
 if pkg-config --modversion cecil>/dev/null; then
@@ -170,80 +217,70 @@ fi
 CECIL_ASM=`pkg-config --variable=Libraries cecil`
 AC_SUBST(CECIL_ASM)
 
-PKG_CHECK_MODULES(WRAPPER, $mono_pc >= $MONO_REQUIRED_VERSION glib-2.0 >= $GLIB_REQUIRED_VERSION)
-AC_SUBST(WRAPPER_CFLAGS)
-AC_SUBST(WRAPPER_LIBS)
-
-GACUTIL_FLAGS='/package $(PACKAGE) /gacdir $(prefix)/lib /root $(DESTDIR)$(prefix)/lib'
-AC_PATH_PROG(GACUTIL, gacutil, no)
-if test "x$GACUTIL" = "xno" ; then
-   AC_MSG_ERROR([No gacutil tool found])
-fi
-
-AC_SUBST(GACUTIL)
-AC_SUBST(GACUTIL_FLAGS)
 AC_SUBST(CFLAGS)
 
-mono_prefix="`$PKG_CONFIG --variable=prefix mono`"
-monodoc_prefix="`$PKG_CONFIG --variable=prefix monodoc`"
-AC_SUBST(mono_prefix)
-AC_SUBST(monodoc_prefix)
+if test x$server_only != xyes; then
+	mono_prefix="`$PKG_CONFIG --variable=prefix mono`"
+	monodoc_prefix="`$PKG_CONFIG --variable=prefix monodoc`"
+	AC_SUBST(mono_prefix)
+	AC_SUBST(monodoc_prefix)
 
-AC_PATH_PROG(MONO, mono)
-AC_PATH_PROG(MCS, gmcs)
-AC_PATH_PROG(MONODIS, monodis)
-if test "x$MONO" = "x" ; then
-   AC_MSG_ERROR([Can't find "mono" in your PATH])
-fi
-if test "x$MCS" = "x" ; then
-   AC_MSG_ERROR([Can't find "mcs" in your PATH])
-fi
-if test "x$MONODIS" = "x" ; then
-   AC_MSG_ERROR([Can't find "monodis" in your PATH])
-fi
-
-AC_PATH_PROG(NUNIT_CONSOLE, nunit-console2)
-if test "x$NUNIT_CONSOLE" = "x" ; then
-  AC_MSG_ERROR([Can't find "nunit-console2" in your PATH])
-fi
-
-target_mono_prefix="$prefix"
-AC_ARG_WITH(target-mono,
-[  --with-target-mono      Manually override the Mono used for target applications],
-	if test "x$with_target_mono" != "x"; then
-	  target_mono_prefix=$with_target_mono
-	  have_target_mono=yes
+	AC_PATH_PROG(MONO, mono)
+	AC_PATH_PROG(MCS, gmcs)
+	AC_PATH_PROG(MONODIS, monodis)
+	if test "x$MONO" = "x" ; then
+	   AC_MSG_ERROR([Can't find "mono" in your PATH])
 	fi
-)
-AC_SUBST(target_mono_prefix)
-AM_CONDITIONAL(HAVE_TARGET_MONO, test "x$have_target_mono" = "xyes")
+	if test "x$MCS" = "x" ; then
+	   AC_MSG_ERROR([Can't find "mcs" in your PATH])
+	fi
+	if test "x$MONODIS" = "x" ; then
+	   AC_MSG_ERROR([Can't find "monodis" in your PATH])
+	fi
 
-if test "x$have_target_mono" = "xyes" ; then
-  TARGET_MCS="$target_mono_prefix/bin/gmcs"
-  TARGET_MONO="$target_mono_prefix/bin/mono"
-  TARGET_MONODIS="$target_mono_prefix/bin/monodis"
-  NUNIT_PREFIX="$target_mono_prefix"
-  NUNIT_VERSION=2.3
-else
-  TARGET_MCS="$MCS"
-  TARGET_MONO="$MONO"
-  TARGET_MONODIS="$MONODIS"
+	AC_PATH_PROG(NUNIT_CONSOLE, nunit-console2)
+	if test "x$NUNIT_CONSOLE" = "x" ; then
+	  AC_MSG_ERROR([Can't find "nunit-console2" in your PATH])
+	fi
 
-  ## Check NUnit
-  if pkg-config --modversion mono-nunit>/dev/null; then
-    AC_MSG_RESULT("Found mono-nunit.pc")
-  else
-    AC_MSG_ERROR([Cannot find mono-nunit (mono-unit.pc for packageconfig)])
-  fi
-  NUNIT_PREFIX=`pkg-config --variable=prefix mono-nunit`
-  NUNIT_VERSION=`pkg-config --modversion mono-nunit`
+	target_mono_prefix="$prefix"
+	AC_ARG_WITH(target-mono,
+	[  --with-target-mono      Manually override the Mono used for target applications],
+		if test "x$with_target_mono" != "x"; then
+		  target_mono_prefix=$with_target_mono
+		  have_target_mono=yes
+		fi
+	)
+	AC_SUBST(target_mono_prefix)
 
+	if test "x$have_target_mono" = "xyes" ; then
+	  TARGET_MCS="$target_mono_prefix/bin/gmcs"
+	  TARGET_MONO="$target_mono_prefix/bin/mono"
+	  TARGET_MONODIS="$target_mono_prefix/bin/monodis"
+	  NUNIT_PREFIX="$target_mono_prefix"
+	  NUNIT_VERSION=2.3
+	else
+	  TARGET_MCS="$MCS"
+	  TARGET_MONO="$MONO"
+	  TARGET_MONODIS="$MONODIS"
+
+	  ## Check NUnit
+	  if pkg-config --modversion mono-nunit>/dev/null; then
+	    AC_MSG_RESULT("Found mono-nunit.pc")
+	  else
+	    AC_MSG_ERROR([Cannot find mono-nunit (mono-unit.pc for packageconfig)])
+	  fi
+	  NUNIT_PREFIX=`pkg-config --variable=prefix mono-nunit`
+	  NUNIT_VERSION=`pkg-config --modversion mono-nunit`
+
+	fi
+	NUNIT_PREFIX=`cd $NUNIT_PREFIX && pwd`
+	AC_SUBST(TARGET_MCS)
+	AC_SUBST(TARGET_MONO)
+	AC_SUBST(TARGET_MONODIS)
+	AC_SUBST(NUNIT_PREFIX)
 fi
-NUNIT_PREFIX=`cd $NUNIT_PREFIX && pwd`
-AC_SUBST(TARGET_MCS)
-AC_SUBST(TARGET_MONO)
-AC_SUBST(TARGET_MONODIS)
-AC_SUBST(NUNIT_PREFIX)
+AM_CONDITIONAL(HAVE_TARGET_MONO, test "x$have_target_mono" = "xyes")
 
 real_top_srcdir=`pwd`
 AC_SUBST(real_top_srcdir)
@@ -272,73 +309,80 @@ AC_HEADER_DIRENT
 AC_CHECK_FUNCS(fcntl getpagesize setitimer sysconf fdopen getuid getgid)
 AC_CHECK_FUNCS(strlcpy strlcat fgetln)
 
-AC_ARG_WITH(xsp,
-[  --with-xsp              Enable XSP support (experimental)],
-with_xsp=yes, with_xsp=no)
+if test x$server_only != xyes -a x$remote_only != xyes; then
+	AC_ARG_WITH(xsp,
+	[  --with-xsp              Enable XSP support (experimental)],
+	with_xsp=yes, with_xsp=no)
 
-if test "x$with_xsp" = "xyes" ; then
-   PKG_CHECK_MODULES(XSP, xsp-2 >= $XSP_REQUIRED_VERSION)
-   XSP_EXE="`$PKG_CONFIG --variable=Executable xsp-2`"
-else
-   XSP_EXE=
-   XSP_CFLAGS=
-   XSP_LIBS=
-fi
-AC_SUBST(XSP_EXE)
-AC_SUBST(XSP_CFLAGS)
-AC_SUBST(XSP_LIBS)
-AM_CONDITIONAL(HAVE_XSP, test "x$with_xsp" = "xyes")
+	if test "x$with_xsp" = "xyes" ; then
+	   PKG_CHECK_MODULES(XSP, xsp-2 >= $XSP_REQUIRED_VERSION)
+	   XSP_EXE="`$PKG_CONFIG --variable=Executable xsp-2`"
+	else
+	   XSP_EXE=
+	   XSP_CFLAGS=
+	   XSP_LIBS=
+	fi
+	AC_SUBST(XSP_EXE)
+	AC_SUBST(XSP_CFLAGS)
+	AC_SUBST(XSP_LIBS)
 
-#not sure why, but I cannot get this test to pass on OS X.
-if test x$platform != xi386darwin ; then
-AC_MSG_CHECKING([Whether your Mono is working])
-old_CFLAGS=$CFLAGS
-CFLAGS=$WRAPPER_CFLAGS
-AC_TRY_COMPILE([#include <mono/metadata/mono-debug.h>
-#include <mono/metadata/debug-mono-symfile.h>
-], [
-#if MONO_DEBUGGER_MAJOR_VERSION != $debugger_major_version
-#error "Your mono is too old for this version of the debugger."
-#endif
-#if MONO_DEBUGGER_MINOR_VERSION < $min_debugger_minor_version
-#error "Your mono is too old for this version of the debugger."
-#endif
-#if MONO_SYMBOL_FILE_MAJOR_VERSION != $symfile_major_version
-#error "Your mono is too old for this version of the debugger."
-#endif
-#if MONO_SYMBOL_FILE_MINOR_VERSION < $min_symfile_minor_version
-#error "Your mono is too old for this version of the debugger."
-#endif
-], mono_working=yes, mono_working=no)
-AC_MSG_RESULT($mono_working)
-CFLAGS=$old_CFLAGS
-if test x$mono_working != xyes; then
-   AC_MSG_ERROR([*** Your Mono is too old for this version of the debugger.])
-fi
+	#not sure why, but I cannot get this test to pass on OS X.
+	if test x$platform != xi386darwin ; then
+	AC_MSG_CHECKING([Whether your Mono is working])
+	old_CFLAGS=$CFLAGS
+	CFLAGS=$WRAPPER_CFLAGS
+	AC_TRY_COMPILE([#include <mono/metadata/mono-debug.h>
+	#include <mono/metadata/debug-mono-symfile.h>
+	], [
+	#if MONO_DEBUGGER_MAJOR_VERSION != $debugger_major_version
+	#error "Your mono is too old for this version of the debugger."
+	#endif
+	#if MONO_DEBUGGER_MINOR_VERSION < $min_debugger_minor_version
+	#error "Your mono is too old for this version of the debugger."
+	#endif
+	#if MONO_SYMBOL_FILE_MAJOR_VERSION != $symfile_major_version
+	#error "Your mono is too old for this version of the debugger."
+	#endif
+	#if MONO_SYMBOL_FILE_MINOR_VERSION < $min_symfile_minor_version
+	#error "Your mono is too old for this version of the debugger."
+	#endif
+	], mono_working=yes, mono_working=no)
+	AC_MSG_RESULT($mono_working)
+	CFLAGS=$old_CFLAGS
+	if test x$mono_working != xyes; then
+	   AC_MSG_ERROR([*** Your Mono is too old for this version of the debugger.])
+	fi
 
-AC_MSG_CHECKING([Whether attaching is supported in this version of the Mono runtime])
-old_CFLAGS=$CFLAGS
-CFLAGS=$WRAPPER_CFLAGS
-#define MONO_DEBUGGER_MAJOR_VERSION			81
-#define MONO_DEBUGGER_MINOR_VERSION			3
-AC_TRY_COMPILE([#include <mono/metadata/mono-debug.h>
-#include <mono/metadata/debug-mono-symfile.h>
-], [
-#if MONO_DEBUGGER_MAJOR_VERSION < 81
-#error "Major version older than 81."
-#endif
-#if MONO_DEBUGGER_MAJOR_VERSION == 81
-#if MONO_DEBUGGER_MINOR_VERSION < 3
-#error "Minor version older than 3."
-#endif
-#endif
-], attaching_supported=yes, attaching_supported=no)
-AC_MSG_RESULT($attaching_supported)
-CFLAGS=$old_CFLAGS
-else
-attaching_supported=no
+	AC_MSG_CHECKING([Whether attaching is supported in this version of the Mono runtime])
+	old_CFLAGS=$CFLAGS
+	CFLAGS=$WRAPPER_CFLAGS
+	#define MONO_DEBUGGER_MAJOR_VERSION			81
+	#define MONO_DEBUGGER_MINOR_VERSION			3
+	AC_TRY_COMPILE([#include <mono/metadata/mono-debug.h>
+	#include <mono/metadata/debug-mono-symfile.h>
+	], [
+	#if MONO_DEBUGGER_MAJOR_VERSION < 81
+	#error "Major version older than 81."
+	#endif
+	#if MONO_DEBUGGER_MAJOR_VERSION == 81
+	#if MONO_DEBUGGER_MINOR_VERSION < 3
+	#error "Minor version older than 3."
+	#endif
+	#endif
+	], attaching_supported=yes, attaching_supported=no)
+	AC_MSG_RESULT($attaching_supported)
+	CFLAGS=$old_CFLAGS
+	else
+	attaching_supported=no
+	fi
+
+	if test x$have_mono_trunk = xtrue; then
+	   AC_DEFINE([USING_MONO_FROM_TRUNK], [1], [Whether we're using Mono from trunk])
+	fi
 fi
+AM_CONDITIONAL(MONO_TRUNK, test x$have_mono_trunk = xtrue)
 AM_CONDITIONAL(ATTACHING_SUPPORTED, test x$attaching_supported = xyes)
+AM_CONDITIONAL(HAVE_XSP, test "x$with_xsp" = "xyes")
 
 martin_private=no
 if test "x$from_svn" = "xyes"; then
@@ -355,10 +399,8 @@ AM_CONDITIONAL(MARTIN_PRIVATE, test x$martin_private = xyes)
 
 AM_CONDITIONAL(DISABLED, false)
 
-if test x$have_mono_trunk = xtrue; then
-   AC_DEFINE([USING_MONO_FROM_TRUNK], [1], [Whether we're using Mono from trunk])
-fi
-AM_CONDITIONAL(MONO_TRUNK, test x$have_mono_trunk = xtrue)
+AM_CONDITIONAL(SERVER_ONLY, test "x$server_only" = "xyes")
+AM_CONDITIONAL(REMOTE_ONLY, test "x$remote_only" = "xyes")
 
 AC_OUTPUT([
 Makefile
