@@ -24,8 +24,6 @@ mdb_server_create_exe_reader (const char *filename)
 		return NULL;
 	}
 
-	g_message (G_STRLOC ": %s - %s - %s", filename, bfd_get_target (reader->bfd), bfd_get_format (reader->bfd));
-
 	if (!bfd_check_format (reader->bfd, bfd_object) && !bfd_check_format (reader->bfd, bfd_archive)) {
 		g_warning (G_STRLOC ": Invalid bfd format: %s", filename);
 		bfd_close (reader->bfd);
