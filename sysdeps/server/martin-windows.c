@@ -9,9 +9,25 @@
 struct InferiorHandle
 {
 	HANDLE process_handle;
+	HANDLE thread_handle;
+	DWORD process_id;
+	DWORD thread_id;
+	CONTEXT current_context;
 	gint argc;
 	gchar **argv;
 };
+
+#define INFERIOR_REG_EIP(r)	r.Eip
+#define INFERIOR_REG_ESP(r)	r.Esp
+#define INFERIOR_REG_EBP(r)	r.Ebp
+#define INFERIOR_REG_EAX(r)	r.Eax
+#define INFERIOR_REG_EBX(r)	r.Ebx
+#define INFERIOR_REG_ECX(r)	r.Ecx
+#define INFERIOR_REG_EDX(r)	r.Edx
+#define INFERIOR_REG_ESI(r)	r.Esi
+#define INFERIOR_REG_EDI(r)	r.Edi
+#define INFERIOR_REG_EFLAGS(r)	r.EFlags
+#define INFERIOR_REG_ESP(r)	r.Esp
 
 static wchar_t windows_error_message [2048];
 static const size_t windows_error_message_len = 2048;
@@ -92,6 +108,7 @@ server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
 	SECURITY_ATTRIBUTES sa;
 	SECURITY_DESCRIPTOR sd;
 	LPSECURITY_ATTRIBUTES lpsa = NULL;
+	DEBUG_EVENT de;
 	BOOL b_ret;
 
 	if (io_data)
@@ -182,6 +199,32 @@ server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
 
 	*child_pid = pi.dwProcessId;
 	inferior->process_handle = pi.hProcess;
+	inferior->thread_handle = pi.hThread;
+	inferior->process_id = pi.dwProcessId;
+	inferior->thread_id = pi.dwThreadId;
+
+	if (!WaitForDebugEvent (&de, 5000)) {
+		format_windows_error_message (GetLastError ());
+		fwprintf (stderr, windows_error_message);
+		return COMMAND_ERROR_CANNOT_START_TARGET;
+	}
+
+	if (de.dwDebugEventCode != CREATE_PROCESS_DEBUG_EVENT) {
+		g_warning (G_STRLOC ": Got unknown debug event: %d", de.dwDebugEventCode);
+		return COMMAND_ERROR_CANNOT_START_TARGET;
+	}
+
+	return COMMAND_ERROR_NONE;
+}
+
+static ServerCommandError
+win32_get_registers (InferiorHandle *inferior)
+{
+	memset (&inferior->current_context, 0, sizeof (inferior->current_context));
+	inferior->current_context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS | CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS;
+
+	if (!GetThreadContext (inferior->thread_handle, &inferior->current_context))
+		return COMMAND_ERROR_UNKNOWN_ERROR;
 
 	return COMMAND_ERROR_NONE;
 }
@@ -189,7 +232,19 @@ server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
 static ServerCommandError
 server_win32_get_frame (ServerHandle *handle, StackFrame *frame)
 {
-	return COMMAND_ERROR_NOT_IMPLEMENTED;
+	ServerCommandError result;
+
+	result = win32_get_registers (handle->inferior);
+	if (result)
+		return result;
+
+	frame->address = (guint32) INFERIOR_REG_EIP (handle->inferior->current_context);
+	frame->stack_pointer = (guint32) INFERIOR_REG_ESP (handle->inferior->current_context);
+	frame->frame_address = (guint32) INFERIOR_REG_EBP (handle->inferior->current_context);
+
+	g_message (G_STRLOC ": %Lx - %Lx - %Lx", frame->address, frame->stack_pointer, frame->frame_address);
+
+	return COMMAND_ERROR_NONE;
 }
 
 static ServerCommandError
@@ -202,6 +257,20 @@ static ServerCommandError
 server_win32_write_memory (ServerHandle *handle, guint64 start, guint32 size, gconstpointer buffer)
 {
 	return COMMAND_ERROR_NOT_IMPLEMENTED;
+}
+
+static ServerCommandError
+server_win32_continue (ServerHandle *handle)
+{
+	InferiorHandle *inferior = handle->inferior;
+
+	if (!ContinueDebugEvent (inferior->process_id, inferior->thread_id, DBG_CONTINUE)) {
+		format_windows_error_message (GetLastError ());
+		fwprintf (stderr, windows_error_message);
+		return COMMAND_ERROR_UNKNOWN_ERROR;
+	}
+
+	return COMMAND_ERROR_NONE;
 }
 
 static ServerCommandError
@@ -322,7 +391,7 @@ InferiorVTable i386_windows_inferior = {
 	NULL,					/* dispatch_event */
 	NULL,					/* dispatch_simple */
 	server_win32_get_target_info,		/* get_target_info */
-	NULL,					/* continue */
+	server_win32_continue,			/* continue */
 	NULL,					/* step */
 	NULL,					/* resume */
 	server_win32_get_frame,			/* get_frame */
