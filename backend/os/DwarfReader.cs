@@ -14,23 +14,23 @@ namespace Mono.Debugger.Backend
 {
 	internal class DwarfException : Exception
 	{
-		public DwarfException (NativeExecutableReader bfd, string message, params object[] args)
+		public DwarfException (ExecutableReader bfd, string message, params object[] args)
 			: base (String.Format ("{0}: {1}", bfd.FileName,
 					       String.Format (message, args)))
 		{ }
 
-		public DwarfException (NativeExecutableReader bfd, string message, Exception inner)
+		public DwarfException (ExecutableReader bfd, string message, Exception inner)
 			: base (String.Format ("{0}: {1}", bfd.FileName, message), inner)
 		{ }
 	}
 
 	internal class DwarfBinaryReader : TargetBinaryReader
 	{
-		NativeExecutableReader bfd;
+		ExecutableReader bfd;
 		OperatingSystemBackend os;
 		bool is64bit;
 
-		public DwarfBinaryReader (OperatingSystemBackend os, NativeExecutableReader bfd,
+		public DwarfBinaryReader (OperatingSystemBackend os, ExecutableReader bfd,
 					  TargetBlob blob, bool is64bit)
 			: base (blob)
 		{
@@ -39,7 +39,7 @@ namespace Mono.Debugger.Backend
 			this.is64bit = is64bit;
 		}
 
-		public NativeExecutableReader ExecutableReader {
+		public ExecutableReader ExecutableReader {
 			get {
 				return bfd;
 			}
@@ -104,7 +104,7 @@ namespace Mono.Debugger.Backend
 	internal class DwarfReader : DebuggerMarshalByRefObject
 	{
 		protected readonly OperatingSystemBackend os;
-		protected NativeExecutableReader bfd;
+		protected ExecutableReader bfd;
 		protected Module module;
 		protected string filename;
 		bool is64bit;
@@ -130,7 +130,7 @@ namespace Mono.Debugger.Backend
 		// Hashtable pubtypes;
 		TargetMemoryInfo target_info;
 
-		public DwarfReader (OperatingSystemBackend os, NativeExecutableReader bfd, Module module)
+		public DwarfReader (OperatingSystemBackend os, ExecutableReader bfd, Module module)
 		{
 			this.os = os;
 			this.bfd = bfd;
@@ -196,7 +196,7 @@ namespace Mono.Debugger.Backend
 			// pubtypes = read_pubtypes ();
 		}
 
-		public static bool IsSupported (NativeExecutableReader bfd)
+		public static bool IsSupported (ExecutableReader bfd)
 		{
 			if ((bfd.TargetName == "elf32-i386") || (bfd.TargetName == "elf64-x86-64"))
 				return bfd.HasSection (".debug_info");

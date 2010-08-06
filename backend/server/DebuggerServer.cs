@@ -28,6 +28,9 @@ namespace Mono.Debugger.Server
 
 		public abstract TargetError InitializeThread (InferiorHandle inferior, int child_pid, bool wait);
 
+		public abstract ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,
+								      string filename, TargetAddress base_address, bool is_loaded);
+
 		internal struct ServerStackFrame
 		{
 			public long Address;

@@ -6,13 +6,13 @@ namespace Mono.Debugger.Backend
 	internal class DwarfFrameReader
 	{
 		protected readonly OperatingSystemBackend os;
-		protected readonly NativeExecutableReader bfd;
+		protected readonly ExecutableReader bfd;
 		protected readonly TargetBlob blob;
 		protected readonly bool is_ehframe;
 		protected readonly long vma;
 		protected CIE cie_list;
 
-		public DwarfFrameReader (OperatingSystemBackend os, NativeExecutableReader bfd,
+		public DwarfFrameReader (OperatingSystemBackend os, ExecutableReader bfd,
 					 TargetBlob blob, long vma, bool is_ehframe)
 		{
 			this.os = os;

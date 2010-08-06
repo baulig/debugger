@@ -68,6 +68,14 @@ namespace Mono.Debugger.Server
 			return new RemoteInferior (connection.CreateInferior (bpm.IID));
 		}
 
+		public override ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,
+								      string filename, TargetAddress base_address, bool is_loaded)
+		{
+			var reader = new RemoteExecutableReader (os, memory, this, filename);
+			reader.ReadDebuggingInfo ();
+			return reader;
+		}
+
 		public override void InitializeProcess (InferiorHandle inferior)
 		{
 			connection.InitializeProcess (((RemoteInferior) inferior).IID);

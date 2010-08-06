@@ -13,7 +13,7 @@ namespace Mono.Debugger.Backend
 {
 	internal delegate void BfdDisposedHandler (Bfd bfd);
  
-	internal class Bfd : NativeExecutableReader, ISymbolContainer
+	internal class Bfd : ExecutableReader, ISymbolContainer
 	{
 		IntPtr bfd;
 		protected Module module;

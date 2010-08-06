@@ -5,7 +5,7 @@ using Mono.Debugger.Architectures;
 
 namespace Mono.Debugger.Backend
 {
-	internal abstract class NativeExecutableReader : DebuggerMarshalByRefObject, IDisposable
+	internal abstract class ExecutableReader : DebuggerMarshalByRefObject, IDisposable
 	{
 		public abstract TargetMemoryInfo TargetMemoryInfo {
 			get;
@@ -92,7 +92,7 @@ namespace Mono.Debugger.Backend
 			GC.SuppressFinalize (this);
 		}
 
-		~NativeExecutableReader ()
+		~ExecutableReader ()
 		{
 			Dispose (false);
 		}

@@ -112,7 +112,7 @@ namespace Mono.Debugger.Backend
 
 		PsErr global_lookup (string obj_name, string sym_name, out long sym_addr)
 		{
-			NativeExecutableReader exe = process.OperatingSystem.LookupLibrary (obj_name);
+			ExecutableReader exe = process.OperatingSystem.LookupLibrary (obj_name);
 			if (exe == null) {
 				sym_addr = 0;
 				return PsErr.NoSym;

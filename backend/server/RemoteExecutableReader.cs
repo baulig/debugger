@@ -12,7 +12,7 @@ using Mono.Debugger.Languages;
 
 namespace Mono.Debugger.Server
 {
-	internal class RemoteExecutableReader : NativeExecutableReader
+	internal class RemoteExecutableReader : ExecutableReader
 	{
 		OperatingSystemBackend os;
 		TargetMemoryInfo memory_info;

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Collections;
+using System.Collections.Generic;
 
 using Mono.Debugger;
 using Mono.Debugger.Server;
@@ -10,84 +11,23 @@ namespace Mono.Debugger.Backend
 {
 	internal class LinuxOperatingSystem : OperatingSystemBackend
 	{
-		Hashtable bfd_hash;
-		NativeExecutableReader main_reader;
-
 		public LinuxOperatingSystem (Process process)
 			: base (process)
+		{ }
+
+		protected override void CheckLoadedLibrary (Inferior inferior, ExecutableReader reader)
 		{
-			this.bfd_hash = Hashtable.Synchronized (new Hashtable ());
-		}
-
-		internal override void ReadNativeTypes ()
-		{
-			foreach (NativeExecutableReader reader in bfd_hash.Values) {
-				reader.ReadDebuggingInfo ();
-			}
-		}
-
-		public override NativeExecutableReader LookupLibrary (TargetAddress address)
-		{
-			foreach (NativeExecutableReader bfd in bfd_hash.Values) {
-				if (!bfd.IsContinuous)
-					continue;
-
-				if ((address >= bfd.StartAddress) && (address < bfd.EndAddress))
-					return bfd;
-			}
-
-			return null;
-		}
-
-		public override NativeExecutableReader LoadExecutable (TargetMemoryInfo memory, string filename,
-								       bool load_native_symtabs)
-		{
-			check_disposed ();
-			NativeExecutableReader bfd = (NativeExecutableReader) bfd_hash [filename];
-			if (bfd != null)
-				return bfd;
-
-			var server = Process.ThreadManager.DebuggerServer as RemoteDebuggerServer;
-			if (server != null) {
-				bfd = new RemoteExecutableReader (this, memory, server, filename);
-				bfd.ReadDebuggingInfo ();
-			} else {
-				bfd = new Bfd (this, memory, filename, TargetAddress.Null, true);
-			}
-
-			bfd_hash.Add (filename, bfd);
-			main_reader = bfd;
-			return bfd;
-		}
-
-		public override NativeExecutableReader AddExecutableFile (Inferior inferior, string filename,
-									  TargetAddress base_address, bool step_into,
-									  bool is_loaded)
-		{
-			check_disposed ();
-			NativeExecutableReader bfd = (NativeExecutableReader) bfd_hash [filename];
-			if (bfd != null)
-				return bfd;
-
-			bfd = new Bfd (this, inferior.TargetMemoryInfo, filename, base_address, is_loaded);
-			bfd_hash.Add (filename, bfd);
-			check_loaded_library (inferior, bfd);
-			return bfd;
-		}
-
-		protected void check_loaded_library (Inferior inferior, NativeExecutableReader bfd)
-		{
-			check_nptl_setxid (inferior, bfd);
+			check_nptl_setxid (inferior, reader);
 
 			if (!Process.MonoRuntimeFound)
-				check_for_mono_runtime (inferior, bfd);
+				check_for_mono_runtime (inferior, reader);
 		}
 
 		TargetAddress pending_mono_init = TargetAddress.Null;
 
-		void check_for_mono_runtime (Inferior inferior, NativeExecutableReader bfd)
+		void check_for_mono_runtime (Inferior inferior, ExecutableReader reader)
 		{
-			TargetAddress info = bfd.GetSectionAddress (".mdb_debug_info");
+			TargetAddress info = reader.GetSectionAddress (".mdb_debug_info");
 			if (info.IsNull)
 				return;
 
@@ -100,7 +40,7 @@ namespace Mono.Debugger.Backend
 				// Note that we have to do a symbol lookup for it because we do not know
 				// whether the mono runtime is recent enough to have this variable.
 				//
-				data = bfd.LookupSymbol ("MONO_DEBUGGER__using_debugger");
+				data = reader.LookupSymbol ("MONO_DEBUGGER__using_debugger");
 				if (data.IsNull) {
 					Report.Error ("Failed to initialize the Mono runtime!");
 					return;
@@ -128,74 +68,48 @@ namespace Mono.Debugger.Backend
 
 		internal override bool CheckForPendingMonoInit (Inferior inferior)
 		{
-			if (pending_mono_init.IsNull)
-				return false;
+			lock (this) {
+				if (pending_mono_init.IsNull)
+					return false;
 
-			TargetAddress data = inferior.ReadAddress (pending_mono_init);
-			if (data.IsNull)
-				return false;
+				TargetAddress data = inferior.ReadAddress (pending_mono_init);
+				if (data.IsNull)
+					return false;
 
-			pending_mono_init = TargetAddress.Null;
-			Process.InitializeMono (inferior, data);
-			return true;
-		}
-
-		public override TargetAddress LookupSymbol (string name)
-		{
-			foreach (NativeExecutableReader bfd in bfd_hash.Values) {
-				TargetAddress symbol = bfd.LookupSymbol (name);
-				if (!symbol.IsNull)
-					return symbol;
+				pending_mono_init = TargetAddress.Null;
+				Process.InitializeMono (inferior, data);
+				return true;
 			}
-
-			return TargetAddress.Null;
-		}
-
-#if FIXME
-		public void CloseNativeExecutableReader (NativeExecutableReader bfd)
-		{
-			if (bfd == null)
-				return;
-
-			bfd_hash.Remove (bfd.FileName);
-			bfd.Dispose ();
-		}
-#endif
-
-		public override NativeExecutableReader LookupLibrary (string name)
-		{
-			foreach (NativeExecutableReader bfd in bfd_hash.Values) {
-				if (Path.GetFileName (bfd.FileName) == name)
-					return bfd;
-			}
-
-			return null;
 		}
 
 		public override bool GetTrampoline (TargetMemoryAccess memory, TargetAddress address,
 						    out TargetAddress trampoline, out bool is_start)
 		{
-			foreach (NativeExecutableReader reader in bfd_hash.Values) {
-				Bfd bfd = reader as Bfd;
-				if ((bfd != null) &&
-				    bfd.GetTrampoline (memory, address, out trampoline, out is_start))
-					return true;
-			}
+			lock (this) {
+				foreach (ExecutableReader reader in reader_hash.Values) {
+					Bfd bfd = reader as Bfd;
+					if ((bfd != null) &&
+					    bfd.GetTrampoline (memory, address, out trampoline, out is_start))
+						return true;
+				}
 
-			is_start = false;
-			trampoline = TargetAddress.Null;
-			return false;
+				is_start = false;
+				trampoline = TargetAddress.Null;
+				return false;
+			}
 		}
 
 		public TargetAddress GetSectionAddress (string name)
 		{
-			foreach (NativeExecutableReader bfd in bfd_hash.Values) {
-				TargetAddress address = bfd.GetSectionAddress (name);
-				if (!address.IsNull)
-					return address;
-			}
+			lock (this) {
+				foreach (ExecutableReader reader in reader_hash.Values) {
+					TargetAddress address = reader.GetSectionAddress (name);
+					if (!address.IsNull)
+						return address;
+				}
 
-			return TargetAddress.Null;
+				return TargetAddress.Null;
+			}
 		}
 
 #region Dynamic Linking
@@ -207,21 +121,7 @@ namespace Mono.Debugger.Backend
 
 		AddressBreakpoint dynlink_breakpoint;
 
-		internal override void UpdateSharedLibraries (Inferior inferior)
-		{
-			// This fails if it's a statically linked executable.
-			try {
-				read_dynamic_info (inferior);
-			} catch (TargetException ex) {
-				Report.Error ("Failed to read shared libraries: {0}", ex.Message);
-				return;
-			} catch (Exception ex) {
-				Report.Error ("Failed to read shared libraries: {0}", ex);
-				return;
-			}
-		}
-
-		void read_dynamic_info (Inferior inferior)
+		protected override void DoUpdateSharedLibraries (Inferior inferior, ExecutableReader main_reader)
 		{
 			if (has_dynlink_info) {
 				if (!first_link_map.IsNull)
@@ -258,7 +158,7 @@ namespace Mono.Debugger.Backend
 
 			do_update_shlib_info (inferior);
 
-			check_loaded_library (inferior, main_reader);
+			CheckLoadedLibrary (inferior, main_reader);
 		}
 
 		bool dynlink_handler (Inferior inferior)
@@ -303,7 +203,7 @@ namespace Mono.Debugger.Backend
 				if (name == null)
 					continue;
 
-				if (bfd_hash.Contains (name))
+				if (reader_hash.ContainsKey (name))
 					continue;
 
 				bool step_into = Process.ProcessStart.LoadNativeSymbolTable;
@@ -345,12 +245,12 @@ namespace Mono.Debugger.Backend
 
 		AddressBreakpoint setxid_breakpoint;
 
-		void check_nptl_setxid (Inferior inferior, NativeExecutableReader bfd)
+		void check_nptl_setxid (Inferior inferior, ExecutableReader reader)
 		{
 			if (setxid_breakpoint != null)
 				return;
 
-			TargetAddress vtable = bfd.LookupSymbol ("__libc_pthread_functions");
+			TargetAddress vtable = reader.LookupSymbol ("__libc_pthread_functions");
 			if (vtable.IsNull)
 				return;
 
@@ -395,14 +295,5 @@ namespace Mono.Debugger.Backend
 		}
 
 #endregion
-
-		protected override void DoDispose ()
-		{
-			if (bfd_hash != null) {
-				foreach (NativeExecutableReader bfd in bfd_hash.Values)
-					bfd.Dispose ();
-				bfd_hash = null;
-			}
-		}
 	}
 }

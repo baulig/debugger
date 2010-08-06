@@ -321,7 +321,9 @@ send_reply_packet (int id, int error, Buffer *data)
 	int len;
 	gboolean res;
 
+#if TRANSPORT_DEBUG
 	g_message (G_STRLOC);
+#endif
 	
 	len = data->p - data->buf + 11;
 	buffer_init (&buf, len);
@@ -390,7 +392,9 @@ main (int argc, char *argv[])
 	}
 
 	fd = socket (AF_INET, SOCK_STREAM, 0);
+#if TRANSPORT_DEBUG
 	g_message (G_STRLOC ": %d", fd);
+#endif
 
 	memset (&serv_addr, 0, sizeof (serv_addr));
 
@@ -414,7 +418,9 @@ main (int argc, char *argv[])
 		return -1;
 	}
 
+#if TRANSPORT_DEBUG
 	g_message (G_STRLOC ": accepted!");
+#endif
 
 	/* Write handshake message */
 	do {
@@ -426,7 +432,9 @@ main (int argc, char *argv[])
 		return -1;
 	}
 
+#if TRANSPORT_DEBUG
 	g_message (G_STRLOC ": sent handshake");
+#endif
 
 	/* Read answer */
 	res = recv_length (conn_fd, buf, strlen (handshake_msg), 0);
@@ -435,7 +443,11 @@ main (int argc, char *argv[])
 		return -1;
 	}
 
+#if TRANSPORT_DEBUG
 	g_message (G_STRLOC ": handshake ok");
+#else
+	g_message (G_STRLOC ": waiting for incoming connections");
+#endif
 
 	/* 
 	 * Set TCP_NODELAY on the socket so the client receives events/command
@@ -533,7 +545,7 @@ server_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 		int iid;
 
 		filename = decode_string (p, &p, end);
-		g_message (G_STRLOC ": %s", filename);
+		g_message (G_STRLOC ": create exe reader - %s", filename);
 
 		reader = mdb_server_create_exe_reader (filename);
 		if (!reader)
@@ -788,6 +800,7 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 	}
 
 	case CMD_INFERIOR_GET_DYNAMIC_INFO: {
+#if defined(__linux__) || defined(__FreeBSD__)
 		MdbExeReader *reader;
 		guint32 reader_iid;
 		guint64 dynamic_info;
@@ -803,6 +816,9 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 
 		buffer_add_long (buf, dynamic_info);
 		break;
+#else
+		return ERR_NOT_IMPLEMENTED;
+#endif
 	}
 
 	default:
@@ -968,7 +984,9 @@ mdb_server_main_loop_iteration (void)
 
 	g_assert (flags == 0);
 
+#if TRANSPORT_DEBUG
 	g_message (G_STRLOC ": Received command %d/%d, id=%d.", command_set, command, id);
+#endif
 
 	data = g_malloc (len - HEADER_LENGTH);
 	if (len - HEADER_LENGTH > 0) {
@@ -1043,9 +1061,10 @@ mdb_server_main_loop_iteration (void)
 		err = ERR_NOT_IMPLEMENTED;
 	}
 
+#if TRANSPORT_DEBUG
 	g_message (G_STRLOC ": Command done: %d/%d, id=%d - err=%d, no-reply=%d.",
 		   command_set, command, id, err, no_reply);
-
+#endif
 
 	if (!no_reply) {
 		debugger_mutex_lock (main_mutex);

@@ -9,80 +9,21 @@ namespace Mono.Debugger.Backend
 {
 	internal class DarwinOperatingSystem : OperatingSystemBackend
 	{
-		Hashtable bfd_hash;
-		Bfd main_bfd;
-
 		public DarwinOperatingSystem (Process process)
 			: base (process)
-		{
-			this.bfd_hash = Hashtable.Synchronized (new Hashtable ());
-		}
+		{ }
 
-		internal override void ReadNativeTypes ()
-		{
-			foreach (Bfd bfd in bfd_hash.Values) {
-				if (bfd == null)
-					continue;
-				bfd.ReadDebuggingInfo ();
-			}
-		}
-
-		public override NativeExecutableReader LookupLibrary (TargetAddress address)
-		{
-			foreach (Bfd bfd in bfd_hash.Values) {
-				if (bfd == null)
-					continue;
-					
-				if (!bfd.IsContinuous)
-					continue;
-
-				if ((address >= bfd.StartAddress) && (address < bfd.EndAddress))
-					return bfd;
-			}
-
-			return null;
-		}
-
-		public override NativeExecutableReader LoadExecutable (TargetMemoryInfo memory, string filename,
-								       bool load_native_symtabs)
-		{
-			check_disposed ();
-			Bfd bfd = (Bfd) bfd_hash [filename];
-			if (bfd != null)
-				return bfd;
-
-			bfd = new Bfd (this, memory, filename, TargetAddress.Null, true);
-			bfd_hash.Add (filename, bfd);
-			main_bfd = bfd;
-			return bfd;
-		}
-
-		public override NativeExecutableReader AddExecutableFile (Inferior inferior, string filename,
-									  TargetAddress base_address, bool step_into,
-									  bool is_loaded)
-		{
-			check_disposed ();
-			Bfd bfd = (Bfd) bfd_hash [filename];
-			if (bfd != null)
-				return bfd;
-
-			bfd = new Bfd (this, inferior.TargetMemoryInfo, filename, base_address, is_loaded);
-			bfd_hash.Add (filename, bfd);
-			check_loaded_library (inferior, bfd);
-			return bfd;
-		}
-
-		protected void check_loaded_library (Inferior inferior, Bfd bfd)
+		protected override void CheckLoadedLibrary (Inferior inferior, ExecutableReader reader)
 		{
 			if (!Process.MonoRuntimeFound)
-				check_for_mono_runtime (inferior, bfd);
+				check_for_mono_runtime (inferior, reader);
 		}
 
 		TargetAddress pending_mono_init = TargetAddress.Null;
 
-		void check_for_mono_runtime (Inferior inferior, Bfd bfd)
+		void check_for_mono_runtime (Inferior inferior, ExecutableReader reader)
 		{
-			TargetAddress info = bfd.LookupSymbol ("MONO_DEBUGGER__debugger_info_ptr");
+			TargetAddress info = reader.LookupSymbol ("MONO_DEBUGGER__debugger_info_ptr");
 			if (info.IsNull)
 				return;
 
@@ -95,7 +36,7 @@ namespace Mono.Debugger.Backend
 				// Note that we have to do a symbol lookup for it because we do not know
 				// whether the mono runtime is recent enough to have this variable.
 				//
-				data = bfd.LookupSymbol ("MONO_DEBUGGER__using_debugger");
+				data = reader.LookupSymbol ("MONO_DEBUGGER__using_debugger");
 				if (data.IsNull) {
 					Report.Error ("Failed to initialize the Mono runtime!");
 					return;
@@ -107,7 +48,7 @@ namespace Mono.Debugger.Backend
 				// Add a breakpoint in mini_debugger_init, to make sure that InitializeMono()
 				// gets called in time to set the breakpoint at debugger_initialize, needed to 
 				// initialize the notifications.
-				TargetAddress mini_debugger_init = bfd.LookupSymbol ("mini_debugger_init");
+				TargetAddress mini_debugger_init = reader.LookupSymbol ("mini_debugger_init");
 				if (!mini_debugger_init.IsNull)
 				{
 					Instruction insn = inferior.Architecture.ReadInstruction (inferior, mini_debugger_init);
@@ -137,48 +78,11 @@ namespace Mono.Debugger.Backend
 			return true;
 		}
 
-		public override TargetAddress LookupSymbol (string name)
-		{
-			foreach (Bfd bfd in bfd_hash.Values) {
-				if (bfd == null)
-					continue;
-					
-				TargetAddress symbol = bfd.LookupSymbol (name);
-				if (!symbol.IsNull)
-					return symbol;
-			}
-
-			return TargetAddress.Null;
-		}
-
-#if FIXME
-		public void CloseBfd (Bfd bfd)
-		{
-			if (bfd == null)
-				return;
-
-			bfd_hash.Remove (bfd.FileName);
-			bfd.Dispose ();
-		}
-#endif
-
-		public override NativeExecutableReader LookupLibrary (string name)
-		{
-			foreach (Bfd bfd in bfd_hash.Values) {
-				if (bfd == null)
-					continue;
-					
-				if (Path.GetFileName (bfd.FileName) == name)
-					return bfd;
-			}
-
-			return null;
-		}
-
 		public override bool GetTrampoline (TargetMemoryAccess memory, TargetAddress address,
 						    out TargetAddress trampoline, out bool is_start)
 		{
-			foreach (Bfd bfd in bfd_hash.Values) {
+			foreach (ExecutableReader reader in reader_hash.Values) {
+				Bfd bfd = reader as Bfd;
 				if (bfd == null)
 					continue;
 					
@@ -193,11 +97,11 @@ namespace Mono.Debugger.Backend
 
 		public TargetAddress GetSectionAddress (string name)
 		{
-			foreach (Bfd bfd in bfd_hash.Values) {
-				if (bfd == null)
+			foreach (ExecutableReader reader in reader_hash.Values) {
+				if (reader == null)
 					continue;
 
-				TargetAddress address = bfd.GetSectionAddress (name);
+				TargetAddress address = reader.GetSectionAddress (name);
 				if (!address.IsNull)
 					return address;
 			}
@@ -213,18 +117,7 @@ namespace Mono.Debugger.Backend
 
 		AddressBreakpoint dynlink_breakpoint;
 
-		internal override void UpdateSharedLibraries (Inferior inferior)
-		{
-			// This fails if it's a statically linked executable.
-			try {
-				read_dynamic_info (inferior);
-			} catch (Exception ex) {
-				Report.Error ("Failed to read shared libraries: {0}", ex);
-				return;
-			}
-		}
-
-		void read_dynamic_info (Inferior inferior)
+		protected override void DoUpdateSharedLibraries (Inferior inferior, ExecutableReader main_reader)
 		{
 			if (has_dynlink_info) {
 				if (!dyld_all_image_infos.IsNull)
@@ -259,7 +152,7 @@ namespace Mono.Debugger.Backend
 
 			do_update_shlib_info (inferior);
 
-			check_loaded_library (inferior, main_bfd);
+			CheckLoadedLibrary (inferior, main_reader);
 		}
 
 		void do_update_shlib_info (Inferior inferior)
@@ -287,7 +180,7 @@ namespace Mono.Debugger.Backend
 					if (name == null)
 						continue;
 	
-					if (bfd_hash.Contains (name))
+					if (reader_hash.ContainsKey (name))
 						continue;
 					
 					try {
@@ -297,7 +190,7 @@ namespace Mono.Debugger.Backend
 					catch (SymbolTableException e)
 					{
 						Console.WriteLine("Unable to load binary for "+name);
-						bfd_hash.Add (name, null);
+						reader_hash.Add (name, null);
 					}
 				}	
 				Console.WriteLine("");
@@ -334,17 +227,5 @@ namespace Mono.Debugger.Backend
 
 
 #endregion
-
-		protected override void DoDispose ()
-		{
-			if (bfd_hash != null) {
-				foreach (Bfd bfd in bfd_hash.Values) {
-					if (bfd == null)
-						continue;
-					bfd.Dispose ();
-				}
-				bfd_hash = null;
-			}
-		}
 	}
 }

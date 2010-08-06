@@ -2,16 +2,10 @@ bin_PROGRAMS = mdb-server
 
 if USING_EGLIB
 eglib_cflags = -I$(top_srcdir)/sysdeps/eglib/src -I../eglib/src
-eglib_libs = ../eglib/src/libeglib.la libmonodebuggerbfdglue.la
-if SERVER_ONLY
-bfdglue_lib =
-else
-bfdglue_lib = libmonodebuggerbfdglue.la
-endif
+eglib_libs = ../eglib/src/libeglib.la
 else
 eglib_cflags =
-eglib_libs = libmonodebuggerbfdglue.la
-bfdglue_lib = libmonodebuggerbfdglue.la
+eglib_libs =
 endif
 
 if SERVER_ONLY
@@ -21,24 +15,6 @@ server_libraries = libmonodebuggerserver.la
 endif
 
 lib_LTLIBRARIES = $(server_libraries)
-
-noinst_LTLIBRARIES = $(bfdglue_lib)
-
-libmonodebuggerbfdglue_la_SOURCES = \
-	bfdglue.c \
-	bfdglue.h
-
-libmonodebuggerbfdglue_la_LIBADD = \
-	../../sysdeps/bfd/opcodes/libopcodes.la ../../sysdeps/bfd/libbfd.la
-libmonodebuggerbfdglue_la_LDFLAGS = \
-	-no-undefined -module -export-dynamic -shared
-
-libmonodebuggerbfdglue_la_CPPFLAGS = \
-	-I$(top_srcdir)/sysdeps/bfd \
-	-I$(top_srcdir)/sysdeps/bfd/include \
-	-I$(top_srcdir)/sysdeps/bfd/opcodes \
-	@SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@ \
-	$(eglib_cflags)
 
 EXTRA_libmonodebuggerserver_la_SOURCES = \
 	i386-arch.c			\
@@ -50,11 +26,12 @@ EXTRA_libmonodebuggerserver_la_SOURCES = \
 	x86-linux-ptrace.h		\
 	x86-ptrace.c			\
 	x86-ptrace.h
-if PLATFORM_POWERPC
+
+if PLATFORM_POWERPC_DARWIN
 platform_sources =
 platform_server =
 platform_libs =
-else
+endif
 if PLATFORM_X86_DARWIN
 platform_sources = \
 	x86-ptrace.c \
@@ -62,29 +39,33 @@ platform_sources = \
 	thread-db.h
 platform_server =
 platform_libs =
-else
+endif
 if PLATFORM_X86_WINDOWS
 platform_sources = \
 	x86-windows.c
 platform_server = \
+	mdb-server-bfd.c \
 	mdb-server-windows.c
 platform_libs = \
 	-lmswsock -lws2_32 -lpsapi -lkernel32
-else
+endif
+if PLATFORM_X86_LINUX
 platform_sources = \
 	x86-ptrace.c \
 	thread-db.c	\
 	thread-db.h
 platform_server = \
+	mdb-server-bfd.c \
 	mdb-server-linux.c
 platform_libs = \
 	-lpthread \
 	-lthread_db
 endif
-endif
-endif
 
 libmonodebuggerserver_la_CPPFLAGS = \
+	-I$(top_srcdir)/sysdeps/bfd \
+	-I$(top_srcdir)/sysdeps/bfd/include \
+	-I$(top_srcdir)/sysdeps/bfd/opcodes \
 	@SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@ \
 	$(eglib_cflags)
 
@@ -98,13 +79,17 @@ libmonodebuggerserver_la_SOURCES = \
 	breakpoints.h		\
 	libgtop-glue.c		\
 	libgtop-glue.h		\
-	linux-proc-service.h
+	linux-proc-service.h	\
+	bfdglue.c		\
+	bfdglue.h
 
 libmonodebuggerserver_la_LDFLAGS = \
 	 -no-undefined -export-dynamic -shared
 
 libmonodebuggerserver_la_LIBADD = \
 	@SERVER_DEPENDENCIES_LIBS@ \
+	../../sysdeps/bfd/opcodes/libopcodes.la \
+	../../sysdeps/bfd/libbfd.la \
 	$(eglib_libs) $(platform_libs)
 
 mdb_server_CPPFLAGS = \

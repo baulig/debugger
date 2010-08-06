@@ -225,6 +225,12 @@ namespace Mono.Debugger.Server
 			return mono_debugger_server_initialize_thread (((NativeInferior) inferior).Handle, child_pid, wait);
 		}
 
+		public override ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,
+								      string filename, TargetAddress base_address, bool is_loaded)
+		{
+			return new Bfd (os, memory, filename, base_address, is_loaded);
+		}
+
 		protected static void check_error (TargetError error)
 		{
 			if (error == TargetError.None)

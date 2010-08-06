@@ -1,3 +1,4 @@
+#if 0
 #include <bfdglue.h>
 #include <signal.h>
 #include <string.h>
@@ -351,3 +352,4 @@ bfd_glue_get_start_address (bfd *abfd)
 {
 	return bfd_get_start_address (abfd);
 }
+#endif

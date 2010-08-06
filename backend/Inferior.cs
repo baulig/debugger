@@ -17,7 +17,7 @@ namespace Mono.Debugger.Backend
 {
 	internal class Inferior : TargetAccess, ITargetNotification, IDisposable
 	{
-		protected NativeExecutableReader exe;
+		protected ExecutableReader exe;
 		protected ThreadManager thread_manager;
 
 		protected readonly ProcessStart start;
@@ -495,7 +495,7 @@ namespace Mono.Debugger.Backend
 			get { return breakpoint_manager; }
 		}
 
-		public NativeExecutableReader Executable {
+		public ExecutableReader Executable {
 			get { return exe; }
 		}
 
