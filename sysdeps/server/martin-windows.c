@@ -1,4 +1,5 @@
-#include <server.h>
+#include <mdb-server.h>
+#include "x86-arch.h"
 #include <string.h>
 #include <assert.h>
 #include <windows.h>
@@ -29,6 +30,28 @@ struct InferiorHandle
 #define INFERIOR_REG_EFLAGS(r)	r.EFlags
 #define INFERIOR_REG_ESP(r)	r.Esp
 
+#define INFERIOR_REG_FS(r)	r.SegFs
+#define INFERIOR_REG_ES(r)	r.SegEs
+#define INFERIOR_REG_DS(r)	r.SegDs
+#define INFERIOR_REG_CS(r)	r.SegCs
+#define INFERIOR_REG_SS(r)	r.SegSs
+#define INFERIOR_REG_GS(r)	r.SegGs
+
+#define DEBUG_EVENT_WAIT_TIMEOUT 5000
+#define BP_OPCODE 0xCC  /* INT 3 instruction */
+#define TF_BIT 0x100    /* single-step register bit */
+
+static HANDLE debug_thread;
+static HANDLE command_event;
+static HANDLE ready_event;
+static HANDLE wait_event;
+static HANDLE command_mutex;
+
+static InferiorDelegate *inferior_delegate;
+
+static DWORD WINAPI debugging_thread_main (LPVOID dummy_arg);
+
+
 static wchar_t windows_error_message [2048];
 static const size_t windows_error_message_len = 2048;
 
@@ -51,6 +74,207 @@ format_windows_error_message (DWORD error_code)
 static void
 server_win32_global_init (void)
 {
+	command_event = CreateEvent (NULL, FALSE, FALSE, NULL);
+	g_assert (command_event);
+
+	ready_event = CreateEvent (NULL, FALSE, FALSE, NULL);
+	g_assert (ready_event);
+
+	wait_event = CreateEvent (NULL, TRUE, FALSE, NULL);
+	g_assert (wait_event);
+
+	command_mutex = CreateMutex (NULL, FALSE, NULL);
+	g_assert (command_mutex);
+
+	debug_thread = CreateThread (NULL, 0, debugging_thread_main, NULL, 0, NULL);
+	g_assert (debug_thread);
+}
+
+gboolean
+mdb_server_inferior_command (InferiorDelegate *delegate)
+{
+	if (WaitForSingleObject (command_mutex, 0) != 0) {
+		g_warning (G_STRLOC ": Failed to acquire command mutex !");
+		return FALSE;
+	}
+
+	inferior_delegate = delegate;
+	SetEvent (command_event);
+
+	WaitForSingleObject (ready_event, INFINITE);
+
+	ReleaseMutex (command_mutex);
+	return TRUE;
+}
+
+/* helper to just print what event has occurred */
+static void
+show_debug_event (DEBUG_EVENT *debug_event)
+{
+	DWORD exception_code;
+
+	switch (debug_event->dwDebugEventCode) {
+	case EXCEPTION_DEBUG_EVENT:
+		exception_code = debug_event->u.Exception.ExceptionRecord.ExceptionCode;
+		if (exception_code== EXCEPTION_BREAKPOINT || exception_code == EXCEPTION_SINGLE_STEP)
+			return;
+		// DecodeException (e,tampon);
+		g_debug ( "ExceptionCode: %d at address 0x%p",exception_code, 
+			  debug_event->u.Exception.ExceptionRecord.ExceptionAddress);
+
+		if (debug_event->u.Exception.dwFirstChance != 0)
+			g_debug ("First Chance\n");
+		else
+			g_debug ("Second Chance \n");
+		break;
+	// ------------------------------------------------------------------
+	// new thread started
+	// ------------------------------------------------------------------
+	case CREATE_THREAD_DEBUG_EVENT:
+		g_debug ("Creating thread %d: hThread: %p,\tLocal base: %p, start at %p",
+			 debug_event->dwThreadId,
+			 debug_event->u.CreateThread.hThread,
+			 debug_event->u.CreateThread.lpThreadLocalBase,
+			 debug_event->u.CreateThread.lpStartAddress);
+		/* thread  list !! to be places not in the show helper AddThread (DebugEvent); REMIND */
+		break;
+	// ------------------------------------------------------------------
+	// new process started
+	// ------------------------------------------------------------------
+	case CREATE_PROCESS_DEBUG_EVENT:
+		g_debug ("CreateProcess:\thProcess: %p\thThread: %p\n + %s%p\t%s%d"
+			 "\n + %s%d\t%s%p\n + %s%p\t%s%p\t%s%d",
+			 debug_event->u.CreateProcessInfo.hProcess,
+			 debug_event->u.CreateProcessInfo.hThread,
+			 TEXT ("Base of image:"), debug_event->u.CreateProcessInfo.lpBaseOfImage,
+			 TEXT ("Debug info file offset: "), debug_event->u.CreateProcessInfo.dwDebugInfoFileOffset,
+			 TEXT ("Debug info size: "), debug_event->u.CreateProcessInfo.nDebugInfoSize,
+			 TEXT ("Thread local base:"), debug_event->u.CreateProcessInfo.lpThreadLocalBase,
+			 TEXT ("Start Address:"), debug_event->u.CreateProcessInfo.lpStartAddress,
+			 TEXT ("Image name:"), debug_event->u.CreateProcessInfo.lpImageName,
+			 TEXT ("fUnicode: "), debug_event->u.CreateProcessInfo.fUnicode);
+		break;
+	// ------------------------------------------------------------------
+	// existing thread terminated
+	// ------------------------------------------------------------------
+	case EXIT_THREAD_DEBUG_EVENT:
+		g_debug ("Thread %d finished with code %d",
+			 debug_event->dwThreadId, debug_event->u.ExitThread.dwExitCode);
+		/* thread list deletion placement DeleteThreadFromList (DebugEvent); REMND */
+		break;
+	// ------------------------------------------------------------------
+	// existing process terminated
+	// ------------------------------------------------------------------
+	case EXIT_PROCESS_DEBUG_EVENT:
+		g_debug ("Exit Process %d Exit code: %d",debug_event->dwProcessId,debug_event->u.ExitProcess.dwExitCode);
+		break;
+	// ------------------------------------------------------------------
+	// new DLL loaded
+	// ------------------------------------------------------------------
+	case LOAD_DLL_DEBUG_EVENT:
+		g_debug ("Load DLL: Base %p",debug_event->u.LoadDll.lpBaseOfDll);
+		break;
+	// ------------------------------------------------------------------
+	// existing DLL explicitly unloaded
+	// ------------------------------------------------------------------
+	case UNLOAD_DLL_DEBUG_EVENT:
+		g_debug ("Unload DLL: base %p",debug_event->u.UnloadDll.lpBaseOfDll);
+		break;
+	// ------------------------------------------------------------------
+	// OutputDebugString () occured
+	// ------------------------------------------------------------------
+	case OUTPUT_DEBUG_STRING_EVENT:
+		g_debug ("OUTPUT_DEBUG_STRNG_EVENT\n");
+		/* could be useful but left out for the moment */
+		break;
+	// ------------------------------------------------------------------
+	// RIP occured
+	// ------------------------------------------------------------------
+	case RIP_EVENT:
+		g_debug ("RIP:\n + %s%d\n + %s%d",
+			 TEXT ("dwError: "), debug_event->u.RipInfo.dwError,
+			 TEXT ("dwType: "), debug_event->u.RipInfo.dwType);
+		break;
+	// ------------------------------------------------------------------
+	// unknown debug event occured
+	// ------------------------------------------------------------------
+	default:
+		g_debug ("%s%X%s",
+			 TEXT ("Debug Event:Unknown [0x"),
+			 debug_event->dwDebugEventCode, "",
+			 TEXT ("]"));
+		break;
+	}
+    
+}
+
+static void
+handle_debug_event (DEBUG_EVENT *de)
+{
+	g_message (G_STRLOC ": Got debug event: %d", de->dwDebugEventCode);
+
+	show_debug_event (de);
+
+	switch (de->dwDebugEventCode) {
+	case EXCEPTION_DEBUG_EVENT: {
+		DWORD exception_code;
+
+		exception_code = de->u.Exception.ExceptionRecord.ExceptionCode;
+		if (exception_code == EXCEPTION_BREAKPOINT || exception_code == EXCEPTION_SINGLE_STEP) {
+			mdb_server_process_child_event (MESSAGE_CHILD_STOPPED, de->dwProcessId, 0, 0, 0, 0, NULL);
+			ResetEvent (wait_event);
+			return;
+		}
+
+		break;
+	}
+
+	default:
+		break;
+	}
+
+	if (!ContinueDebugEvent (de->dwProcessId, de->dwThreadId, DBG_CONTINUE)) {
+		format_windows_error_message (GetLastError ());
+		fwprintf (stderr, windows_error_message);
+	}
+}
+
+static DWORD WINAPI
+debugging_thread_main (LPVOID dummy_arg)
+{
+	while (TRUE) {
+		HANDLE wait_handles[2] = { command_event, wait_event };
+		DWORD ret;
+
+		ret = WaitForMultipleObjects (2, wait_handles, FALSE, INFINITE);
+
+		g_message (G_STRLOC ": Main loop got event: %d", ret);
+
+		if (ret == 0) { /* command_event */
+			InferiorDelegate *delegate;
+
+			delegate = inferior_delegate;
+			inferior_delegate = NULL;
+
+			delegate->func (delegate->user_data);
+
+			g_message (G_STRLOC ": Command event done");
+
+			SetEvent (ready_event);
+		} else if (ret == 1) { /* wait_event */
+			DEBUG_EVENT de;
+
+			g_message (G_STRLOC ": waiting for debug event");
+
+			if (WaitForDebugEvent (&de, DEBUG_EVENT_WAIT_TIMEOUT)) {
+				handle_debug_event (&de);
+			}
+		} else {
+			g_warning (G_STRLOC ": WaitForMultipleObjects() returned %d", ret);
+		}
+	}
+
+	return 0;
 }
 
 static ServerType
@@ -259,16 +483,63 @@ server_win32_write_memory (ServerHandle *handle, guint64 start, guint32 size, gc
 	return COMMAND_ERROR_NOT_IMPLEMENTED;
 }
 
+static BOOL
+set_step_flag (InferiorHandle *inferior, BOOL on)
+{
+	CONTEXT context;
+
+	context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS | CONTEXT_FLOATING_POINT;
+
+	if (!GetThreadContext (inferior->thread_handle, &context)) {
+		g_warning (G_STRLOC ": GetThreadContext() failed");
+		return FALSE;
+	}
+
+        if (on)
+		context.EFlags |= TF_BIT;
+        else
+		context.EFlags &= ~TF_BIT;
+
+	if (!SetThreadContext (inferior->thread_handle, &context)) {
+		g_warning (G_STRLOC ": SetThreadContext() failed");
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 static ServerCommandError
-server_win32_continue (ServerHandle *handle)
+server_win32_step (ServerHandle *handle)
 {
 	InferiorHandle *inferior = handle->inferior;
+
+	set_step_flag (inferior, TRUE);
 
 	if (!ContinueDebugEvent (inferior->process_id, inferior->thread_id, DBG_CONTINUE)) {
 		format_windows_error_message (GetLastError ());
 		fwprintf (stderr, windows_error_message);
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 	}
+
+	SetEvent (wait_event);
+
+	return COMMAND_ERROR_NONE;
+}
+
+static ServerCommandError
+server_win32_continue (ServerHandle *handle)
+{
+	InferiorHandle *inferior = handle->inferior;
+
+	set_step_flag (inferior, FALSE);
+
+	if (!ContinueDebugEvent (inferior->process_id, inferior->thread_id, DBG_CONTINUE)) {
+		format_windows_error_message (GetLastError ());
+		fwprintf (stderr, windows_error_message);
+		return COMMAND_ERROR_UNKNOWN_ERROR;
+	}
+
+	SetEvent (wait_event);
 
 	return COMMAND_ERROR_NONE;
 }
@@ -309,14 +580,33 @@ server_win32_get_breakpoints (ServerHandle *handle, guint32 *count, guint32 **re
 static ServerCommandError
 server_win32_count_registers (InferiorHandle *inferior, guint32 *out_count)
 {
-	*out_count = -1;
-	return COMMAND_ERROR_NOT_IMPLEMENTED;
+	*out_count = DEBUGGER_REG_LAST;
+	return COMMAND_ERROR_NONE;
 }
 
 static ServerCommandError
 server_win32_get_registers (ServerHandle *handle, guint64 *values) 
 {
-	return COMMAND_ERROR_NOT_IMPLEMENTED;
+	InferiorHandle *inferior = handle->inferior;
+
+	values [DEBUGGER_REG_RBX] = (guint32) INFERIOR_REG_EBX (inferior->current_context);
+	values [DEBUGGER_REG_RCX] = (guint32) INFERIOR_REG_ECX (inferior->current_context);
+	values [DEBUGGER_REG_RDX] = (guint32) INFERIOR_REG_EDX (inferior->current_context);
+	values [DEBUGGER_REG_RSI] = (guint32) INFERIOR_REG_ESI (inferior->current_context);
+	values [DEBUGGER_REG_RDI] = (guint32) INFERIOR_REG_EDI (inferior->current_context);
+	values [DEBUGGER_REG_RBP] = (guint32) INFERIOR_REG_EBP (inferior->current_context);
+	values [DEBUGGER_REG_RAX] = (guint32) INFERIOR_REG_EAX (inferior->current_context);
+	values [DEBUGGER_REG_DS] = (guint32) INFERIOR_REG_DS (inferior->current_context);
+	values [DEBUGGER_REG_ES] = (guint32) INFERIOR_REG_ES (inferior->current_context);
+	values [DEBUGGER_REG_FS] = (guint32) INFERIOR_REG_FS (inferior->current_context);
+	values [DEBUGGER_REG_GS] = (guint32) INFERIOR_REG_GS (inferior->current_context);
+	values [DEBUGGER_REG_RIP] = (guint32) INFERIOR_REG_EIP (inferior->current_context);
+	values [DEBUGGER_REG_CS] = (guint32) INFERIOR_REG_CS (inferior->current_context);
+	values [DEBUGGER_REG_EFLAGS] = (guint32) INFERIOR_REG_EFLAGS (inferior->current_context);
+	values [DEBUGGER_REG_RSP] = (guint32) INFERIOR_REG_ESP (inferior->current_context);
+	values [DEBUGGER_REG_SS] = (guint32) INFERIOR_REG_SS (inferior->current_context);
+
+	return COMMAND_ERROR_NONE;
 }
 
 static ServerCommandError
@@ -329,6 +619,11 @@ static ServerCommandError
 server_win32_get_signal_info (ServerHandle *handle, SignalInfo **sinfo_out)
 {
 	SignalInfo *sinfo = g_new0 (SignalInfo, 1);
+
+	sinfo->sigkill = 0xffff;
+	sinfo->sigstop = 0xffff;
+	sinfo->sigint = 0xffff;
+	sinfo->sigchld = 0xffff;
 
 	*sinfo_out = sinfo;
 
@@ -392,7 +687,7 @@ InferiorVTable i386_windows_inferior = {
 	NULL,					/* dispatch_simple */
 	server_win32_get_target_info,		/* get_target_info */
 	server_win32_continue,			/* continue */
-	NULL,					/* step */
+	server_win32_step,			/* step */
 	NULL,					/* resume */
 	server_win32_get_frame,			/* get_frame */
 	NULL,					/* current_insn_is_bpt */
