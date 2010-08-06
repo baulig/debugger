@@ -1,26 +1,29 @@
 /* ppc-dis.c -- Disassemble PowerPC instructions
-   Copyright 1994, 1995, 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
+   2008, 2009 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support
 
-This file is part of GDB, GAS, and the GNU binutils.
+   This file is part of the GNU opcodes library.
 
-GDB, GAS, and the GNU binutils are free software; you can redistribute
-them and/or modify them under the terms of the GNU General Public
-License as published by the Free Software Foundation; either version
-2, or (at your option) any later version.
+   This library is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3, or (at your option)
+   any later version.
 
-GDB, GAS, and the GNU binutils are distributed in the hope that they
-will be useful, but WITHOUT ANY WARRANTY; without even the implied
-warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See
-the GNU General Public License for more details.
+   It is distributed in the hope that it will be useful, but WITHOUT
+   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+   or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+   License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this file; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this file; see the file COPYING.  If not, write to the
+   Free Software Foundation, 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 #include <stdio.h>
 #include "sysdep.h"
 #include "dis-asm.h"
+#include "opintl.h"
 #include "opcode/ppc.h"
 
 /* This file provides several disassembler functions, all of which use
@@ -28,109 +31,311 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  *
    are provided because this file handles disassembly for the PowerPC
    in both big and little endian mode and also for the POWER (RS/6000)
    chip.  */
+static int print_insn_powerpc (bfd_vma, struct disassemble_info *, int,
+			       ppc_cpu_t);
 
-static int print_insn_powerpc PARAMS ((bfd_vma, struct disassemble_info *,
-				       int bigendian, int dialect));
-
-static int powerpc_dialect PARAMS ((struct disassemble_info *));
-
-/* Determine which set of machines to disassemble for.  PPC403/601 or
-   BookE.  For convenience, also disassemble instructions supported
-   by the AltiVec vector unit.  */
-
-int
-powerpc_dialect(info)
-     struct disassemble_info *info;
+struct dis_private
 {
-  int dialect = PPC_OPCODE_PPC | PPC_OPCODE_ALTIVEC;
+  /* Stash the result of parsing disassembler_options here.  */
+  ppc_cpu_t dialect;
+};
 
-  if (BFD_DEFAULT_TARGET_SIZE == 64)
-    dialect |= PPC_OPCODE_64;
+#define POWERPC_DIALECT(INFO) \
+  (((struct dis_private *) ((INFO)->private_data))->dialect)
 
-  if (info->disassembler_options
-      && (strcmp (info->disassembler_options, "booke") == 0
-	  || strcmp (info->disassembler_options, "booke32") == 0
-	  || strcmp (info->disassembler_options, "booke64") == 0))
-    dialect |= PPC_OPCODE_BOOKE | PPC_OPCODE_BOOKE64;
-  else
-    if ((info->mach == bfd_mach_ppc_e500)
-	|| (info->disassembler_options
-	&& (   strcmp (info->disassembler_options, "e500") == 0
-	    || strcmp (info->disassembler_options, "e500x2") == 0)))
+struct ppc_mopt {
+  const char *opt;
+  ppc_cpu_t cpu;
+  ppc_cpu_t sticky;
+};
+
+struct ppc_mopt ppc_opts[] = {
+  { "403",     (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_403
+		| PPC_OPCODE_32),
+    0 },
+  { "405",     (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_403
+		| PPC_OPCODE_405 | PPC_OPCODE_32),
+    0 },
+  { "440",     (PPC_OPCODE_PPC | PPC_OPCODE_BOOKE | PPC_OPCODE_32
+		| PPC_OPCODE_440 | PPC_OPCODE_ISEL | PPC_OPCODE_RFMCI),
+    0 },
+  { "464",     (PPC_OPCODE_PPC | PPC_OPCODE_BOOKE | PPC_OPCODE_32
+		| PPC_OPCODE_440 | PPC_OPCODE_ISEL | PPC_OPCODE_RFMCI),
+    0 },
+  { "476",     (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_ISEL
+		| PPC_OPCODE_440 | PPC_OPCODE_476 | PPC_OPCODE_POWER4
+		| PPC_OPCODE_POWER5),
+    0 },
+  { "601",     (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_601
+		| PPC_OPCODE_32),
+    0 },
+  { "603",     (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_32),
+    0 },
+  { "604",     (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_32),
+    0 },
+  { "620",     (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_64),
+    0 },
+  { "7400",    (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_ALTIVEC
+		| PPC_OPCODE_32),
+    0 },
+  { "7410",    (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_ALTIVEC
+		| PPC_OPCODE_32),
+    0 },
+  { "7450",    (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_ALTIVEC
+		| PPC_OPCODE_32),
+    0 },
+  { "7455",    (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_ALTIVEC
+		| PPC_OPCODE_32),
+    0 },
+  { "750cl",   (PPC_OPCODE_PPC | PPC_OPCODE_PPCPS)
+    , 0 },
+  { "altivec", (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC),
+    PPC_OPCODE_ALTIVEC },
+  { "any",     0,
+    PPC_OPCODE_ANY },
+  { "booke",   (PPC_OPCODE_PPC | PPC_OPCODE_BOOKE | PPC_OPCODE_32),
+    0 },
+  { "booke32", (PPC_OPCODE_PPC | PPC_OPCODE_BOOKE | PPC_OPCODE_32),
+    0 },
+  { "cell",    (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_64
+		| PPC_OPCODE_POWER4 | PPC_OPCODE_CELL | PPC_OPCODE_ALTIVEC),
+    0 },
+  { "com",     (PPC_OPCODE_COMMON | PPC_OPCODE_32),
+    0 },
+  { "e300",    (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_32
+		| PPC_OPCODE_E300),
+    0 },
+  { "e500",    (PPC_OPCODE_PPC | PPC_OPCODE_BOOKE | PPC_OPCODE_SPE
+		| PPC_OPCODE_ISEL | PPC_OPCODE_EFS | PPC_OPCODE_BRLOCK
+		| PPC_OPCODE_PMR | PPC_OPCODE_CACHELCK | PPC_OPCODE_RFMCI
+		| PPC_OPCODE_E500MC),
+    0 },
+  { "e500mc",  (PPC_OPCODE_PPC | PPC_OPCODE_BOOKE | PPC_OPCODE_ISEL
+		| PPC_OPCODE_PMR | PPC_OPCODE_CACHELCK | PPC_OPCODE_RFMCI
+		| PPC_OPCODE_E500MC),
+    0 },
+  { "e500x2",  (PPC_OPCODE_PPC | PPC_OPCODE_BOOKE | PPC_OPCODE_SPE
+		| PPC_OPCODE_ISEL | PPC_OPCODE_EFS | PPC_OPCODE_BRLOCK
+		| PPC_OPCODE_PMR | PPC_OPCODE_CACHELCK | PPC_OPCODE_RFMCI
+		| PPC_OPCODE_E500MC),
+    0 },
+  { "efs",     (PPC_OPCODE_PPC | PPC_OPCODE_EFS),
+    0 },
+  { "power4",  (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_64
+		| PPC_OPCODE_POWER4),
+    0 },
+  { "power5",  (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_64
+		| PPC_OPCODE_POWER4 | PPC_OPCODE_POWER5),
+    0 },
+  { "power6",  (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_64
+		| PPC_OPCODE_POWER4 | PPC_OPCODE_POWER5 | PPC_OPCODE_POWER6
+		| PPC_OPCODE_ALTIVEC),
+    0 },
+  { "power7",  (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_ISEL
+		| PPC_OPCODE_64 | PPC_OPCODE_POWER4 | PPC_OPCODE_POWER5
+		| PPC_OPCODE_POWER6 | PPC_OPCODE_POWER7 | PPC_OPCODE_ALTIVEC
+		| PPC_OPCODE_VSX),
+    0 },
+  { "ppc",     (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_32),
+    0 },
+  { "ppc32",   (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_32),
+    0 },
+  { "ppc64",   (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_64),
+    0 },
+  { "ppc64bridge", (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_64_BRIDGE
+		    | PPC_OPCODE_64),
+    0 },
+  { "a2",      (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC | PPC_OPCODE_ISEL
+		| PPC_OPCODE_POWER4 | PPC_OPCODE_POWER5 | PPC_OPCODE_CACHELCK
+		| PPC_OPCODE_64 | PPC_OPCODE_A2),
+    0 },
+  { "ppcps",   (PPC_OPCODE_PPC | PPC_OPCODE_PPCPS),
+    0 },
+  { "pwr",     (PPC_OPCODE_POWER | PPC_OPCODE_32),
+    0 },
+  { "pwr2",    (PPC_OPCODE_POWER | PPC_OPCODE_POWER2 | PPC_OPCODE_32),
+    0 },
+  { "pwrx",    (PPC_OPCODE_POWER | PPC_OPCODE_POWER2 | PPC_OPCODE_32),
+    0 },
+  { "spe",     (PPC_OPCODE_PPC | PPC_OPCODE_EFS),
+    PPC_OPCODE_SPE },
+  { "vsx",     (PPC_OPCODE_PPC | PPC_OPCODE_CLASSIC),
+    PPC_OPCODE_VSX },
+};
+
+/* Handle -m and -M options that set cpu type, and .machine arg.  */
+
+ppc_cpu_t
+ppc_parse_cpu (ppc_cpu_t ppc_cpu, const char *arg)
+{
+  /* Sticky bits.  */
+  ppc_cpu_t retain_flags = ppc_cpu & (PPC_OPCODE_ALTIVEC | PPC_OPCODE_VSX
+				      | PPC_OPCODE_SPE | PPC_OPCODE_ANY);
+  unsigned int i;
+
+  for (i = 0; i < sizeof (ppc_opts) / sizeof (ppc_opts[0]); i++)
+    if (strcmp (ppc_opts[i].opt, arg) == 0)
       {
-	dialect |= PPC_OPCODE_BOOKE
-	  | PPC_OPCODE_SPE | PPC_OPCODE_ISEL
-	  | PPC_OPCODE_EFS | PPC_OPCODE_BRLOCK
-	  | PPC_OPCODE_PMR | PPC_OPCODE_CACHELCK
-	  | PPC_OPCODE_RFMCI;
-	/* efs* and AltiVec conflict.  */
-	dialect &= ~PPC_OPCODE_ALTIVEC;
+	if (ppc_opts[i].sticky)
+	  {
+	    retain_flags |= ppc_opts[i].sticky;
+	    if ((ppc_cpu & ~(PPC_OPCODE_ALTIVEC | PPC_OPCODE_VSX
+			     | PPC_OPCODE_SPE | PPC_OPCODE_ANY)) != 0)
+	      break;
+	  }
+	ppc_cpu = ppc_opts[i].cpu;
+	break;
       }
-  else
-    if (info->disassembler_options
-	&& (strcmp (info->disassembler_options, "efs") == 0))
-      {
-	dialect |= PPC_OPCODE_EFS;
-	/* efs* and AltiVec conflict.  */
-	dialect &= ~PPC_OPCODE_ALTIVEC;
-      }
-  else
-    dialect |= (PPC_OPCODE_403 | PPC_OPCODE_601 | PPC_OPCODE_CLASSIC
-		| PPC_OPCODE_COMMON);
+  if (i >= sizeof (ppc_opts) / sizeof (ppc_opts[0]))
+    return 0;
 
-  if (info->disassembler_options
-      && strcmp (info->disassembler_options, "power4") == 0)
-    dialect |= PPC_OPCODE_POWER4;
+  ppc_cpu |= retain_flags;
+  return ppc_cpu;
+}
 
-  if (info->disassembler_options)
+/* Determine which set of machines to disassemble for.  */
+
+static int
+powerpc_init_dialect (struct disassemble_info *info)
+{
+  ppc_cpu_t dialect = 0;
+  char *arg;
+  struct dis_private *priv = calloc (sizeof (*priv), 1);
+
+  if (priv == NULL)
+    return FALSE;
+
+  arg = info->disassembler_options;
+  while (arg != NULL)
     {
-      if (strstr (info->disassembler_options, "32") != NULL)
-	dialect &= ~PPC_OPCODE_64;
-      else if (strstr (info->disassembler_options, "64") != NULL)
-	dialect |= PPC_OPCODE_64;
+      ppc_cpu_t new_cpu = 0;
+      char *end = strchr (arg, ',');
+
+      if (end != NULL)
+	*end = 0;
+
+      if ((new_cpu = ppc_parse_cpu (dialect, arg)) != 0)
+	dialect = new_cpu;
+      else if (strcmp (arg, "32") == 0)
+	{
+	  dialect &= ~PPC_OPCODE_64;
+	  dialect |= PPC_OPCODE_32;
+	}
+      else if (strcmp (arg, "64") == 0)
+	{
+	  dialect |= PPC_OPCODE_64;
+	  dialect &= ~PPC_OPCODE_32;
+	}
+      else
+	fprintf (stderr, _("warning: ignoring unknown -M%s option\n"), arg);
+
+      if (end != NULL)
+	*end++ = ',';
+      arg = end;
     }
 
-  return dialect;
+  if ((dialect & ~(PPC_OPCODE_32 | PPC_OPCODE_64)) == 0)
+    {
+      if (info->mach == bfd_mach_ppc64)
+	dialect |= PPC_OPCODE_64;
+      else
+	dialect |= PPC_OPCODE_32;
+      /* Choose a reasonable default.  */
+      dialect |= (PPC_OPCODE_PPC | PPC_OPCODE_COMMON | PPC_OPCODE_CLASSIC
+		  | PPC_OPCODE_601 | PPC_OPCODE_ALTIVEC);
+    }
+
+  info->private_data = priv;
+  POWERPC_DIALECT(info) = dialect;
+
+  return TRUE;
 }
 
 /* Print a big endian PowerPC instruction.  */
 
 int
-print_insn_big_powerpc (memaddr, info)
-     bfd_vma memaddr;
-     struct disassemble_info *info;
+print_insn_big_powerpc (bfd_vma memaddr, struct disassemble_info *info)
 {
-  return print_insn_powerpc (memaddr, info, 1, powerpc_dialect(info));
+  if (info->private_data == NULL && !powerpc_init_dialect (info))
+    return -1;
+  return print_insn_powerpc (memaddr, info, 1, POWERPC_DIALECT(info));
 }
 
 /* Print a little endian PowerPC instruction.  */
 
 int
-print_insn_little_powerpc (memaddr, info)
-     bfd_vma memaddr;
-     struct disassemble_info *info;
+print_insn_little_powerpc (bfd_vma memaddr, struct disassemble_info *info)
 {
-  return print_insn_powerpc (memaddr, info, 0, powerpc_dialect(info));
+  if (info->private_data == NULL && !powerpc_init_dialect (info))
+    return -1;
+  return print_insn_powerpc (memaddr, info, 0, POWERPC_DIALECT(info));
 }
 
 /* Print a POWER (RS/6000) instruction.  */
 
 int
-print_insn_rs6000 (memaddr, info)
-     bfd_vma memaddr;
-     struct disassemble_info *info;
+print_insn_rs6000 (bfd_vma memaddr, struct disassemble_info *info)
 {
   return print_insn_powerpc (memaddr, info, 1, PPC_OPCODE_POWER);
+}
+
+/* Extract the operand value from the PowerPC or POWER instruction.  */
+
+static long
+operand_value_powerpc (const struct powerpc_operand *operand,
+		       unsigned long insn, ppc_cpu_t dialect)
+{
+  long value;
+  int invalid;
+  /* Extract the value from the instruction.  */
+  if (operand->extract)
+    value = (*operand->extract) (insn, dialect, &invalid);
+  else
+    {
+      value = (insn >> operand->shift) & operand->bitm;
+      if ((operand->flags & PPC_OPERAND_SIGNED) != 0)
+	{
+	  /* BITM is always some number of zeros followed by some
+	     number of ones, followed by some numer of zeros.  */
+	  unsigned long top = operand->bitm;
+	  /* top & -top gives the rightmost 1 bit, so this
+	     fills in any trailing zeros.  */
+	  top |= (top & -top) - 1;
+	  top &= ~(top >> 1);
+	  value = (value ^ top) - top;
+	}
+    }
+
+  return value;
+}
+
+/* Determine whether the optional operand(s) should be printed.  */
+
+static int
+skip_optional_operands (const unsigned char *opindex,
+			unsigned long insn, ppc_cpu_t dialect)
+{
+  const struct powerpc_operand *operand;
+
+  for (; *opindex != 0; opindex++)
+    {
+      operand = &powerpc_operands[*opindex];
+      if ((operand->flags & PPC_OPERAND_NEXT) != 0
+	  || ((operand->flags & PPC_OPERAND_OPTIONAL) != 0
+	      && operand_value_powerpc (operand, insn, dialect) != 0))
+	return 0;
+    }
+
+  return 1;
 }
 
 /* Print a PowerPC or POWER instruction.  */
 
 static int
-print_insn_powerpc (memaddr, info, bigendian, dialect)
-     bfd_vma memaddr;
-     struct disassemble_info *info;
-     int bigendian;
-     int dialect;
+print_insn_powerpc (bfd_vma memaddr,
+		    struct disassemble_info *info,
+		    int bigendian,
+		    ppc_cpu_t dialect)
 {
   bfd_byte buffer[4];
   int status;
@@ -138,6 +343,7 @@ print_insn_powerpc (memaddr, info, bigendian, dialect)
   const struct powerpc_opcode *opcode;
   const struct powerpc_opcode *opcode_end;
   unsigned long op;
+  ppc_cpu_t dialect_orig = dialect;
 
   status = (*info->read_memory_func) (memaddr, buffer, 4, info);
   if (status != 0)
@@ -157,6 +363,7 @@ print_insn_powerpc (memaddr, info, bigendian, dialect)
   /* Find the first match in the opcode table.  We could speed this up
      a bit by doing a binary search on the major opcode.  */
   opcode_end = powerpc_opcodes + powerpc_num_opcodes;
+ again:
   for (opcode = powerpc_opcodes; opcode < opcode_end; opcode++)
     {
       unsigned long table_op;
@@ -165,6 +372,7 @@ print_insn_powerpc (memaddr, info, bigendian, dialect)
       int invalid;
       int need_comma;
       int need_paren;
+      int skip_optional;
 
       table_op = PPC_OP (opcode->opcode);
       if (op < table_op)
@@ -173,10 +381,8 @@ print_insn_powerpc (memaddr, info, bigendian, dialect)
 	continue;
 
       if ((insn & opcode->mask) != opcode->opcode
-	  || (opcode->flags & dialect) == 0)
-	continue;
-
-      if ((dialect & PPC_OPCODE_EFS) && (opcode->flags & PPC_OPCODE_ALTIVEC))
+	  || (opcode->flags & dialect) == 0
+	  || (opcode->deprecated & dialect_orig) != 0)
 	continue;
 
       /* Make two passes over the operands.  First see if any of them
@@ -193,13 +399,15 @@ print_insn_powerpc (memaddr, info, bigendian, dialect)
 	continue;
 
       /* The instruction is valid.  */
-      (*info->fprintf_func) (info->stream, "%s", opcode->name);
       if (opcode->operands[0] != 0)
-	(*info->fprintf_func) (info->stream, "\t");
+	(*info->fprintf_func) (info->stream, "%-7s ", opcode->name);
+      else
+	(*info->fprintf_func) (info->stream, "%s", opcode->name);
 
       /* Now extract and print the operands.  */
       need_comma = 0;
       need_paren = 0;
+      skip_optional = -1;
       for (opindex = opcode->operands; *opindex != 0; opindex++)
 	{
 	  long value;
@@ -212,23 +420,18 @@ print_insn_powerpc (memaddr, info, bigendian, dialect)
 	  if ((operand->flags & PPC_OPERAND_FAKE) != 0)
 	    continue;
 
-	  /* Extract the value from the instruction.  */
-	  if (operand->extract)
-	    value = (*operand->extract) (insn, dialect, (int *) NULL);
-	  else
+	  /* If all of the optional operands have the value zero,
+	     then don't print any of them.  */
+	  if ((operand->flags & PPC_OPERAND_OPTIONAL) != 0)
 	    {
-	      value = (insn >> operand->shift) & ((1 << operand->bits) - 1);
-	      if ((operand->flags & PPC_OPERAND_SIGNED) != 0
-		  && (value & (1 << (operand->bits - 1))) != 0)
-		value -= 1 << operand->bits;
+	      if (skip_optional < 0)
+		skip_optional = skip_optional_operands (opindex, insn,
+							dialect);
+	      if (skip_optional)
+		continue;
 	    }
 
-	  /* If the operand is optional, and the value is zero, don't
-	     print anything.  */
-	  if ((operand->flags & PPC_OPERAND_OPTIONAL) != 0
-	      && (operand->flags & PPC_OPERAND_NEXT) == 0
-	      && value == 0)
-	    continue;
+	  value = operand_value_powerpc (operand, insn, dialect);
 
 	  if (need_comma)
 	    {
@@ -237,23 +440,30 @@ print_insn_powerpc (memaddr, info, bigendian, dialect)
 	    }
 
 	  /* Print the operand as directed by the flags.  */
-	  if ((operand->flags & PPC_OPERAND_GPR) != 0)
+	  if ((operand->flags & PPC_OPERAND_GPR) != 0
+	      || ((operand->flags & PPC_OPERAND_GPR_0) != 0 && value != 0))
 	    (*info->fprintf_func) (info->stream, "r%ld", value);
 	  else if ((operand->flags & PPC_OPERAND_FPR) != 0)
 	    (*info->fprintf_func) (info->stream, "f%ld", value);
 	  else if ((operand->flags & PPC_OPERAND_VR) != 0)
 	    (*info->fprintf_func) (info->stream, "v%ld", value);
+	  else if ((operand->flags & PPC_OPERAND_VSR) != 0)
+	    (*info->fprintf_func) (info->stream, "vs%ld", value);
 	  else if ((operand->flags & PPC_OPERAND_RELATIVE) != 0)
 	    (*info->print_address_func) (memaddr + value, info);
 	  else if ((operand->flags & PPC_OPERAND_ABSOLUTE) != 0)
 	    (*info->print_address_func) ((bfd_vma) value & 0xffffffff, info);
-	  else if ((operand->flags & PPC_OPERAND_CR) == 0
-		   || (dialect & PPC_OPCODE_PPC) == 0)
+	  else if ((operand->flags & PPC_OPERAND_FSL) != 0) 
+	    (*info->fprintf_func) (info->stream, "fsl%ld", value);
+	  else if ((operand->flags & PPC_OPERAND_FCR) != 0)
+	    (*info->fprintf_func) (info->stream, "fcr%ld", value);
+	  else if ((operand->flags & PPC_OPERAND_UDI) != 0)
 	    (*info->fprintf_func) (info->stream, "%ld", value);
-	  else
+	  else if ((operand->flags & PPC_OPERAND_CR) != 0
+		   && (dialect & PPC_OPCODE_PPC) != 0)
 	    {
-	      if (operand->bits == 3)
-		(*info->fprintf_func) (info->stream, "cr%d", value);
+	      if (operand->bitm == 7)
+		(*info->fprintf_func) (info->stream, "cr%ld", value);
 	      else
 		{
 		  static const char *cbnames[4] = { "lt", "gt", "eq", "so" };
@@ -267,6 +477,8 @@ print_insn_powerpc (memaddr, info, bigendian, dialect)
 		  (*info->fprintf_func) (info->stream, "%s", cbnames[cc]);
 		}
 	    }
+	  else
+	    (*info->fprintf_func) (info->stream, "%ld", value);
 
 	  if (need_paren)
 	    {
@@ -287,6 +499,12 @@ print_insn_powerpc (memaddr, info, bigendian, dialect)
       return 4;
     }
 
+  if ((dialect & PPC_OPCODE_ANY) != 0)
+    {
+      dialect = ~PPC_OPCODE_ANY;
+      goto again;
+    }
+
   /* We could not find a match.  */
   (*info->fprintf_func) (info->stream, ".long 0x%lx", insn);
 
@@ -294,16 +512,22 @@ print_insn_powerpc (memaddr, info, bigendian, dialect)
 }
 
 void
-print_ppc_disassembler_options (FILE * stream)
+print_ppc_disassembler_options (FILE *stream)
 {
-  fprintf (stream, "\n\
-The following PPC specific disassembler options are supported for use with\n\
-the -M switch:\n");
+  unsigned int i, col;
 
-  fprintf (stream, "  booke|booke32|booke64    Disassemble the BookE instructions\n");
-  fprintf (stream, "  e500|e500x2              Disassemble the e500 instructions\n");
-  fprintf (stream, "  efs                      Disassemble the EFS instructions\n");
-  fprintf (stream, "  power4                   Disassemble the Power4 instructions\n");
-  fprintf (stream, "  32                       Do not disassemble 64-bit instructions\n");
-  fprintf (stream, "  64                       Allow disassembly of 64-bit instructions\n");
+  fprintf (stream, _("\n\
+The following PPC specific disassembler options are supported for use with\n\
+the -M switch:\n"));
+
+  for (col = 0, i = 0; i < sizeof (ppc_opts) / sizeof (ppc_opts[0]); i++)
+    {
+      col += fprintf (stream, " %s,", ppc_opts[i].opt);
+      if (col > 66)
+	{
+	  fprintf (stream, "\n");
+	  col = 0;
+	}
+    }
+  fprintf (stream, " 32, 64\n");
 }

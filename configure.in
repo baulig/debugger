@@ -61,65 +61,44 @@ if test x$remote_only != xyes; then
 	AC_MSG_CHECKING([host platform characteristics])
 	case "$host" in
 	x86_64-*-linux*)
-		glue_cflags=-D_GNU_SOURCE
 		server_cflags=-D_GNU_SOURCE
-		bfd_target=x86_64
-		platform=x86_64
+		platform=x86_linux
 		;;
-	*-*-linux*)
-		glue_cflags=-D_GNU_SOURCE
+	i[3-7]86-*-linux*)
 		server_cflags=-D_GNU_SOURCE
-		bfd_target=i386linux
-		platform=i386linux
+		platform=x86_linux
 		;;
 	powerpc-apple-darwin*)
-		glue_flags=
 		server_cflags=
-		bfd_target=powerpc
-		platform=powerpc
+		platform=powerpc_darwin
 		;;
 	*86-apple-darwin*)
-		glue_flags=
 		server_cflags=
-		bfd_target=i386darwin
-		platform=i386darwin
+		platform=x86_darwin
 		;;
 	i386-pc-mingw32*)
 		if test x$server_only != xyes; then
 			AC_MSG_ERROR([*** This platform is not yet supported.])
 		fi
-		glue_flags=
-		server_cflags="-DWINDOWS -DUNICODE"
-		bfd_target=i386windows
-		platform=i386windows
+		server_cflags='-DWINDOWS -DUNICODE'
+		platform=x86_windows
 		;;
 	*)
 		AC_MSG_ERROR([*** This platform is not yet supported.])
 		;;
 	esac
-	AC_MSG_RESULT(ok)
+	AC_MSG_RESULT($platform)
 
-	AC_ARG_WITH(bfd-target,
-	[  --with-bfd-target       Manually override the BFD target],
-		if test x$with_bfd_target != "x"; then
-		   bfd_target=$with_bfd_target
-		fi
-	)
+	AC_CONFIG_SUBDIRS(sysdeps/bfd)
 else
-	glue_cflags=
 	server_cflags=
-	bfd_target=none
 	platform=none
 fi
 
-AM_CONDITIONAL(BFD_TARGET_X86_MACH, test x$bfd_target = xi386darwin)
-AM_CONDITIONAL(BFD_TARGET_POWERPC, test x$bfd_target = xpowerpc)
-AM_CONDITIONAL(BFD_TARGET_X86_64, test x$bfd_target = xx86_64)
-AM_CONDITIONAL(BFD_TARGET_X86_WINDOWS, test x$bfd_target = xi386windows)
-AM_CONDITIONAL(PLATFORM_X86_DARWIN, test x$platform = xi386darwin)
-AM_CONDITIONAL(PLATFORM_POWERPC, test x$platform = xpowerpc)
-AM_CONDITIONAL(PLATFORM_X86_64, test x$platform = xx86_64)
-AM_CONDITIONAL(PLATFORM_X86_WINDOWS, test x$platform = xi386windows)
+AM_CONDITIONAL(PLATFORM_X86_DARWIN, test x$platform = xx86_darwin)
+AM_CONDITIONAL(PLATFORM_POWERPC_DARWIN, test x$platform = xpowerpc_darwin)
+AM_CONDITIONAL(PLATFORM_X86_LINUX, test x$platform = xx86_linux)
+AM_CONDITIONAL(PLATFORM_X86_WINDOWS, test x$platform = xx86_windows)
 
 AC_SUBST(glue_cflags)
 AC_SUBST(server_cflags)
@@ -411,15 +390,6 @@ classes/Makefile
 build/Makefile
 build/Mono.Debugger.dll.config
 sysdeps/Makefile
-sysdeps/bfd/libiberty/Makefile
-sysdeps/bfd/opcodes/Makefile
-sysdeps/bfd/Makefile
-sysdeps/bfd/hosts/Makefile
-sysdeps/bfd/include/Makefile
-sysdeps/bfd/include/aout/Makefile
-sysdeps/bfd/include/coff/Makefile
-sysdeps/bfd/include/elf/Makefile
-sysdeps/bfd/include/opcode/Makefile
 sysdeps/server/Makefile
 backend/Makefile
 backend/arch/Makefile

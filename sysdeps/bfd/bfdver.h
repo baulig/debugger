@@ -1,3 +1,4 @@
-#define BFD_VERSION_DATE 20030612
-#define BFD_VERSION 214000000
-#define BFD_VERSION_STRING "2.14 20030612"
+#define BFD_VERSION_DATE 20091016
+#define BFD_VERSION 220000000
+#define BFD_VERSION_STRING  "(GNU Binutils) " "2.20"
+#define REPORT_BUGS_TO "<http://www.sourceware.org/bugzilla/>"

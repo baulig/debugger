@@ -98,6 +98,12 @@ if test -d $srcdir/sysdeps/eglib; then
   echo Done running sysdeps/eglib/autogen.sh ...
 fi
 
+if test -d $srcdir/sysdeps/bfd; then
+  echo Running sysdeps/bfd/autogen.sh ...
+  (cd $srcdir/sysdeps/bfd ; NOCONFIGURE=1 ./autogen.sh "$@")
+  echo Done running sysdeps/bfd/autogen.sh ...
+fi
+
 conf_flags="--enable-maintainer-mode --enable-build-warnings" #--enable-iso-c
 
 if test x$NOCONFIGURE = x; then

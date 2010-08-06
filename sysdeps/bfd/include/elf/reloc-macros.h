@@ -1,5 +1,5 @@
 /* Generic relocation support for BFD.
-   Copyright 1998, 1999, 2000 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2003 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -15,7 +15,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
-   Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /* These macros are used by the various *.h target specific header
    files to either generate an enum containing all the known relocations
@@ -43,13 +43,40 @@
    	  R_foo_count
    	};
 
+   Note: The value of the symbol defined in the END_RELOC_NUMBERS
+   macro (R_foo_count in the case of the example above) will be
+   set to the value of the whichever *_RELOC macro preceeds it plus
+   one.  Therefore if you intend to use the symbol as a sentinel for
+   the highest valid macro value you should make sure that the
+   preceeding *_RELOC macro is the highest valid number.  ie a
+   declaration like this:
+
+   	START_RELOC_NUMBERS (foo)
+   	    RELOC_NUMBER (R_foo_NONE,    0)
+   	    RELOC_NUMBER (R_foo_32,      1)
+   	    FAKE_RELOC   (R_foo_illegal, 9)
+   	    FAKE_RELOC   (R_foo_synonym, 0)
+   	END_RELOC_NUMBERS (R_foo_count)
+
+   will result in R_foo_count having a value of 1 (R_foo_synonym + 1)
+   rather than 10 or 2 as might be expected.
+
+   Alternatively you can assign a value to END_RELOC_NUMBERS symbol
+   explicitly, like this:
+
+   	START_RELOC_NUMBERS (foo)
+   	    RELOC_NUMBER (R_foo_NONE,    0)
+   	    RELOC_NUMBER (R_foo_32,      1)
+   	    FAKE_RELOC   (R_foo_illegal, 9)
+   	    FAKE_RELOC   (R_foo_synonym, 0)
+   	END_RELOC_NUMBERS (R_foo_count = 2)
+
    If RELOC_MACROS_GEN_FUNC *is* defined, then instead the
    following function will be generated:
 
-   	static const char * foo PARAMS ((unsigned long rtype));
+   	static const char *foo (unsigned long rtype);
    	static const char *
-   	foo (rtype)
-   	    unsigned long rtype;
+   	foo (unsigned long rtype)
    	{
    	   switch (rtype)
    	   {
@@ -70,26 +97,22 @@
    the relocation is not recognised, NULL is returned.  */
 
 #define START_RELOC_NUMBERS(name)   				\
-static const char * name    PARAMS ((unsigned long rtype)); 	\
+static const char *name (unsigned long rtype);			\
 static const char *						\
-name (rtype)							\
-	unsigned long rtype;					\
+name (unsigned long rtype)					\
 {								\
   switch (rtype)						\
-  {
+    {
 
-#if defined (__STDC__) || defined (ALMOST_STDC)
-#define RELOC_NUMBER(name, number)  case number : return #name ;
-#else
-#define RELOC_NUMBER(name, number)  case number : return "name" ;
-#endif
+#define RELOC_NUMBER(name, number) \
+    case number: return #name;
 
 #define FAKE_RELOC(name, number)
 #define EMPTY_RELOC(name)
 
 #define END_RELOC_NUMBERS(name)	\
     default: return NULL;	\
-  }				\
+    }				\
 }
 
 
@@ -103,4 +126,4 @@ name (rtype)							\
 
 #endif
 
-#endif /* RELOC_MACROS_H */
+#endif /* _RELOC_MACROS_H */

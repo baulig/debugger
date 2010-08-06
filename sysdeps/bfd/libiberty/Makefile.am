@@ -8,5 +8,7 @@ noinst_LTLIBRARIES = libiberty.la
 libiberty_la_SOURCES = \
 	concat.c hashtab.c hex.c objalloc.c safe-ctype.c \
 	xexit.c xmalloc.c xstrerror.c fnmatch.c basename.c \
-	xstrdup.c
+	xstrdup.c lbasename.c lrealpath.c asprintf.c vasprintf.c \
+	vsprintf.c vsnprintf.c _doprnt.c unlink-if-ordinary.c \
+	cplus-dem.c cp-demint.c cp-demangle.c
 libiberty_la_LDFLAGS = -export-dynamic

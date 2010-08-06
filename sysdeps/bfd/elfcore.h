@@ -1,12 +1,12 @@
 /* ELF core file support for BFD.
-   Copyright 1995, 1996, 1997, 1998, 2000, 2001, 2002, 2003
-   Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1997, 1998, 2000, 2001, 2002, 2003, 2005, 2007,
+   2008 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,26 +16,23 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 char*
-elf_core_file_failing_command (abfd)
-     bfd *abfd;
+elf_core_file_failing_command (bfd *abfd)
 {
   return elf_tdata (abfd)->core_command;
 }
 
 int
-elf_core_file_failing_signal (abfd)
-     bfd *abfd;
+elf_core_file_failing_signal (bfd *abfd)
 {
   return elf_tdata (abfd)->core_signal;
 }
 
 bfd_boolean
-elf_core_file_matches_executable_p (core_bfd, exec_bfd)
-     bfd *core_bfd;
-     bfd *exec_bfd;
+elf_core_file_matches_executable_p (bfd *core_bfd, bfd *exec_bfd)
 {
   char* corename;
 
@@ -55,7 +52,7 @@ elf_core_file_matches_executable_p (core_bfd, exec_bfd)
 
       execname = execname ? execname + 1 : exec_bfd->filename;
 
-      if (strcmp(execname, corename) != 0)
+      if (strcmp (execname, corename) != 0)
 	return FALSE;
     }
 
@@ -74,22 +71,20 @@ elf_core_file_matches_executable_p (core_bfd, exec_bfd)
     floating point registers (.reg2).  */
 
 const bfd_target *
-elf_core_file_p (abfd)
-     bfd *abfd;
+elf_core_file_p (bfd *abfd)
 {
   Elf_External_Ehdr x_ehdr;	/* Elf file header, external form.  */
   Elf_Internal_Ehdr *i_ehdrp;	/* Elf file header, internal form.  */
   Elf_Internal_Phdr *i_phdrp;	/* Elf program header, internal form.  */
   unsigned int phindex;
-  struct elf_backend_data *ebd;
+  const struct elf_backend_data *ebd;
   struct bfd_preserve preserve;
   bfd_size_type amt;
 
   preserve.marker = NULL;
 
   /* Read in the ELF header in external format.  */
-  if (bfd_bread ((PTR) &x_ehdr, (bfd_size_type) sizeof (x_ehdr), abfd)
-      != sizeof (x_ehdr))
+  if (bfd_bread (&x_ehdr, sizeof (x_ehdr), abfd) != sizeof (x_ehdr))
     {
       if (bfd_get_error () != bfd_error_system_call)
 	goto wrong;
@@ -122,15 +117,13 @@ elf_core_file_p (abfd)
       goto wrong;
     }
 
-  /* Give abfd an elf_obj_tdata.  */
-  amt = sizeof (struct elf_obj_tdata);
-  preserve.marker = bfd_zalloc (abfd, amt);
-  if (preserve.marker == NULL)
-    goto fail;
   if (!bfd_preserve_save (abfd, &preserve))
     goto fail;
 
-  elf_tdata (abfd) = preserve.marker;
+  /* Give abfd an elf_obj_tdata.  */
+  if (! (*abfd->xvec->_bfd_set_format[bfd_core]) (abfd))
+    goto fail;
+  preserve.marker = elf_tdata (abfd);
 
   /* Swap in the rest of the header, now that we have the byte order.  */
   i_ehdrp = elf_elfheader (abfd);
@@ -161,11 +154,13 @@ elf_core_file_p (abfd)
 
       for (target_ptr = bfd_target_vector; *target_ptr != NULL; target_ptr++)
 	{
-	  struct elf_backend_data *back;
+	  const struct elf_backend_data *back;
 
 	  if ((*target_ptr)->flavour != bfd_target_elf_flavour)
 	    continue;
-	  back = (struct elf_backend_data *) (*target_ptr)->backend_data;
+	  back = xvec_get_elf_backend_data (*target_ptr);
+	  if (back->s->arch_size != ARCH_SIZE)
+	    continue;
 	  if (back->elf_machine_code == i_ehdrp->e_machine
 	      || (back->elf_machine_alt1 != 0
 	          && i_ehdrp->e_machine == back->elf_machine_alt1)
@@ -206,8 +201,7 @@ elf_core_file_p (abfd)
     {
       Elf_External_Phdr x_phdr;
 
-      if (bfd_bread ((PTR) &x_phdr, (bfd_size_type) sizeof (x_phdr), abfd)
-	  != sizeof (x_phdr))
+      if (bfd_bread (&x_phdr, sizeof (x_phdr), abfd) != sizeof (x_phdr))
 	goto fail;
 
       elf_swap_phdr_in (abfd, &x_phdr, i_phdrp + phindex);
@@ -216,26 +210,53 @@ elf_core_file_p (abfd)
   /* Set the machine architecture.  Do this before processing the
      program headers since we need to know the architecture type
      when processing the notes of some systems' core files.  */
-  if (! bfd_default_set_arch_mach (abfd, ebd->arch, 0))
-    {
+  if (! bfd_default_set_arch_mach (abfd, ebd->arch, 0)
       /* It's OK if this fails for the generic target.  */
-      if (ebd->elf_machine_code != EM_NONE)
-	goto fail;
-    }
+      && ebd->elf_machine_code != EM_NONE)
+    goto fail;
+
+  /* Let the backend double check the format and override global
+     information.  We do this before processing the program headers
+     to allow the correct machine (as opposed to just the default
+     machine) to be set, making it possible for grok_prstatus and
+     grok_psinfo to rely on the mach setting.  */
+  if (ebd->elf_backend_object_p != NULL
+      && ! ebd->elf_backend_object_p (abfd))
+    goto wrong;
 
   /* Process each program header.  */
   for (phindex = 0; phindex < i_ehdrp->e_phnum; ++phindex)
     if (! bfd_section_from_phdr (abfd, i_phdrp + phindex, (int) phindex))
       goto fail;
 
+  /* Check for core truncation.  */
+  {
+    bfd_size_type high = 0;
+    struct stat statbuf;
+    for (phindex = 0; phindex < i_ehdrp->e_phnum; ++phindex) 
+      {
+	Elf_Internal_Phdr *p = i_phdrp + phindex;
+	if (p->p_filesz)
+	  {
+	    bfd_size_type current = p->p_offset + p->p_filesz;
+	    if (high < current)
+	      high = current;
+	  }
+      }
+    if (bfd_stat (abfd, &statbuf) == 0)
+      {
+	if ((bfd_size_type) statbuf.st_size < high)
+	  {
+	    (*_bfd_error_handler)
+	      (_("Warning: %B is truncated: expected core file "
+		 "size >= %lu, found: %lu."),
+	       abfd, (unsigned long) high, (unsigned long) statbuf.st_size);
+	  }
+      }
+  }
+  
   /* Save the entry point from the ELF header.  */
   bfd_get_start_address (abfd) = i_ehdrp->e_entry;
-
-  /* Let the backend double check the format and override global
-     information.  */
-  if (ebd->elf_backend_object_p
-      && (! (*ebd->elf_backend_object_p) (abfd)))
-    goto wrong;
 
   bfd_preserve_finish (abfd, &preserve);
   return abfd->xvec;

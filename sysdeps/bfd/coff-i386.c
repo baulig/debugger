@@ -1,27 +1,28 @@
 /* BFD back-end for Intel 386 COFF files.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002
+   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
    Written by Cygnus Support.
 
-This file is part of BFD, the Binary File Descriptor library.
+   This file is part of BFD, the Binary File Descriptor library.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 
 #include "coff/i386.h"
@@ -34,6 +35,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #ifdef COFF_GO32_EXE
 #include "coff/go32exe.h"
+#endif
+
+#ifndef bfd_pe_print_pdata
+#define bfd_pe_print_pdata	NULL
 #endif
 
 #include "libcoff.h"
@@ -56,7 +61,7 @@ static reloc_howto_type *coff_i386_reloc_type_lookup
    section for a reference to a common symbol is the value itself plus
    any desired offset.  Ian Taylor, Cygnus Support.  */
 
-/* If we are producing relocateable output, we need to do some
+/* If we are producing relocatable output, we need to do some
    adjustments to the object file that are not done by the
    bfd_perform_relocation function.  This function is called by every
    reloc type to make any required adjustments.  */
@@ -103,7 +108,7 @@ coff_i386_reloc (abfd, reloc_entry, symbol, data, input_section, output_bfd,
     {
       /* For some reason bfd_perform_relocation always effectively
 	 ignores the addend for a COFF target when producing
-	 relocateable output.  This seems to be always wrong for 386
+	 relocatable output.  This seems to be always wrong for 386
 	 COFF, so we handle the addend here instead.  */
 #ifdef COFF_WITH_PE
       if (output_bfd == (bfd *) NULL)
@@ -119,6 +124,8 @@ coff_i386_reloc (abfd, reloc_entry, symbol, data, input_section, output_bfd,
 	     here.  */
 	  if (howto->pc_relative && howto->pcrel_offset)
 	    diff = -(1 << howto->size);
+	  else if (symbol->flags & BSF_WEAK)
+	    diff = reloc_entry->addend - symbol->value;
 	  else
 	    diff = -reloc_entry->addend;
 	}
@@ -234,7 +241,24 @@ static reloc_howto_type howto_table[] =
   EMPTY_HOWTO (010),
   EMPTY_HOWTO (011),
   EMPTY_HOWTO (012),
+#ifdef COFF_WITH_PE
+  /* 32-bit longword section relative relocation (013).  */
+  HOWTO (R_SECREL32,		/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_bitfield, /* complain_on_overflow */
+	 coff_i386_reloc,	/* special_function */
+	 "secrel32",		/* name */
+	 TRUE,			/* partial_inplace */
+	 0xffffffff,		/* src_mask */
+	 0xffffffff,		/* dst_mask */
+	 TRUE),			/* pcrel_offset */
+#else
   EMPTY_HOWTO (013),
+#endif
   EMPTY_HOWTO (014),
   EMPTY_HOWTO (015),
   EMPTY_HOWTO (016),
@@ -386,7 +410,7 @@ static reloc_howto_type howto_table[] =
 
 /* The PE relocate section routine.  The only difference between this
    and the regular routine is that we don't want to do anything for a
-   relocateable link.  */
+   relocatable link.  */
 
 static bfd_boolean coff_pe_i386_relocate_section
   PARAMS ((bfd *, struct bfd_link_info *, bfd *, asection *, bfd_byte *,
@@ -405,7 +429,7 @@ coff_pe_i386_relocate_section (output_bfd, info, input_bfd,
      struct internal_syment *syms;
      asection **sections;
 {
-  if (info->relocateable)
+  if (info->relocatable)
     return TRUE;
 
   return _bfd_coff_generic_relocate_section (output_bfd, info, input_bfd,
@@ -430,7 +454,7 @@ coff_i386_rtype_to_howto (abfd, sec, rel, h, sym, addendp)
 {
   reloc_howto_type *howto;
 
-  if (rel->r_type > sizeof (howto_table) / sizeof (howto_table[0]))
+  if (rel->r_type >= sizeof (howto_table) / sizeof (howto_table[0]))
     {
       bfd_set_error (bfd_error_bad_value);
       return NULL;
@@ -470,7 +494,7 @@ coff_i386_rtype_to_howto (abfd, sec, rel, h, sym, addendp)
 
 #ifndef COFF_WITH_PE
   /* If the output symbol is common (in which case this must be a
-     relocateable link), we need to add in the final size of the
+     relocatable link), we need to add in the final size of the
      common symbol.  */
   if (h != NULL && h->root.type == bfd_link_hash_common)
     *addendp += h->root.u.c.size;
@@ -497,12 +521,38 @@ coff_i386_rtype_to_howto (abfd, sec, rel, h, sym, addendp)
     {
       *addendp -= pe_data(sec->output_section->owner)->pe_opthdr.ImageBase;
     }
+
+  BFD_ASSERT (sym != NULL);
+  if (rel->r_type == R_SECREL32 && sym != NULL)
+    {
+      bfd_vma osect_vma;
+
+      if (h && (h->type == bfd_link_hash_defined
+		|| h->type == bfd_link_hash_defweak))
+	osect_vma = h->root.u.def.section->output_section->vma;
+      else
+	{
+	  asection *sec;
+	  int i;
+
+	  /* Sigh, the only way to get the section to offset against
+	     is to find it the hard way.  */
+
+	  for (sec = abfd->sections, i = 1; i < sym->n_scnum; i++)
+	    sec = sec->next;
+
+	  osect_vma = sec->output_section->vma;
+	}
+
+      *addendp -= osect_vma;
+    }
 #endif
 
   return howto;
 }
 
 #define coff_bfd_reloc_type_lookup coff_i386_reloc_type_lookup
+#define coff_bfd_reloc_name_lookup coff_i386_reloc_name_lookup
 
 static reloc_howto_type *
 coff_i386_reloc_type_lookup (abfd, code)
@@ -525,10 +575,28 @@ coff_i386_reloc_type_lookup (abfd, code)
       return howto_table + R_RELBYTE;
     case BFD_RELOC_8_PCREL:
       return howto_table + R_PCRBYTE;
+#ifdef COFF_WITH_PE
+    case BFD_RELOC_32_SECREL:
+      return howto_table + R_SECREL32;
+#endif
     default:
       BFD_FAIL ();
       return 0;
     }
+}
+
+static reloc_howto_type *
+coff_i386_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+			     const char *r_name)
+{
+  unsigned int i;
+
+  for (i = 0; i < sizeof (howto_table) / sizeof (howto_table[0]); i++)
+    if (howto_table[i].name != NULL
+	&& strcasecmp (howto_table[i].name, r_name) == 0)
+      return &howto_table[i];
+
+  return NULL;
 }
 
 #define coff_rtype_to_howto coff_i386_rtype_to_howto

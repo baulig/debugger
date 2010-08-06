@@ -1,6 +1,6 @@
 /* ELF support for BFD.
-   Copyright 1991, 1992, 1993, 1995, 1997, 1998, 1999, 2001
-   Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1995, 1997, 1998, 1999, 2001, 2003, 2005,
+   2008 Free Software Foundation, Inc.
 
    Written by Fred Fish @ Cygnus Support, from information published
    in "UNIX System V Release 4, Programmers Guide: ANSI C and
@@ -20,7 +20,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 
 /* This file is part of ELF support for BFD, and contains the portions
@@ -34,6 +34,19 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #ifndef _ELF_EXTERNAL_H
 #define _ELF_EXTERNAL_H
+
+/* Special section indices, which may show up in st_shndx fields, among
+   other places.  */
+
+#define SHN_LORESERVE	0xFF00		/* Begin range of reserved indices */
+#define SHN_LOPROC	0xFF00		/* Begin range of appl-specific */
+#define SHN_HIPROC	0xFF1F		/* End range of appl-specific */
+#define SHN_LOOS	0xFF20		/* OS specific semantics, lo */
+#define SHN_HIOS	0xFF3F		/* OS specific semantics, hi */
+#define SHN_ABS		0xFFF1		/* Associated symbol is absolute */
+#define SHN_COMMON	0xFFF2		/* Associated symbol is in common */
+#define SHN_XINDEX	0xFFFF		/* Section index is held elsewhere */
+#define SHN_HIRESERVE	0xFFFF		/* End range of reserved indices */
 
 /* ELF Header (32-bit implementations) */
 
@@ -245,11 +258,7 @@ typedef struct {
 
 typedef struct {
   unsigned char		vs_vers[2];
-}
-#ifdef __GNUC__
-  __attribute__ ((packed))
-#endif
-  Elf_External_Versym;
+} ATTRIBUTE_PACKED  Elf_External_Versym;
 
 /* Structure for syminfo section.  */
 typedef struct
@@ -257,5 +266,23 @@ typedef struct
   unsigned char		si_boundto[2];
   unsigned char		si_flags[2];
 } Elf_External_Syminfo;
+
+
+/* This structure appears on the stack and in NT_AUXV core file notes.  */
+typedef struct
+{
+  unsigned char		a_type[4];
+  unsigned char		a_val[4];
+} Elf32_External_Auxv;
+
+typedef struct
+{
+  unsigned char		a_type[8];
+  unsigned char		a_val[8];
+} Elf64_External_Auxv;
+
+/* Size of SHT_GROUP section entry.  */
+
+#define GRP_ENTRY_SIZE		4
 
 #endif /* _ELF_EXTERNAL_H */

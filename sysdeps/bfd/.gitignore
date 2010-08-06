@@ -6,6 +6,7 @@
 /config.h
 /config.log
 /config.status
+/config.in
 /configure
 /libtool
 /ofiles
@@ -13,3 +14,4 @@
 /.libs
 /Makefile
 /Makefile.in
+/INSTALL
