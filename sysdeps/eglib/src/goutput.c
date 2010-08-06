@@ -113,7 +113,7 @@ g_logv (const gchar *log_domain, GLogLevelFlags log_level, const gchar *format, 
 {
 	char *msg;
 	
-	vasprintf (&msg, format, args);
+	monoeg_vasprintf (&msg, format, args);
 #if PLATFORM_ANDROID
 	__android_log_print (to_android_priority (log_level), 
 		/* TODO: provide a proper app name */

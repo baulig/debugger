@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int vasprintf(char **ret, const char *fmt, va_list ap)
+int monoeg_vasprintf(char **ret, const char *fmt, va_list ap)
 {
 	char *buf;
 	int len;

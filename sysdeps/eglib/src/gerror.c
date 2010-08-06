@@ -40,7 +40,7 @@ g_error_new (gpointer domain, gint code, const char *format, ...)
 	err->code = code;
 
 	va_start (args, format);
-	if (vasprintf (&err->message, format, args) == -1)
+	if (monoeg_vasprintf (&err->message, format, args) == -1)
 		err->message = g_strdup_printf ("internal: invalid format string %s", format); 
 	va_end (args);
 
