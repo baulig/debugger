@@ -2,7 +2,7 @@ bin_PROGRAMS = mdb-server
 
 if USING_EGLIB
 eglib_cflags = -I$(top_srcdir)/sysdeps/eglib/src -I../eglib/src
-eglib_libs = ../eglib/src/libeglib.la
+eglib_libs = ../eglib/src/libeglib-static.la
 else
 eglib_cflags =
 eglib_libs =
@@ -125,7 +125,7 @@ mdb_server_SOURCES = \
 	$(platform_server_sources)
 
 mdb_server_LDFLAGS = \
-	-static
+	-static -all-static -no-undefined
 
 mdb_server_LDADD = \
 	libmonodebuggerserver.la
