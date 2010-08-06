@@ -55,6 +55,8 @@ static DWORD WINAPI debugging_thread_main (LPVOID dummy_arg);
 static wchar_t windows_error_message [2048];
 static const size_t windows_error_message_len = 2048;
 
+static BOOL win32_get_registers (InferiorHandle *inferior);
+
 /* Format a more readable error message on failures which set ErrorCode */
 static void
 format_windows_error_message (DWORD error_code)
@@ -441,26 +443,20 @@ server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
+static BOOL
 win32_get_registers (InferiorHandle *inferior)
 {
 	memset (&inferior->current_context, 0, sizeof (inferior->current_context));
 	inferior->current_context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS | CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS;
 
-	if (!GetThreadContext (inferior->thread_handle, &inferior->current_context))
-		return COMMAND_ERROR_UNKNOWN_ERROR;
-
-	return COMMAND_ERROR_NONE;
+	return GetThreadContext (inferior->thread_handle, &inferior->current_context);
 }
 
 static ServerCommandError
 server_win32_get_frame (ServerHandle *handle, StackFrame *frame)
 {
-	ServerCommandError result;
-
-	result = win32_get_registers (handle->inferior);
-	if (result)
-		return result;
+	if (!win32_get_registers (handle->inferior))
+		return COMMAND_ERROR_UNKNOWN_ERROR;
 
 	frame->address = (guint32) INFERIOR_REG_EIP (handle->inferior->current_context);
 	frame->stack_pointer = (guint32) INFERIOR_REG_ESP (handle->inferior->current_context);
