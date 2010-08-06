@@ -149,7 +149,7 @@ int_vasprintf (char **result, const char *format, va_list args)
 }
 
 int
-vasprintf (char **result, const char *format,
+bfd_vasprintf (char **result, const char *format,
 #if defined (_BSD_VA_LIST_) && defined (__FreeBSD__)
            _BSD_VA_LIST_ args)
 #else

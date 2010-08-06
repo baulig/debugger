@@ -44,13 +44,13 @@ not be allocated, minus one is returned and @code{NULL} is stored in
 */
 
 int
-asprintf (char **buf, const char *fmt, ...)
+bfd_asprintf (char **buf, const char *fmt, ...)
 {
   int status;
   VA_OPEN (ap, fmt);
   VA_FIXEDARG (ap, char **, buf);
   VA_FIXEDARG (ap, const char *, fmt);
-  status = vasprintf (buf, fmt, ap);
+  status = bfd_vasprintf (buf, fmt, ap);
   VA_CLOSE (ap);
   return status;
 }

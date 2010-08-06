@@ -469,7 +469,7 @@ bfd_errmsg (bfd_error_type error_tag)
       char *buf;
       const char *msg = bfd_errmsg (input_error);
 
-      if (asprintf (&buf, _(bfd_errmsgs [error_tag]), input_bfd->filename, msg)
+      if (bfd_asprintf (&buf, _(bfd_errmsgs [error_tag]), input_bfd->filename, msg)
 	  != -1)
 	return buf;
 

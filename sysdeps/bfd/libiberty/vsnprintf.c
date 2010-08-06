@@ -56,10 +56,10 @@ used.
 
 /* This implementation relies on a working vasprintf.  */
 int
-vsnprintf (char *s, size_t n, const char *format, va_list ap)
+bfd_vsnprintf (char *s, size_t n, const char *format, va_list ap)
 {
   char *buf = 0;
-  int result = vasprintf (&buf, format, ap);
+  int result = bfd_vasprintf (&buf, format, ap);
 
   if (!buf)
     return -1;
@@ -98,7 +98,7 @@ checkit (char *s, size_t n, const char *format, ...)
   VA_FIXEDARG (ap, char *, s);
   VA_FIXEDARG (ap, size_t, n);
   VA_FIXEDARG (ap, const char *, format);
-  result = vsnprintf (s, n, format, ap);
+  result = bfd_vsnprintf (s, n, format, ap);
   VA_CLOSE (ap);
   return result;
 }
