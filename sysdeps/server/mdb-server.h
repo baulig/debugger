@@ -19,8 +19,14 @@ typedef enum {
 	ERR_NO_SUCH_INFERIOR = 0x1003,
 	ERR_NO_SUCH_BPM = 0x1004,
 	ERR_NO_SUCH_EXE_READER = 0x1005,
-	ERR_CANNOT_OPEN_EXE = 0x1006
+	ERR_CANNOT_OPEN_EXE = 0x1006,
+	ERR_NOT_STOPPED = 0x1007
 } ErrorCode;
+
+typedef struct {
+	void (* func) (gpointer user_data);
+	gpointer user_data;
+} InferiorDelegate;
 
 extern int
 mdb_server_init_os (void);
@@ -64,6 +70,9 @@ mdb_exe_reader_get_section_address (MdbExeReader *reader, const char *name);
 
 extern gpointer
 mdb_exe_reader_get_section_contents (MdbExeReader *reader, const char *name, guint32 *out_size);
+
+extern gboolean
+mdb_server_inferior_command (InferiorDelegate *delegate);
 
 G_END_DECLS
 

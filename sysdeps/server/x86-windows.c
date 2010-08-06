@@ -2280,6 +2280,7 @@ server_win32_get_application (ServerHandle *handle, gchar **exe_file, gchar **cw
 	*/
 	*exe_file = g_strdup (handle->inferior->argv [0]);
 	*nargs = handle->inferior->argc;
+	*cwd = NULL;
 
 	array = g_ptr_array_new ();
 

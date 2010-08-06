@@ -9,6 +9,15 @@
 #endif
 #include <ws2tcpip.h>
 
+static HANDLE debug_thread;
+static HANDLE command_event;
+static HANDLE ready_event;
+static HANDLE command_mutex;
+
+static InferiorDelegate *inferior_delegate;
+
+static DWORD WINAPI debugging_thread_main (LPVOID dummy_arg);
+
 int
 mdb_server_init_os (void)
 {
@@ -30,6 +39,58 @@ mdb_server_init_os (void)
 	if (LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2) {
 		g_warning (G_STRLOC ": Could not find a usable version of Winsock.dll");
 		return -1;
+	}
+
+	command_event = CreateEvent (NULL, FALSE, FALSE, NULL);
+	g_assert (command_event);
+
+	ready_event = CreateEvent (NULL, FALSE, FALSE, NULL);
+	g_assert (ready_event);
+
+	command_mutex = CreateMutex (NULL, FALSE, NULL);
+	g_assert (command_mutex);
+
+	debug_thread = CreateThread (NULL, 0, debugging_thread_main, NULL, 0, NULL);
+	g_assert (debug_thread);
+
+	return 0;
+}
+
+gboolean
+mdb_server_inferior_command (InferiorDelegate *delegate)
+{
+	if (WaitForSingleObject (command_mutex, 0) != 0) {
+		g_warning (G_STRLOC ": Failed to acquire command mutex !");
+		return FALSE;
+	}
+
+	inferior_delegate = delegate;
+	SetEvent (command_event);
+
+	WaitForSingleObject (ready_event, INFINITE);
+
+	ReleaseMutex (command_mutex);
+	return TRUE;
+}
+
+DWORD WINAPI
+debugging_thread_main (LPVOID dummy_arg)
+{
+	while (TRUE) {
+		InferiorDelegate *delegate;
+
+		WaitForSingleObject (command_event, INFINITE);
+
+		g_message (G_STRLOC ": Got command event!");
+
+		delegate = inferior_delegate;
+		inferior_delegate = NULL;
+
+		delegate->func (delegate->user_data);
+
+		g_message (G_STRLOC ": Command event done!");
+
+		SetEvent (ready_event);
 	}
 
 	return 0;
