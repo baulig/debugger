@@ -11,6 +11,10 @@ G_BEGIN_DECLS
 #include <sys/user.h>
 #endif
 
+#ifdef WINDOWS
+#include <windows.h>
+#endif
+
 #ifndef WINDOWS
 #define INFERIOR_REGS_TYPE	struct user_regs_struct
 #define INFERIOR_FPREGS_TYPE	struct user_fpregs_struct
@@ -34,6 +38,8 @@ G_BEGIN_DECLS
 #define INFERIOR_REG_SS(r)	r.xss
 #define INFERIOR_REG_GS(r)	r.xgs
 #else
+#define INFERIOR_REGS_TYPE	CONTEXT
+
 /* macros  for accessing registries in the debuggee.context structure */
 #define INFERIOR_REG_EIP(r)	r.Eip
 #define INFERIOR_REG_ESP(r)	r.Esp

@@ -42,7 +42,7 @@ platform_libs =
 endif
 if PLATFORM_X86_WINDOWS
 platform_sources = \
-	x86-windows.c
+	martin-windows.c
 platform_server = \
 	mdb-server-bfd.c \
 	mdb-server-windows.c
