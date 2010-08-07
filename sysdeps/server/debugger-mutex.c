@@ -23,7 +23,7 @@ debugger_mutex_new (void)
 #if WINDOWS
 	InitializeCriticalSection (&mutex->section);
 #else
-	pthread_mutex_init (&mutex->mutex);
+	pthread_mutex_init (&mutex->mutex, NULL);
 #endif
 
 	return mutex;

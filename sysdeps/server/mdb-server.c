@@ -1,3 +1,4 @@
+#include <config.h>
 #include <mdb-server.h>
 #include <debugger-mutex.h>
 #include <errno.h>

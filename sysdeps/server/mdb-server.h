@@ -80,6 +80,13 @@ mdb_server_disassemble_insn (ServerHandle *inferior, guint64 address, guint32 *o
 extern const gchar *
 mdb_exe_reader_lookup_symbol_by_addr (MdbExeReader *reader, guint64 address);
 
+#if defined(__linux__) || defined(__FreeBSD__)
+
+extern guint64
+mdb_exe_reader_get_dynamic_info (ServerHandle *server, MdbExeReader *reader);
+
+#endif
+
 G_END_DECLS
 
 #endif

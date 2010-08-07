@@ -7,7 +7,7 @@ DEBUGDIR=${libdir}/debug
 INCDIR = $(srcdir)/include
 CSEARCH = -I. -I$(srcdir) -I$(INCDIR) -DDEBUGDIR=\"$(DEBUGDIR)\"
 
-noinst_LTLIBRARIES = libbfd.la
+noinst_LTLIBRARIES = libbfd.la libbfd-static.la
 
 WARN_CFLAGS = @WARN_CFLAGS@
 AM_CFLAGS = $(WARN_CFLAGS)
@@ -15,10 +15,10 @@ AM_CFLAGS = $(WARN_CFLAGS)
 elf32_backend = elf32-i386.c elf32.c elf.c elflink.c elf-strtab.c elf-eh-frame.c dwarf1.c elf32-gen.c elf-vxworks.c elf-attrs.c elf-ifunc.c
 
 if BFD_TARGET_X64_LINUX
-bfd_backend = elf64-x86-64.c elf64.c elf64-gen.c $(elf32_backend) i386linux.c aout32.c peigen.c cofflink.c cpu-i386.c pe-i386.c pei-i386.c trad-core.c archive64.c
+bfd_backend = elf64-x86-64.c elf64.c elf64-gen.c $(elf32_backend) i386linux.c aout32.c peigen.c cofflink.c cpu-i386.c pe-i386.c pei-i386.c trad-core.c archive64.c verilog.c
 endif
 if BFD_TARGET_I386_LINUX
-bfd_backend = $(elf32_backend) i386linux.c aout32.c efi-app-ia32.c peigen.c cofflink.c cpu-i386.c pe-i386.c pei-i386.c trad-core.c
+bfd_backend = $(elf32_backend) i386linux.c aout32.c efi-app-ia32.c peigen.c cofflink.c cpu-i386.c pe-i386.c pei-i386.c trad-core.c verilog.c
 endif
 if BFD_TARGET_POWERPC_DARWIN
 bfd_backend = mach-o.c pef.c rs6000-core.c xsym.c cpu-rs6000.c cpu-powerpc.c
@@ -45,7 +45,11 @@ SOURCE_FILES = \
 
 libbfd_la_SOURCES = $(BFD_BACKEND) $(SOURCE_FILES)
 libbfd_la_LDFLAGS = -export-dynamic
-libbfd_la_LIBADD = libiberty/libiberty.la
+libbfd_la_LIBADD = libiberty/libiberty.la opcodes/libopcodes.la
+
+libbfd_static_la_SOURCES = $(BFD_BACKEND) $(SOURCE_FILES)
+libbfd_static_la_LDFLAGS = -static
+libbfd_static_la_LIBADD = libiberty/libiberty-static.la opcodes/libopcodes-static.la
 
 # When compiling archures.c and targets.c, supply the default target
 # info from configure.

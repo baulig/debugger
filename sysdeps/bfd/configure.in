@@ -15,10 +15,6 @@ dnl to call AC_CHECK_PROG.
 AC_CHECK_TOOL(AR, ar)
 AC_CHECK_TOOL(RANLIB, ranlib, :)
 
-dnl Default to a non shared library.  This may be overridden by the
-dnl configure option --enable-shared.
-AC_DISABLE_SHARED
-
 AC_PROG_CC
 AC_GNU_SOURCE
 

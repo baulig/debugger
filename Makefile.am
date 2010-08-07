@@ -1,7 +1,7 @@
 if SERVER_ONLY
 csharp_dirs =
 else
-csharp_dirs = interface languages classes backend symbolwriter frontend test
+csharp_dirs = interface languages classes backend symbolwriter frontend test build
 endif
 
 if REMOTE_ONLY

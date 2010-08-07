@@ -32,6 +32,9 @@ if test "x${build_warnings}" != x && test "x$GCC" = xyes ; then
 fi
 AC_SUBST(WARN_CFLAGS)
 
+server_only=no
+remote_only=no
+
 AC_ARG_WITH(backend,
 [  --backend Select backend (EXPERIMENTAL).],
 [case "${withval}" in
@@ -156,6 +159,7 @@ if test x$server_only != xyes; then
 		have_mono_trunk=true
 		mono_pc=mono-2
 		min_debugger_minor_version=6
+		MONO_REQUIRED_VERSION=2.7
 		server_deps="glib-2.0 >= $GLIB_REQUIRED_VERSION $martin_deps"
 		AC_MSG_RESULT([yes])
 	else
@@ -283,12 +287,17 @@ AC_SUBST(LIB_SUFFIX)
 
 AC_CHECK_HEADERS(stddef.h string.h strings.h stdlib.h time.h unistd.h)
 AC_CHECK_HEADERS(fcntl.h sys/user.h sys/file.h sys/time.h termcap.h termcap/termcap.h)
+AC_CHECK_HEADERS(sys/types.h sys/select.h sys/socket.h netinet/tcp.h netinet/in.h netdb.h)
 AC_HEADER_TIME
 AC_HEADER_DIRENT
 AC_CHECK_FUNCS(fcntl getpagesize setitimer sysconf fdopen getuid getgid)
 AC_CHECK_FUNCS(strlcpy strlcat fgetln)
 
 if test x$server_only != xyes -a x$remote_only != xyes; then
+	PKG_CHECK_MODULES(MONO, $mono_pc >= $MONO_REQUIRED_VERSION)
+	AC_SUBST(MONO_CFLAGS)
+	AC_SUBST(MONO_LIBS)
+
 	AC_ARG_WITH(xsp,
 	[  --with-xsp              Enable XSP support (experimental)],
 	with_xsp=yes, with_xsp=no)
@@ -309,7 +318,7 @@ if test x$server_only != xyes -a x$remote_only != xyes; then
 	if test x$platform != xi386darwin ; then
 	AC_MSG_CHECKING([Whether your Mono is working])
 	old_CFLAGS=$CFLAGS
-	CFLAGS=$WRAPPER_CFLAGS
+	CFLAGS=$MONO_CFLAGS
 	AC_TRY_COMPILE([#include <mono/metadata/mono-debug.h>
 	#include <mono/metadata/debug-mono-symfile.h>
 	], [
@@ -334,7 +343,7 @@ if test x$server_only != xyes -a x$remote_only != xyes; then
 
 	AC_MSG_CHECKING([Whether attaching is supported in this version of the Mono runtime])
 	old_CFLAGS=$CFLAGS
-	CFLAGS=$WRAPPER_CFLAGS
+	CFLAGS=$MONO_CFLAGS
 	#define MONO_DEBUGGER_MAJOR_VERSION			81
 	#define MONO_DEBUGGER_MINOR_VERSION			3
 	AC_TRY_COMPILE([#include <mono/metadata/mono-debug.h>

@@ -230,19 +230,22 @@ mdb_exe_reader_get_dynamic_info (ServerHandle *server, MdbExeReader *reader)
 	asection *section;
 	gpointer contents;
 	guint64 dynamic_base;
+	int size;
 
 	section = find_section (reader, ".dynamic");
 	if (!section)
 		return 0;
 
-	contents = g_malloc0 (section->_raw_size);
+	size = bfd_get_section_size (section);
 
-	if (mono_debugger_server_read_memory (server, section->vma, section->_raw_size, contents)) {
+	contents = g_malloc0 (size);
+
+	if (mono_debugger_server_read_memory (server, section->vma, size, contents)) {
 		g_free (contents);
 		return 0;
 	}
 
-	dynamic_base = bfd_glue_elfi386_locate_base (reader->bfd, contents, section->_raw_size);
+	dynamic_base = bfd_glue_elfi386_locate_base (reader->bfd, contents, size);
 
 	g_free (contents);
 

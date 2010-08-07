@@ -1,4 +1,4 @@
-noinst_LTLIBRARIES = libopcodes.la
+noinst_LTLIBRARIES = libopcodes.la libopcodes-static.la
 
 if BFD_TARGET_X64_LINUX
 opcode_sources = i386-dis.c
@@ -20,5 +20,9 @@ INCLUDES = -D_GNU_SOURCE @bfd_cflags@ -I$(srcdir)/.. -I$(srcdir)/../include
 
 libopcodes_la_SOURCES =  $(opcode_sources) dis-buf.c disassemble.c dis-init.c
 libopcodes_la_LDFLAGS = -export-dynamic
+
+libopcodes_static_la_SOURCES =  $(opcode_sources) dis-buf.c disassemble.c dis-init.c
+libopcodes_static_la_LDFLAGS = -static
+
 
 EXTRA_DIST = opintl.h sysdep.h
