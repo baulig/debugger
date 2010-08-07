@@ -66,22 +66,22 @@ if test x$remote_only != xyes; then
 	x86_64-*-linux*)
 		server_cflags=-D_GNU_SOURCE
 		platform=x86_linux
-		using_eglib=false
+		using_eglib=no
 		;;
 	i[[3-7]]86-*-linux*)
 		server_cflags=-D_GNU_SOURCE
 		platform=x86_linux
-		using_eglib=false
+		using_eglib=no
 		;;
 	powerpc-apple-darwin*)
 		server_cflags=
 		platform=powerpc_darwin
-		using_eglib=true
+		using_eglib=yes
 		;;
 	*86-apple-darwin*)
 		server_cflags=
 		platform=x86_darwin
-		using_eglib=true
+		using_eglib=yes
 		;;
 	i386-pc-mingw32*)
 		if test x$server_only != xyes; then
@@ -89,7 +89,7 @@ if test x$remote_only != xyes; then
 		fi
 		server_cflags='-DWINDOWS -DUNICODE -D_UNICODE'
 		platform=x86_windows
-		using_eglib=true
+		using_eglib=yes
 		;;
 	*)
 		AC_MSG_ERROR([*** This platform is not yet supported.])
@@ -113,6 +113,8 @@ if test x$using_eglib = xyes; then
 	AC_CONFIG_SUBDIRS(sysdeps/eglib)
 	AC_DEFINE([USING_EGLIB], [1], [Whether we're using eglib])
 fi
+AC_MSG_CHECKING([whether we're using eglib])
+AC_MSG_RESULT($using_eglib)
 AM_CONDITIONAL(USING_EGLIB, test x$using_eglib = xyes)
 
 AC_SUBST(glue_cflags)
