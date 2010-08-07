@@ -1,75 +1,68 @@
 #ifndef __MONO_DEBUGGER_I386_ARCH_H__
 #define __MONO_DEBUGGER_I386_ARCH_H__
 
+#if !defined(__i386__)
+#error "Wrong architecture!"
+#endif
+
 #include <glib.h>
 
 G_BEGIN_DECLS
 
-#if defined(__i386__)
+#if defined(WINDOWS)
 
-#ifdef HAVE_SYS_USER_H
-#include <sys/user.h>
-#endif
-
-#ifdef WINDOWS
 #include <windows.h>
-#endif
 
-#ifndef WINDOWS
-#define INFERIOR_REGS_TYPE	struct user_regs_struct
-#define INFERIOR_FPREGS_TYPE	struct user_fpregs_struct
+struct _InferiorRegsType {
+	CONTEXT context;
+};
 
-#define INFERIOR_REG_EIP(r)	r.eip
-#define INFERIOR_REG_ESP(r)	r.esp
-#define INFERIOR_REG_EBP(r)	r.ebp
-#define INFERIOR_REG_EAX(r)	r.eax
-#define INFERIOR_REG_EBX(r)	r.ebx
-#define INFERIOR_REG_ECX(r)	r.ecx
-#define INFERIOR_REG_EDX(r)	r.edx
-#define INFERIOR_REG_ESI(r)	r.esi
-#define INFERIOR_REG_EDI(r)	r.edi
-#define INFERIOR_REG_ORIG_EAX(r)	r.orig_eax
-#define INFERIOR_REG_EFLAGS(r)	r.eflags
-#define INFERIOR_REG_ESP(r)	r.esp
-#define INFERIOR_REG_FS(r)	r.xfs
-#define INFERIOR_REG_ES(r)	r.xes
-#define INFERIOR_REG_DS(r)	r.xds
-#define INFERIOR_REG_CS(r)	r.xcs
-#define INFERIOR_REG_SS(r)	r.xss
-#define INFERIOR_REG_GS(r)	r.xgs
+#elif defined(__linux__) || defined(__FreeBSD__)
+
+#include <sys/user.h>
+
+/* Debug registers' indices.  */
+#define DR_NADDR		4  /* the number of debug address registers */
+#define DR_STATUS		6  /* index of debug status register (DR6) */
+#define DR_CONTROL		7  /* index of debug control register (DR7) */
+
+struct _InferiorRegsType {
+	struct user_regs_struct regs;
+	struct user_fpregs_struct fpregs;
+	guint64 dr_control, dr_status;
+	guint64 dr_regs [DR_NADDR];
+};
+
+#define INFERIOR_REG_RBP(r)		r.regs.ebp
+#define INFERIOR_REG_RBX(r)		r.regs.ebx
+#define INFERIOR_REG_RAX(r)		r.regs.eax
+#define INFERIOR_REG_RCX(r)		r.regs.ecx
+#define INFERIOR_REG_RDX(r)		r.regs.edx
+#define INFERIOR_REG_RSI(r)		r.regs.esi
+#define INFERIOR_REG_RDI(r)		r.regs.edi
+#define INFERIOR_REG_ORIG_RAX(r)	r.regs.orig_eax
+#define INFERIOR_REG_RIP(r)		r.regs.eip
+#define INFERIOR_REG_CS(r)		r.regs.xcs
+#define INFERIOR_REG_EFLAGS(r)		r.regs.eflags
+#define INFERIOR_REG_RSP(r)		r.regs.esp
+#define INFERIOR_REG_SS(r)		r.regs.xss
+
+#define INFERIOR_REG_FS_BASE(r)		r.regs.fs_base
+#define INFERIOR_REG_GS_BASE(r)		r.regs.gs_base
+
+#define INFERIOR_REG_DS(r)		r.regs.xds
+#define INFERIOR_REG_ES(r)		r.regs.xes
+#define INFERIOR_REG_FS(r)		r.regs.xfs
+#define INFERIOR_REG_GS(r)		r.regs.xgs
+
+#define INFERIOR_REG_DR_CONTROL(r)	r.dr_control
+#define INFERIOR_REG_DR_STATUS(r)	r.dr_control
+#define INFERIOR_REG_DR_N(r,n)		r.dr_regs[n]
+
 #else
-#define INFERIOR_REGS_TYPE	CONTEXT
-
-/* macros  for accessing registries in the debuggee.context structure */
-#define INFERIOR_REG_EIP(r)	r.Eip
-#define INFERIOR_REG_ESP(r)	r.Esp
-#define INFERIOR_REG_EBP(r)	r.Ebp
-#define INFERIOR_REG_EAX(r)	r.Eax
-#define INFERIOR_REG_EBX(r)	r.Ebx
-#define INFERIOR_REG_ECX(r)	r.Ecx
-#define INFERIOR_REG_EDX(r)	r.Edx
-#define INFERIOR_REG_ESI(r)	r.Esi
-#define INFERIOR_REG_EDI(r)	r.Edi
-/* what that in CONTEXT ? #define INFERIOR_REG_ORIG_EAX(r)	r.orig_eax */
-#define INFERIOR_REG_EFLAGS(r)	r.EFlags
-#define INFERIOR_REG_ESP(r)	r.Esp
-/* extended registers, how to get them in Windows there is no 
-   name for them, check with jacob
-*/
-/*
-#define INFERIOR_REG_FS(r)	r.xfs
-#define INFERIOR_REG_ES(r)	r.xes
-#define INFERIOR_REG_DS(r)	r.xds
-#define INFERIOR_REG_CS(r)	r.xcs
-#define INFERIOR_REG_SS(r)	r.xss
-#define INFERIOR_REG_GS(r)	r.xgs
-*/
+#error "Unknown operating systrem."
 #endif
 
 G_END_DECLS
-
-#else
-#error "Wrong architecture!"
-#endif
 
 #endif

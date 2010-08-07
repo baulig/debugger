@@ -47,68 +47,15 @@ static ServerCommandError
 _server_ptrace_check_errno (InferiorHandle *);
 
 static ServerCommandError
-_server_ptrace_make_memory_executable (ServerHandle *handle, guint64 start, guint32 size);
-
-static ServerCommandError
-_server_ptrace_count_registers (InferiorHandle *inferior, guint32 *out_count);
-
-static ServerCommandError
-_server_ptrace_get_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs);
-
-static ServerCommandError
-_server_ptrace_set_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs);
-
-static ServerCommandError
-_server_ptrace_get_fp_registers (InferiorHandle *inferior, INFERIOR_FPREGS_TYPE *regs);
-
-static ServerCommandError
-_server_ptrace_set_fp_registers (InferiorHandle *inferior, INFERIOR_FPREGS_TYPE *regs);
-
-static ServerCommandError
-_server_ptrace_read_memory (ServerHandle *handle, guint64 start,
-			    guint32 size, gpointer buffer);
-
-static ServerCommandError
-server_ptrace_read_memory (ServerHandle *handle, guint64 start, guint32 size, gpointer buffer);
-
-static ServerCommandError
-server_ptrace_write_memory (ServerHandle *handle, guint64 start,
-			    guint32 size, gconstpointer buffer);
-
-static ServerCommandError
-server_ptrace_poke_word (ServerHandle *handle, guint64 addr, gsize value);
-
-static ServerCommandError
-_server_ptrace_set_dr (InferiorHandle *handle, int regnum, guint64 value);
-
-static ServerCommandError
-_server_ptrace_get_dr (InferiorHandle *handle, int regnum, guint64 *value);
-
-static ServerCommandError
-server_ptrace_continue (ServerHandle *handle);
-
-static ServerCommandError
-server_ptrace_step (ServerHandle *handle);
-
-static ServerCommandError
-server_ptrace_kill (ServerHandle *handle);
-
-static ServerCommandError
-server_ptrace_stop (ServerHandle *handle);
-
-static ServerCommandError
-server_ptrace_stop_and_wait (ServerHandle *handle, guint32 *status);
-
-static ServerCommandError
 _server_ptrace_setup_inferior (ServerHandle *handle);
 
 static void
 _server_ptrace_finalize_inferior (ServerHandle *handle);
 
-static ServerCommandError
-server_ptrace_get_signal_info (ServerHandle *handle, SignalInfo **sinfo);
-
 static gboolean
 _server_ptrace_wait_for_new_thread (ServerHandle *handle);
+
+static void
+_server_ptrace_io_thread_main (IOThreadData *io_data, ChildOutputFunc func);
 
 #endif

@@ -18,7 +18,7 @@ if BFD_TARGET_X64_LINUX
 bfd_backend = elf64-x86-64.c elf64.c elf64-gen.c $(elf32_backend) i386linux.c aout32.c peigen.c cofflink.c cpu-i386.c pe-i386.c pei-i386.c trad-core.c archive64.c verilog.c
 endif
 if BFD_TARGET_I386_LINUX
-bfd_backend = $(elf32_backend) i386linux.c aout32.c efi-app-ia32.c peigen.c cofflink.c cpu-i386.c pe-i386.c pei-i386.c trad-core.c verilog.c
+bfd_backend = $(elf32_backend) i386linux.c aout32.c peigen.c cofflink.c cpu-i386.c pe-i386.c pei-i386.c trad-core.c verilog.c
 endif
 if BFD_TARGET_POWERPC_DARWIN
 bfd_backend = mach-o.c pef.c rs6000-core.c xsym.c cpu-rs6000.c cpu-powerpc.c

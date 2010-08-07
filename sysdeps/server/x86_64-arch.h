@@ -1,50 +1,63 @@
 #ifndef __MONO_DEBUGGER_X86_86_ARCH_H__
 #define __MONO_DEBUGGER_X86_86_ARCH_H__
 
+#if !defined(__x86_64__)
+#error "Wrong architecture"
+#endif
+
 #include <glib.h>
 
 G_BEGIN_DECLS
 
-#if defined(__x86_64__)
-
 #include <sys/user.h>
 
-#define INFERIOR_REGS_TYPE	struct user_regs_struct
-#define INFERIOR_FPREGS_TYPE	struct user_fpregs_struct
+/* Debug registers' indices.  */
+#define DR_NADDR		4  /* the number of debug address registers */
+#define DR_STATUS		6  /* index of debug status register (DR6) */
+#define DR_CONTROL		7  /* index of debug control register (DR7) */
 
-#define INFERIOR_REG_R15(r)	r.r15
-#define INFERIOR_REG_R14(r)	r.r14
-#define INFERIOR_REG_R13(r)	r.r13
-#define INFERIOR_REG_R12(r)	r.r12
-#define INFERIOR_REG_RBP(r)	r.rbp
-#define INFERIOR_REG_RBX(r)	r.rbx
-#define INFERIOR_REG_R11(r)	r.r11
-#define INFERIOR_REG_R10(r)	r.r10
-#define INFERIOR_REG_R9(r)	r.r9
-#define INFERIOR_REG_R8(r)	r.r8
-#define INFERIOR_REG_RAX(r)	r.rax
-#define INFERIOR_REG_RCX(r)	r.rcx
-#define INFERIOR_REG_RDX(r)	r.rdx
-#define INFERIOR_REG_RSI(r)	r.rsi
-#define INFERIOR_REG_RDI(r)	r.rdi
-#define INFERIOR_REG_ORIG_RAX(r)	r.orig_rax
-#define INFERIOR_REG_RIP(r)	r.rip
-#define INFERIOR_REG_CS(r)	r.cs
-#define INFERIOR_REG_EFLAGS(r)	r.eflags
-#define INFERIOR_REG_RSP(r)	r.rsp
-#define INFERIOR_REG_SS(r)	r.ss
+struct _InferiorRegsType {
+	struct user_regs_struct regs;
+	struct user_fpregs_struct fpregs;
+	guint64 dr_control, dr_status;
+	guint64 dr_regs [DR_NADDR];
+};
 
-#define INFERIOR_REG_FS_BASE(r)	r.fs_base
-#define INFERIOR_REG_GS_BASE(r)	r.gs_base
+#define INFERIOR_REG_R15(r)		r.regs.r15
+#define INFERIOR_REG_R14(r)		r.regs.r14
+#define INFERIOR_REG_R13(r)		r.regs.r13
+#define INFERIOR_REG_R12(r)		r.regs.r12
+#define INFERIOR_REG_RBP(r)		r.regs.rbp
+#define INFERIOR_REG_RBX(r)		r.regs.rbx
+#define INFERIOR_REG_R11(r)		r.regs.r11
+#define INFERIOR_REG_R10(r)		r.regs.r10
+#define INFERIOR_REG_R9(r)		r.regs.r9
+#define INFERIOR_REG_R8(r)		r.regs.r8
+#define INFERIOR_REG_RAX(r)		r.regs.rax
+#define INFERIOR_REG_RCX(r)		r.regs.rcx
+#define INFERIOR_REG_RDX(r)		r.regs.rdx
+#define INFERIOR_REG_RSI(r)		r.regs.rsi
+#define INFERIOR_REG_RDI(r)		r.regs.rdi
+#define INFERIOR_REG_ORIG_RAX(r)	r.regs.orig_rax
+#define INFERIOR_REG_RIP(r)		r.regs.rip
+#define INFERIOR_REG_CS(r)		r.regs.cs
+#define INFERIOR_REG_EFLAGS(r)		r.regs.eflags
+#define INFERIOR_REG_RSP(r)		r.regs.rsp
+#define INFERIOR_REG_SS(r)		r.regs.ss
 
-#define INFERIOR_REG_DS(r)	r.ds
-#define INFERIOR_REG_ES(r)	r.es
-#define INFERIOR_REG_FS(r)	r.fs
-#define INFERIOR_REG_GS(r)	r.gs
+#define INFERIOR_REG_FS_BASE(r)		r.regs.fs_base
+#define INFERIOR_REG_GS_BASE(r)		r.regs.gs_base
 
-#else
-#error "Unknown architecture"
-#endif
+#define INFERIOR_REG_DS(r)		r.regs.ds
+#define INFERIOR_REG_ES(r)		r.regs.es
+#define INFERIOR_REG_FS(r)		r.regs.fs
+#define INFERIOR_REG_GS(r)		r.regs.gs
+
+#define INFERIOR_REG_DR_CONTROL(r)	r.dr_control
+#define INFERIOR_REG_DR_STATUS(r)	r.dr_control
+#define INFERIOR_REG_DR_N(r,n)		r.dr_regs[n]
+
+#define AMD64_RED_ZONE_SIZE 128
 
 G_END_DECLS
 

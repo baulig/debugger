@@ -121,7 +121,7 @@ x86_64-*-linux*)
 	bfd_cflags='-DTRAD_CORE -DBFD64 -DARCH_i386'
 	bfd_target=x64_linux
 	;;
-i[3-7]86-*-linux*)
+i[[3-7]]86-*-linux*)
 	default_vec=bfd_elf32_i386_vec
 	select_vecs='&bfd_elf32_i386_vec,&i386linux_vec,&bfd_elf32_little_generic_vec,&bfd_elf32_big_generic_vec,&i386pe_vec,&i386pei_vec'
 	select_archs='&bfd_i386_arch'

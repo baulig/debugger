@@ -45,6 +45,7 @@ platform_libs =
 endif
 if PLATFORM_X86_WINDOWS
 platform_sources = \
+	x86-arch.c \
 	martin-windows.c
 platform_server = \
 	mdb-server-bfd.c \
@@ -54,6 +55,7 @@ platform_libs = \
 endif
 if PLATFORM_X86_LINUX
 platform_sources = \
+	x86-arch.c \
 	x86-ptrace.c \
 	thread-db.c \
 	thread-db.h

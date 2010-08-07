@@ -1,5 +1,5 @@
 #include <config.h>
-#include <server.h>
+#include <library.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif

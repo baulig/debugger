@@ -1,4 +1,5 @@
 #include <mdb-server.h>
+#include <string.h>
 #include <bfd.h>
 #if defined(__linux__) || defined(__FreeBSD__)
 #include <link.h>
@@ -38,7 +39,7 @@ mdb_server_create_exe_reader (const char *filename)
 		reader->num_symbols = bfd_canonicalize_symtab (reader->bfd, reader->symtab);
 	}
 
-	g_message (G_STRLOC ": %d - %d - %p", reader->symtab_size, reader->num_symbols, reader->symtab);
+	g_message (G_STRLOC ": %ld - %ld - %p", reader->symtab_size, reader->num_symbols, reader->symtab);
 
 	return reader;
 }
@@ -110,7 +111,7 @@ mdb_exe_reader_lookup_symbol_by_addr (MdbExeReader *reader, guint64 address)
 	for (i = 0; i < reader->num_symbols; i++) {
 		asymbol *symbol = reader->symtab [i];
 		gboolean is_function;
-		gpointer sym_address;
+		guint64 sym_address;
 		int flags;
 
 		if ((symbol->flags & (BSF_WEAK | BSF_DYNAMIC)) == (BSF_WEAK | BSF_DYNAMIC))
@@ -143,7 +144,7 @@ find_section (MdbExeReader *reader, const char *name)
 	g_message (G_STRLOC ": %s - %p", name, reader->bfd->sections);
 
 	for (section = reader->bfd->sections; section; section = section->next) {
-		g_message (G_STRLOC ": %p - %s - %Lx", section, section->name, section->vma);
+		g_message (G_STRLOC ": %p - %s - %lx", section, section->name, section->vma);
 		if (!strcmp (section->name, name))
 			return section;
 	}

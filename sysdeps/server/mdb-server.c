@@ -594,7 +594,7 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		argv [0] = g_strdup_printf ("X:\\Work\\Martin\\mdb\\testnativetypes.exe");
 		cwd = g_get_current_dir (); // FIXME
 
-		result = mono_debugger_server_spawn (inferior, cwd, argv, NULL, FALSE, &child_pid, NULL, &error);
+		result = mono_debugger_server_spawn (inferior, cwd, (const gchar **) argv, NULL, FALSE, &child_pid, NULL, &error);
 		g_message (G_STRLOC ": %d - %d - %s", result, child_pid, error);
 
 		if (result != COMMAND_ERROR_NONE)
@@ -945,7 +945,6 @@ exe_reader_commands (int command, int id, MdbExeReader *reader, guint8 *p, guint
 
 		section_name = decode_string (p, &p, end);
 		address = mdb_exe_reader_get_section_address (reader, section_name);
-		g_message (G_STRLOC ": %s - %Lx", section_name, address);
 		buffer_add_long (buf, address);
 		g_free (section_name);
 		break;
@@ -977,6 +976,8 @@ exe_reader_commands (int command, int id, MdbExeReader *reader, guint8 *p, guint
 	return ERR_NONE;
 }
 
+#if WINDOWS
+
 typedef struct {
 	int command;
 	int id;
@@ -994,6 +995,8 @@ inferior_command_proxy (gpointer user_data)
 
 	data->ret = inferior_commands (data->command, data->id, data->inferior, data->p, data->end, data->buf);
 }
+
+#endif
 
 gboolean
 mdb_server_main_loop_iteration (void)

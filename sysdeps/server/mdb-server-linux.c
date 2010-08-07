@@ -134,10 +134,6 @@ handle_wait_event (void)
 	message = mono_debugger_server_dispatch_event (
 		server, status, &arg, &data1, &data2, &opt_data_size, &opt_data);
 
-	g_message (G_STRLOC ": dispatched child event: %d / %d - %Ld, %Lx, %Lx",
-		   message, ret, arg, data1, data2);
-
-
 	mdb_server_process_child_event (
 		message, ret, arg, data1, data2, opt_data_size, opt_data);
 }

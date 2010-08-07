@@ -99,9 +99,9 @@ mono_debugger_server_finalize_mono_runtime (MonoRuntimeInfo *runtime)
 }
 
 static void
-server_ptrace_finalize (ServerHandle *handle)
+mdb_server_finalize (ServerHandle *handle)
 {
-	x86_arch_finalize (handle->arch);
+	mdb_arch_finalize (handle->arch);
 
 	_server_ptrace_finalize_inferior (handle);
 
@@ -113,17 +113,17 @@ server_ptrace_finalize (ServerHandle *handle)
 #endif
 
 static ServerCommandError
-server_ptrace_resume (ServerHandle *handle)
+mdb_server_resume (ServerHandle *handle)
 {
 	InferiorHandle *inferior = handle->inferior;
 	if (inferior->stepping)
-		return server_ptrace_step (handle);
+		return mdb_server_step (handle);
 	else
-		return server_ptrace_continue (handle);
+		return mdb_server_continue (handle);
 }
 
 static ServerCommandError
-server_ptrace_detach (ServerHandle *handle)
+mdb_server_detach (ServerHandle *handle)
 {
 	InferiorHandle *inferior = handle->inferior;
 
@@ -135,14 +135,46 @@ server_ptrace_detach (ServerHandle *handle)
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
-server_ptrace_peek_word (ServerHandle *handle, guint64 start, guint64 *retval)
+ServerCommandError
+mdb_inferior_peek_word (InferiorHandle *inferior, guint64 start, guint64 *retval)
 {
-	return server_ptrace_read_memory (handle, start, sizeof (gsize), retval);
+	return mdb_inferior_read_memory (inferior, start, sizeof (gsize), retval);
+}
+
+ServerCommandError
+mdb_server_peek_word (ServerHandle *server, guint64 start, guint64 *retval)
+{
+	return mdb_inferior_read_memory (server->inferior, start, sizeof (gsize), retval);
+}
+
+ServerCommandError
+mdb_server_read_memory (ServerHandle *server, guint64 start, guint32 size, gpointer buffer)
+{
+	ServerCommandError result;
+
+	result = mdb_inferior_read_memory (server->inferior, start, size, buffer);
+	if (result)
+		return result;
+
+	mdb_server_remove_breakpoints_from_target_memory (server, start, size, buffer);
+	return COMMAND_ERROR_NONE;
+}
+
+ServerCommandError
+mdb_server_write_memory (ServerHandle *handle, guint64 start, guint32 size, gconstpointer buffer)
+{
+	return mdb_inferior_write_memory (handle->inferior, start, size, buffer);
+}
+
+ServerCommandError
+mdb_server_count_registers (ServerHandle *server, guint32 *out_count)
+{
+	*out_count = DEBUGGER_REG_LAST;
+	return COMMAND_ERROR_NONE;
 }
 
 static ServerStatusMessageType
-server_ptrace_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg,
+mdb_server_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg,
 			      guint64 *data1, guint64 *data2, guint32 *opt_data_size,
 			      gpointer *opt_data)
 {
@@ -211,7 +243,7 @@ server_ptrace_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg
 		if (stopsig == SIGCONT)
 			stopsig = 0;
 
-		action = x86_arch_child_stopped (
+		action = mdb_arch_child_stopped (
 			handle, stopsig, &callback_arg, &retval, &retval2, opt_data_size, opt_data);
 
 		if (action != STOP_ACTION_STOPPED)
@@ -283,7 +315,7 @@ server_ptrace_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg
 }
 
 static ServerStatusMessageType
-server_ptrace_dispatch_simple (guint32 status, guint32 *arg)
+mdb_server_dispatch_simple (guint32 status, guint32 *arg)
 {
 	if (status >> 16)
 		return MESSAGE_UNKNOWN_ERROR;
@@ -314,7 +346,7 @@ server_ptrace_dispatch_simple (guint32 status, guint32 *arg)
 
 
 static ServerHandle *
-server_ptrace_create_inferior (BreakpointManager *bpm)
+mdb_server_create_inferior (BreakpointManager *bpm)
 {
 	ServerHandle *handle = g_new0 (ServerHandle, 1);
 
@@ -326,7 +358,7 @@ server_ptrace_create_inferior (BreakpointManager *bpm)
 
 	handle->bpm = bpm;
 	handle->inferior = g_new0 (InferiorHandle, 1);
-	handle->arch = x86_arch_initialize ();
+	handle->arch = mdb_arch_initialize ();
 
 	return handle;
 }
@@ -344,7 +376,7 @@ child_setup_func (InferiorHandle *inferior)
 }
 
 static ServerCommandError
-server_ptrace_spawn (ServerHandle *handle, const gchar *working_directory,
+mdb_server_spawn (ServerHandle *handle, const gchar *working_directory,
 		     const gchar **argv, const gchar **envp, gboolean redirect_fds,
 		     gint *child_pid, IOThreadData **io_data, gchar **error)
 {	
@@ -458,7 +490,7 @@ server_ptrace_spawn (ServerHandle *handle, const gchar *working_directory,
 }
 
 static ServerCommandError
-server_ptrace_initialize_thread (ServerHandle *handle, guint32 pid, gboolean wait)
+mdb_server_initialize_thread (ServerHandle *handle, guint32 pid, gboolean do_wait)
 {
 	InferiorHandle *inferior = handle->inferior;
 
@@ -469,7 +501,7 @@ server_ptrace_initialize_thread (ServerHandle *handle, guint32 pid, gboolean wai
 	inferior->os.thread = get_thread_from_index(GET_THREAD_INDEX(pid));
 #else
 	inferior->pid = pid;
-	if (wait && !_server_ptrace_wait_for_new_thread (handle))
+	if (do_wait && !_server_ptrace_wait_for_new_thread (handle))
 		return COMMAND_ERROR_INTERNAL_ERROR;
 #endif
 
@@ -477,7 +509,7 @@ server_ptrace_initialize_thread (ServerHandle *handle, guint32 pid, gboolean wai
 }
 
 static ServerCommandError
-server_ptrace_attach (ServerHandle *handle, guint32 pid)
+mdb_server_attach (ServerHandle *handle, guint32 pid)
 {
 	InferiorHandle *inferior = handle->inferior;
 
@@ -512,8 +544,8 @@ process_output (int fd, gboolean is_stderr, ChildOutputFunc func)
 	func (is_stderr, buffer);
 }
 
-void
-server_ptrace_io_thread_main (IOThreadData *io_data, ChildOutputFunc func)
+static void
+_server_ptrace_io_thread_main (IOThreadData *io_data, ChildOutputFunc func)
 {
 	struct pollfd fds [2];
 	int ret;
@@ -547,7 +579,7 @@ server_ptrace_io_thread_main (IOThreadData *io_data, ChildOutputFunc func)
 }
 
 static ServerCommandError
-server_ptrace_set_signal (ServerHandle *handle, guint32 sig, guint32 send_it)
+mdb_server_set_signal (ServerHandle *handle, guint32 sig, guint32 send_it)
 {
 	if (send_it)
 		kill (handle->inferior->pid, sig);
@@ -557,28 +589,40 @@ server_ptrace_set_signal (ServerHandle *handle, guint32 sig, guint32 send_it)
 }
 
 static ServerCommandError
-server_ptrace_get_pending_signal (ServerHandle *handle, guint32 *signal)
+mdb_server_get_pending_signal (ServerHandle *handle, guint32 *out_signal)
 {
-	*signal = handle->inferior->last_signal;
+	*out_signal = handle->inferior->last_signal;
 	return COMMAND_ERROR_NONE;
 }
 
 static void
-server_ptrace_set_runtime_info (ServerHandle *handle, MonoRuntimeInfo *mono_runtime)
+mdb_server_set_runtime_info (ServerHandle *handle, MonoRuntimeInfo *mono_runtime)
 {
 	handle->mono_runtime = mono_runtime;
 }
 
 static guint32
-server_ptrace_get_current_pid (void)
+mdb_server_get_current_pid (void)
 {
 	return getpid ();
 }
 
 static guint64
-server_ptrace_get_current_thread (void)
+mdb_server_get_current_thread (void)
 {
 	return pthread_self ();
+}
+
+void
+_mdb_inferior_set_last_signal (InferiorHandle *inferior, int last_signal)
+{
+	inferior->last_signal = last_signal;
+}
+
+int
+_mdb_inferior_get_last_signal (InferiorHandle *inferior)
+{
+	return inferior->last_signal;
 }
 
 extern void GC_start_blocking (void);
@@ -596,77 +640,62 @@ extern void GC_end_blocking (void);
 #include "darwin-ptrace.c"
 #endif
 
-#if defined(__i386__)
-#include "i386-arch.c"
-#elif defined(__x86_64__)
-#include "x86_64-arch.c"
-#else
-#error "Unknown architecture"
-#endif
-
-static ServerCommandError
-server_ptrace_count_registers (InferiorHandle *inferior, guint32 *out_count)
-{
-	*out_count = DEBUGGER_REG_LAST;
-	return COMMAND_ERROR_NONE;
-}
-
 InferiorVTable i386_ptrace_inferior = {
-	server_ptrace_global_init,
-	server_ptrace_get_server_type,
-	server_ptrace_get_capabilities,
-	server_ptrace_create_inferior,
-	server_ptrace_initialize_process,
-	server_ptrace_initialize_thread,
-	server_ptrace_set_runtime_info,
-	server_ptrace_io_thread_main,
-	server_ptrace_spawn,
-	server_ptrace_attach,
-	server_ptrace_detach,
-	server_ptrace_finalize,
-	server_ptrace_global_wait,
-	server_ptrace_stop_and_wait,
-	server_ptrace_dispatch_event,
-	server_ptrace_dispatch_simple,
-	server_ptrace_get_target_info,
-	server_ptrace_continue,
-	server_ptrace_step,
-	server_ptrace_resume,
-	server_ptrace_get_frame,
-	server_ptrace_current_insn_is_bpt,
-	server_ptrace_peek_word,
-	server_ptrace_read_memory,
-	server_ptrace_write_memory,
-	server_ptrace_call_method,
-	server_ptrace_call_method_1,
-	server_ptrace_call_method_2,
-	server_ptrace_call_method_3,
-	server_ptrace_call_method_invoke,
-	server_ptrace_execute_instruction,
-	server_ptrace_mark_rti_frame,
-	server_ptrace_abort_invoke,
-	server_ptrace_insert_breakpoint,
-	server_ptrace_insert_hw_breakpoint,
-	server_ptrace_remove_breakpoint,
-	server_ptrace_enable_breakpoint,
-	server_ptrace_disable_breakpoint,
-	server_ptrace_get_breakpoints,
-	server_ptrace_count_registers,
-	server_ptrace_get_registers,
-	server_ptrace_set_registers,
-	server_ptrace_stop,
-	server_ptrace_set_signal,
-	server_ptrace_get_pending_signal,
-	server_ptrace_kill,
-	server_ptrace_get_signal_info,
-	server_ptrace_get_threads,
-	server_ptrace_get_application,
-	server_ptrace_detach_after_fork,
-	server_ptrace_push_registers,
-	server_ptrace_pop_registers,
-	server_ptrace_get_callback_frame,
-	server_ptrace_restart_notification,
-	server_ptrace_get_registers_from_core_file,
-	server_ptrace_get_current_pid,
-	server_ptrace_get_current_thread
+	mdb_server_global_init,
+	mdb_server_get_server_type,
+	mdb_server_get_capabilities,
+	mdb_server_create_inferior,
+	mdb_server_initialize_process,
+	mdb_server_initialize_thread,
+	mdb_server_set_runtime_info,
+	_server_ptrace_io_thread_main,
+	mdb_server_spawn,
+	mdb_server_attach,
+	mdb_server_detach,
+	mdb_server_finalize,
+	mdb_server_global_wait,
+	mdb_server_stop_and_wait,
+	mdb_server_dispatch_event,
+	mdb_server_dispatch_simple,
+	mdb_server_get_target_info,
+	mdb_server_continue,
+	mdb_server_step,
+	mdb_server_resume,
+	mdb_server_get_frame,
+	mdb_server_current_insn_is_bpt,
+	mdb_server_peek_word,
+	mdb_server_read_memory,
+	mdb_server_write_memory,
+	mdb_server_call_method,
+	mdb_server_call_method_1,
+	mdb_server_call_method_2,
+	mdb_server_call_method_3,
+	mdb_server_call_method_invoke,
+	mdb_server_execute_instruction,
+	mdb_server_mark_rti_frame,
+	mdb_server_abort_invoke,
+	mdb_server_insert_breakpoint,
+	mdb_server_insert_hw_breakpoint,
+	mdb_server_remove_breakpoint,
+	mdb_server_enable_breakpoint,
+	mdb_server_disable_breakpoint,
+	mdb_server_get_breakpoints,
+	mdb_server_count_registers,
+	mdb_server_get_registers,
+	mdb_server_set_registers,
+	mdb_server_stop,
+	mdb_server_set_signal,
+	mdb_server_get_pending_signal,
+	mdb_server_kill,
+	mdb_server_get_signal_info,
+	mdb_server_get_threads,
+	mdb_server_get_application,
+	mdb_server_detach_after_fork,
+	mdb_server_push_registers,
+	mdb_server_pop_registers,
+	mdb_server_get_callback_frame,
+	mdb_server_restart_notification,
+	mdb_server_get_registers_from_core_file,
+	mdb_server_get_current_pid,
+	mdb_server_get_current_thread
 };

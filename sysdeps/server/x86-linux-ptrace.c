@@ -1,11 +1,19 @@
-static ServerType
-server_ptrace_get_server_type (void)
+#if defined(__x86_64__)
+#include "x86_64-arch.h"
+#elif defined(__i386__)
+#include "i386-arch.h"
+#else
+#error "Unknown architecture"
+#endif
+
+ServerType
+mdb_server_get_server_type (void)
 {
 	return SERVER_TYPE_LINUX_PTRACE;
 }
 
-static ServerCapabilities
-server_ptrace_get_capabilities (void)
+ServerCapabilities
+mdb_server_get_capabilities (void)
 {
 	return SERVER_CAPABILITIES_THREAD_EVENTS | SERVER_CAPABILITIES_CAN_DETACH_ANY | SERVER_CAPABILIITES_HAS_SIGNALS;
 }
@@ -34,56 +42,107 @@ _server_ptrace_check_errno (InferiorHandle *inferior)
 	return COMMAND_ERROR_NO_TARGET;
 }
 
-static ServerCommandError
-_server_ptrace_make_memory_executable (ServerHandle *handle, guint64 start, guint32 size)
+ServerCommandError
+mdb_inferior_make_memory_executable (InferiorHandle *inferior, guint64 start, guint32 size)
 {
 	return COMMAND_ERROR_NONE;
 }
 
 static ServerCommandError
-_server_ptrace_get_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
+_ptrace_set_dr (InferiorHandle *handle, int regnum, guint64 value)
 {
-	if (ptrace (PT_GETREGS, inferior->pid, NULL, regs) != 0)
+	errno = 0;
+	ptrace (PTRACE_POKEUSER, handle->pid, offsetof (struct user, u_debugreg [regnum]), value);
+	if (errno) {
+		g_message (G_STRLOC ": %d - %d - %s", handle->pid, regnum, g_strerror (errno));
+		return COMMAND_ERROR_UNKNOWN_ERROR;
+	}
+
+	return COMMAND_ERROR_NONE;
+}
+
+
+static ServerCommandError
+_ptrace_get_dr (InferiorHandle *handle, int regnum, guint64 *value)
+{
+	int ret;
+
+	errno = 0;
+	ret = ptrace (PTRACE_PEEKUSER, handle->pid, offsetof (struct user, u_debugreg [regnum]));
+	if (errno) {
+		g_message (G_STRLOC ": %d - %d - %s", handle->pid, regnum, g_strerror (errno));
+		return COMMAND_ERROR_UNKNOWN_ERROR;
+	}
+
+	*value = ret;
+	return COMMAND_ERROR_NONE;
+}
+
+extern ServerCommandError
+mdb_inferior_get_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
+{
+	ServerCommandError result;
+	int i;
+
+	if (ptrace (PT_GETREGS, inferior->pid, NULL, regs->regs) != 0)
 		return _server_ptrace_check_errno (inferior);
 
-	return COMMAND_ERROR_NONE;
-}
-
-static ServerCommandError
-_server_ptrace_set_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
-{
-	if (ptrace (PT_SETREGS, inferior->pid, NULL, regs) != 0)
+	if (ptrace (PT_SETREGS, inferior->pid, NULL, regs->fpregs) != 0)
 		return _server_ptrace_check_errno (inferior);
 
+	result = _ptrace_get_dr (inferior, DR_CONTROL, &regs->dr_control);
+	if (result)
+		return result;
+
+	result = _ptrace_get_dr (inferior, DR_STATUS, &regs->dr_status);
+	if (result)
+		return result;
+
+	for (i = 0; i < DR_NADDR; i++) {
+		result = _ptrace_get_dr (inferior, i, &regs->dr_regs[i]);
+		if (result)
+			return result;
+	}
+
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
-_server_ptrace_get_fp_registers (InferiorHandle *inferior, INFERIOR_FPREGS_TYPE *regs)
+ServerCommandError
+mdb_inferior_set_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
 {
-	if (ptrace (PT_GETFPREGS, inferior->pid, NULL, regs) != 0)
+	ServerCommandError result;
+	int i;
+
+	if (ptrace (PT_SETREGS, inferior->pid, NULL, regs->regs) != 0)
 		return _server_ptrace_check_errno (inferior);
 
-	return COMMAND_ERROR_NONE;
-}
-
-static ServerCommandError
-_server_ptrace_set_fp_registers (InferiorHandle *inferior, INFERIOR_FPREGS_TYPE *regs)
-{
-	if (ptrace (PT_SETFPREGS, inferior->pid, NULL, regs) != 0)
+	if (ptrace (PT_SETREGS, inferior->pid, NULL, regs->fpregs) != 0)
 		return _server_ptrace_check_errno (inferior);
 
+	result = _ptrace_set_dr (inferior, DR_CONTROL, regs->dr_control);
+	if (result)
+		return result;
+
+	result = _ptrace_set_dr (inferior, DR_STATUS, regs->dr_status);
+	if (result)
+		return result;
+
+	for (i = 0; i < DR_NADDR; i++) {
+		result = _ptrace_set_dr (inferior, i, regs->dr_regs[i]);
+		if (result)
+			return result;
+	}
+
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
-_server_ptrace_read_memory (ServerHandle *handle, guint64 start, guint32 size, gpointer buffer)
+ServerCommandError
+mdb_inferior_read_memory (InferiorHandle *inferior, guint64 start, guint32 size, gpointer buffer)
 {
 	guint8 *ptr = buffer;
-	guint32 old_size = size;
 
 	while (size) {
-		int ret = pread64 (handle->inferior->os.mem_fd, ptr, size, start);
+		int ret = pread64 (inferior->os.mem_fd, ptr, size, start);
 		if (ret < 0) {
 			if (errno == EINTR)
 				continue;
@@ -101,21 +160,10 @@ _server_ptrace_read_memory (ServerHandle *handle, guint64 start, guint32 size, g
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
-server_ptrace_read_memory (ServerHandle *handle, guint64 start, guint32 size, gpointer buffer)
+ServerCommandError
+mdb_inferior_write_memory (InferiorHandle *inferior, guint64 start,
+			   guint32 size, gconstpointer buffer)
 {
-	ServerCommandError result = _server_ptrace_read_memory (handle, start, size, buffer);
-	if (result != COMMAND_ERROR_NONE)
-		return result;
-	x86_arch_remove_breakpoints_from_target_memory (handle, start, size, buffer);
-	return COMMAND_ERROR_NONE;
-}
-
-static ServerCommandError
-server_ptrace_write_memory (ServerHandle *handle, guint64 start,
-			    guint32 size, gconstpointer buffer)
-{
-	InferiorHandle *inferior = handle->inferior;
 	ServerCommandError result;
 	const long *ptr = buffer;
 	guint64 addr = start;
@@ -135,57 +183,27 @@ server_ptrace_write_memory (ServerHandle *handle, guint64 start,
 	if (!size)
 		return COMMAND_ERROR_NONE;
 
-	result = _server_ptrace_read_memory (handle, addr, sizeof (long), &temp);
+	result = mdb_inferior_read_memory (inferior, addr, sizeof (long), &temp);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
 	memcpy (&temp, ptr, size);
 
-	return server_ptrace_write_memory (handle, addr, sizeof (long), &temp);
+	return mdb_inferior_write_memory (inferior, addr, sizeof (long), &temp);
 }
 
-static ServerCommandError
-server_ptrace_poke_word (ServerHandle *handle, guint64 addr, gsize value)
+ServerCommandError
+mdb_inferior_poke_word (InferiorHandle *inferior, guint64 addr, gsize value)
 {
 	errno = 0;
-	if (ptrace (PT_WRITE_D, handle->inferior->pid, GSIZE_TO_POINTER (addr), value) != 0)
-		return _server_ptrace_check_errno (handle->inferior);
+	if (ptrace (PT_WRITE_D, inferior->pid, GSIZE_TO_POINTER (addr), value) != 0)
+		return _server_ptrace_check_errno (inferior);
 
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
-_server_ptrace_set_dr (InferiorHandle *handle, int regnum, guint64 value)
-{
-	errno = 0;
-	ptrace (PTRACE_POKEUSER, handle->pid, offsetof (struct user, u_debugreg [regnum]), value);
-	if (errno) {
-		g_message (G_STRLOC ": %d - %d - %s", handle->pid, regnum, g_strerror (errno));
-		return COMMAND_ERROR_UNKNOWN_ERROR;
-	}
-
-	return COMMAND_ERROR_NONE;
-}
-
-
-static ServerCommandError
-_server_ptrace_get_dr (InferiorHandle *handle, int regnum, guint64 *value)
-{
-	int ret;
-
-	errno = 0;
-	ret = ptrace (PTRACE_PEEKUSER, handle->pid, offsetof (struct user, u_debugreg [regnum]));
-	if (errno) {
-		g_message (G_STRLOC ": %d - %d - %s", handle->pid, regnum, g_strerror (errno));
-		return COMMAND_ERROR_UNKNOWN_ERROR;
-	}
-
-	*value = ret;
-	return COMMAND_ERROR_NONE;
-}
-
-static ServerCommandError
-server_ptrace_continue (ServerHandle *handle)
+ServerCommandError
+mdb_server_continue (ServerHandle *handle)
 {
 	InferiorHandle *inferior = handle->inferior;
 
@@ -198,8 +216,8 @@ server_ptrace_continue (ServerHandle *handle)
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
-server_ptrace_step (ServerHandle *handle)
+ServerCommandError
+mdb_server_step (ServerHandle *handle)
 {
 	InferiorHandle *inferior = handle->inferior;
 
@@ -212,7 +230,7 @@ server_ptrace_step (ServerHandle *handle)
 }
 
 static ServerCommandError
-server_ptrace_kill (ServerHandle *handle)
+mdb_server_kill (ServerHandle *handle)
 {
 	if (ptrace (PTRACE_KILL, handle->inferior->pid, NULL, 0))
 		return COMMAND_ERROR_UNKNOWN_ERROR;
@@ -225,7 +243,7 @@ GStaticMutex wait_mutex_2 = G_STATIC_MUTEX_INIT;
 GStaticMutex wait_mutex_3 = G_STATIC_MUTEX_INIT;
 
 static int
-do_wait (int pid, guint32 *status, gboolean nohang)
+do_wait (int pid, int *status, gboolean nohang)
 {
 	int ret, flags;
 
@@ -255,7 +273,7 @@ static int stop_requested = 0;
 static int stop_status = 0;
 
 static guint32
-server_ptrace_global_wait (guint32 *status_ret)
+mdb_server_global_wait (guint32 *status_ret)
 {
 	int ret, status;
 
@@ -297,7 +315,8 @@ server_ptrace_global_wait (guint32 *status_ret)
 static gboolean
 _server_ptrace_wait_for_new_thread (ServerHandle *handle)
 {
-	guint32 ret, status = 0;
+	guint32 ret = 0;
+	int status;
 
 	/*
 	 * There is a race condition in the Linux kernel which shows up on >= 2.6.27:
@@ -340,7 +359,7 @@ _server_ptrace_wait_for_new_thread (ServerHandle *handle)
 	 * Just as an extra safety check.
 	 */
 
-	if (x86_arch_get_registers (handle) != COMMAND_ERROR_NONE) {
+	if (mdb_arch_get_registers (handle) != COMMAND_ERROR_NONE) {
 		g_static_mutex_unlock (&wait_mutex);
 		g_warning (G_STRLOC ": Failed to get registers: %d", handle->inferior->pid);
 		return FALSE;
@@ -351,7 +370,7 @@ _server_ptrace_wait_for_new_thread (ServerHandle *handle)
 }
 
 static ServerCommandError
-server_ptrace_stop (ServerHandle *handle)
+mdb_server_stop (ServerHandle *handle)
 {
 	ServerCommandError result;
 
@@ -359,7 +378,7 @@ server_ptrace_stop (ServerHandle *handle)
 	 * Try to get the thread's registers.  If we suceed, then it's already stopped
 	 * and still alive.
 	 */
-	result = x86_arch_get_registers (handle);
+	result = mdb_arch_get_registers (handle);
 	if (result == COMMAND_ERROR_NONE)
 		return COMMAND_ERROR_ALREADY_STOPPED;
 
@@ -377,7 +396,7 @@ server_ptrace_stop (ServerHandle *handle)
 }
 
 static ServerCommandError
-server_ptrace_stop_and_wait (ServerHandle *handle, guint32 *status)
+mdb_server_stop_and_wait (ServerHandle *handle, guint32 *out_status)
 {
 	ServerCommandError result;
 	gboolean already_stopped = FALSE;
@@ -391,7 +410,7 @@ server_ptrace_stop_and_wait (ServerHandle *handle, guint32 *status)
 	g_message (G_STRLOC ": stop and wait %d", handle->inferior->pid);
 #endif
 	g_static_mutex_lock (&wait_mutex_2);
-	result = server_ptrace_stop (handle);
+	result = mdb_server_stop (handle);
 	if (result == COMMAND_ERROR_ALREADY_STOPPED) {
 #if DEBUG_WAIT
 		g_message (G_STRLOC ": %d - already stopped", handle->inferior->pid);
@@ -421,7 +440,7 @@ server_ptrace_stop_and_wait (ServerHandle *handle, guint32 *status)
 	g_message (G_STRLOC ": %d - got stop status %x", handle->inferior->pid, stop_status);
 #endif
 	if (stop_status) {
-		*status = stop_status;
+		*out_status = stop_status;
 		stop_requested = stop_status = 0;
 		g_static_mutex_unlock (&wait_mutex);
 		g_static_mutex_unlock (&wait_mutex_3);
@@ -431,14 +450,18 @@ server_ptrace_stop_and_wait (ServerHandle *handle, guint32 *status)
 	stop_requested = stop_status = 0;
 
 	do {
+		int status;
+
 #if DEBUG_WAIT
 		g_message (G_STRLOC ": %d - waiting", handle->inferior->pid);
 #endif
-		ret = do_wait (handle->inferior->pid, status, already_stopped);
+		ret = do_wait (handle->inferior->pid, &status, already_stopped);
 #if DEBUG_WAIT
 		g_message (G_STRLOC ": %d - done waiting %d, %x",
 			   handle->inferior->pid, ret, status);
 #endif
+
+		*out_status = status;
 	} while (ret == 0);
 	g_static_mutex_unlock (&wait_mutex);
 	g_static_mutex_unlock (&wait_mutex_3);
@@ -452,12 +475,12 @@ server_ptrace_stop_and_wait (ServerHandle *handle, guint32 *status)
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
+ServerCommandError
 _server_ptrace_setup_inferior (ServerHandle *handle)
 {
 	gchar *filename = g_strdup_printf ("/proc/%d/mem", handle->inferior->pid);
 
-	x86_arch_remove_hardware_breakpoints (handle);
+	mdb_server_remove_hardware_breakpoints (handle);
 
 	handle->inferior->os.mem_fd = open64 (filename, O_RDONLY);
 
@@ -481,7 +504,7 @@ _server_ptrace_finalize_inferior (ServerHandle *handle)
 }
 
 static ServerCommandError
-server_ptrace_initialize_process (ServerHandle *handle)
+mdb_server_initialize_process (ServerHandle *handle)
 {
 	int flags = PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK |
 		PTRACE_O_TRACEEXEC;
@@ -495,8 +518,8 @@ server_ptrace_initialize_process (ServerHandle *handle)
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
-server_ptrace_get_signal_info (ServerHandle *handle, SignalInfo **sinfo_out)
+ServerCommandError
+mdb_server_get_signal_info (ServerHandle *handle, SignalInfo **sinfo_out)
 {
 	SignalInfo *sinfo = g_new0 (SignalInfo, 1);
 
@@ -529,14 +552,14 @@ server_ptrace_get_signal_info (ServerHandle *handle, SignalInfo **sinfo_out)
 }
 
 static void
-server_ptrace_global_init (void)
+mdb_server_global_init (void)
 {
 	stop_requested = 0;
 	stop_status = 0;
 }
 
-static ServerCommandError
-server_ptrace_get_threads (ServerHandle *handle, guint32 *count, guint32 **threads)
+ServerCommandError
+mdb_server_get_threads (ServerHandle *handle, guint32 *count, guint32 **threads)
 {
 	gchar *dirname = g_strdup_printf ("/proc/%d/task", handle->inferior->pid);
 	const gchar *filename;
@@ -583,9 +606,9 @@ server_ptrace_get_threads (ServerHandle *handle, guint32 *count, guint32 **threa
 	return COMMAND_ERROR_UNKNOWN_ERROR;
 }
 
-static ServerCommandError
-server_ptrace_get_application (ServerHandle *handle, gchar **exe_file, gchar **cwd,
-			       guint32 *nargs, gchar ***cmdline_args)
+ServerCommandError
+mdb_server_get_application (ServerHandle *handle, gchar **exe_file, gchar **cwd,
+			    guint32 *nargs, gchar ***cmdline_args)
 {
 	gchar *exe_filename = g_strdup_printf ("/proc/%d/exe", handle->inferior->pid);
 	gchar *cwd_filename = g_strdup_printf ("/proc/%d/cwd", handle->inferior->pid);
@@ -593,7 +616,7 @@ server_ptrace_get_application (ServerHandle *handle, gchar **exe_file, gchar **c
 	char buffer [BUFSIZ+1];
 	GPtrArray *array;
 	gchar *cmdline, **ptr;
-	gssize pos, len;
+	gsize pos, len;
 	int i;
 
 	len = readlink (exe_filename, buffer, BUFSIZ);
@@ -655,13 +678,12 @@ server_ptrace_get_application (ServerHandle *handle, gchar **exe_file, gchar **c
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
-server_ptrace_detach_after_fork (ServerHandle *handle)
+ServerCommandError
+mdb_server_detach_after_fork (ServerHandle *handle)
 {
 	ServerCommandError result;
 	GPtrArray *breakpoints;
-	guint32 status;
-	int ret, i;
+	int ret, status, i;
 
 	ret = waitpid (handle->inferior->pid, &status, WUNTRACED | WNOHANG | __WALL | __WCLONE);
 	if (ret < 0)
@@ -670,10 +692,10 @@ server_ptrace_detach_after_fork (ServerHandle *handle)
 	/*
 	 * Make sure we're stopped.
 	 */
-	if (x86_arch_get_registers (handle) != COMMAND_ERROR_NONE)
+	if (mdb_arch_get_registers (handle) != COMMAND_ERROR_NONE)
 		do_wait (handle->inferior->pid, &status, FALSE);
 
-	result = x86_arch_get_registers (handle);
+	result = mdb_arch_get_registers (handle);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -683,7 +705,7 @@ server_ptrace_detach_after_fork (ServerHandle *handle)
 	for (i = 0; i < breakpoints->len; i++) {
 		BreakpointInfo *info = g_ptr_array_index (breakpoints, i);
 
-		x86_arch_disable_breakpoint (handle, info);
+		mdb_arch_disable_breakpoint (handle, info);
 	}
 
 	mono_debugger_breakpoint_manager_unlock ();
