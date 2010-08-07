@@ -10,7 +10,7 @@ using Mono.Debugger.Architectures;
 
 namespace Mono.Debugger.Backend
 {
-	internal class BfdDisassembler : Disassembler, IDisposable
+	internal class BfdDisassembler : Disassembler
 	{
 		IntPtr handle;
 		Process process;
@@ -183,32 +183,10 @@ namespace Mono.Debugger.Backend
 		// IDisposable
 		//
 
-		private bool disposed = false;
-
-		protected virtual void Dispose (bool disposing)
+		protected override void DoDispose ()
 		{
-			// Check to see if Dispose has already been called.
-			if (!this.disposed) {
-				this.disposed = true;
-
-				// Release unmanaged resources
-				lock (this) {
-					bfd_glue_free_disassembler (handle);
-					handle = IntPtr.Zero;
-				}
-			}
-		}
-
-		public override void Dispose ()
-		{
-			Dispose (true);
-			// Take yourself off the Finalization queue
-			GC.SuppressFinalize (this);
-		}
-
-		~BfdDisassembler ()
-		{
-			Dispose (false);
+			bfd_glue_free_disassembler (handle);
+			handle = IntPtr.Zero;
 		}
 	}
 }

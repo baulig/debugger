@@ -74,6 +74,9 @@ mdb_exe_reader_get_section_contents (MdbExeReader *reader, const char *name, gui
 extern gboolean
 mdb_server_inferior_command (InferiorDelegate *delegate);
 
+extern gchar *
+mdb_server_disassemble_insn (ServerHandle *inferior, guint64 address, guint32 *out_insn_size);
+
 G_END_DECLS
 
 #endif

@@ -80,7 +80,8 @@ typedef enum {
 	CMD_INFERIOR_WRITE_MEMORY = 15,
 	CMD_INFERIOR_GET_PENDING_SIGNAL = 16,
 	CMD_INFERIOR_SET_SIGNAL = 17,
-	CMD_INFERIOR_GET_DYNAMIC_INFO = 18
+	CMD_INFERIOR_GET_DYNAMIC_INFO = 18,
+	CMD_INFERIOR_DISASSEMBLE_INSN = 19
 } CmdInferior;
 
 typedef enum {
@@ -815,6 +816,24 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		dynamic_info = mdb_exe_reader_get_dynamic_info (inferior, reader);
 
 		buffer_add_long (buf, dynamic_info);
+		break;
+#else
+		return ERR_NOT_IMPLEMENTED;
+#endif
+	}
+
+	case CMD_INFERIOR_DISASSEMBLE_INSN: {
+#if WINDOWS
+		guint64 address;
+		guint32 insn_size;
+		gchar *insn;
+
+		address = decode_long (p, &p, end);
+
+		insn = mdb_server_disassemble_insn (inferior, address, &insn_size);
+		buffer_add_int (buf, insn_size);
+		buffer_add_string (buf, insn);
+		g_free (insn);
 		break;
 #else
 		return ERR_NOT_IMPLEMENTED;

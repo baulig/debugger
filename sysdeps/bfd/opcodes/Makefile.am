@@ -18,7 +18,7 @@ endif
 
 INCLUDES = -D_GNU_SOURCE @bfd_cflags@ -I$(srcdir)/.. -I$(srcdir)/../include
 
-libopcodes_la_SOURCES =  $(opcode_sources) dis-buf.c disassemble.c
+libopcodes_la_SOURCES =  $(opcode_sources) dis-buf.c disassemble.c dis-init.c
 libopcodes_la_LDFLAGS = -export-dynamic
 
 EXTRA_DIST = opintl.h sysdep.h

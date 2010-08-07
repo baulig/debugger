@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <glib.h>
+#include <bfd.h>
+#include <dis-asm.h>
 
 struct InferiorHandle
 {
@@ -16,6 +18,8 @@ struct InferiorHandle
 	CONTEXT current_context;
 	gint argc;
 	gchar **argv;
+	struct disassemble_info *disassembler;
+	char disasm_buffer [1024];
 };
 
 #define INFERIOR_REG_EIP(r)	r.Eip
@@ -467,6 +471,19 @@ server_win32_get_frame (ServerHandle *handle, StackFrame *frame)
 	return COMMAND_ERROR_NONE;
 }
 
+static BOOL
+read_from_debuggee (InferiorHandle *inferior, LPVOID start, LPVOID buf, DWORD size, PDWORD read_bytes) 
+{
+	SetLastError (0);
+	if (!ReadProcessMemory (inferior->process_handle, start, buf, size, read_bytes)) {
+		format_windows_error_message (GetLastError ());
+		fwprintf (stderr, windows_error_message);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 static ServerCommandError
 server_win32_read_memory (ServerHandle *handle, guint64 start, guint32 size, gpointer buffer)
 {
@@ -662,6 +679,75 @@ server_win32_get_application (ServerHandle *handle, gchar **exe_file, gchar **cw
 	g_ptr_array_free (array, FALSE);
 
 	return COMMAND_ERROR_NONE;
+}
+
+static int
+disasm_read_memory_func (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length, struct disassemble_info *info)
+{
+	InferiorHandle *inferior = info->application_data;
+
+	return read_from_debuggee (inferior, memaddr, myaddr, length, NULL) ? 0 : 1;
+}
+
+static int
+disasm_fprintf_func (gpointer stream, const char *message, ...)
+{
+	InferiorHandle *inferior = stream;
+	va_list args;
+	char *start;
+	int len, max, retval;
+
+	len = strlen (inferior->disasm_buffer);
+	start = inferior->disasm_buffer + len;
+	max = 1024 - len;
+
+	va_start (args, message);
+	retval = vsnprintf (start, max, message, args);
+	va_end (args);
+
+	return retval;
+}
+
+static void
+init_disassembler (InferiorHandle *inferior)
+{
+	struct disassemble_info *info;
+
+	if (inferior->disassembler)
+		return;
+
+	info = g_new0 (struct disassemble_info, 1);
+	INIT_DISASSEMBLE_INFO (*info, stderr, fprintf);
+	info->flavour = bfd_target_coff_flavour;
+	info->arch = bfd_arch_i386;
+	info->mach = bfd_mach_i386_i386;
+	info->octets_per_byte = 1;
+	info->display_endian = info->endian = BFD_ENDIAN_LITTLE;
+
+	info->application_data = inferior;
+	info->read_memory_func = disasm_read_memory_func;
+	info->fprintf_func = disasm_fprintf_func;
+	info->stream = inferior;
+
+	inferior->disassembler = info;
+}
+
+gchar *
+mdb_server_disassemble_insn (ServerHandle *handle, guint64 address, guint32 *out_insn_size)
+{
+	InferiorHandle *inferior = handle->inferior;
+	int ret;
+
+	init_disassembler (inferior);
+
+	memset (inferior->disasm_buffer, 0, 1024);
+
+	ret = print_insn_i386 (address, inferior->disassembler);
+
+	if (out_insn_size)
+		*out_insn_size = ret;
+
+	return g_strdup (inferior->disasm_buffer);
 }
 
 InferiorVTable i386_windows_inferior = {
