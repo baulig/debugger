@@ -191,14 +191,26 @@ namespace Mono.Debugger.Server
 		}
 
 		NativeThreadManager manager;
+		ServerCapabilities capabilities;
+		ServerType server_type;
 
 		public NativeDebuggerServer (Debugger debugger)
 		{
 			manager = new NativeThreadManager (debugger, this);
+			server_type = mono_debugger_server_get_server_type ();
+			capabilities = mono_debugger_server_get_capabilities ();
 		}
 
 		public override ThreadManager ThreadManager {
 			get { return manager; }
+		}
+
+		public override ServerType Type {
+			get { return server_type; }
+		}
+
+		public override ServerCapabilities Capabilities {
+			get { return capabilities; }
 		}
 
 		public override BreakpointManager CreateBreakpointManager ()
@@ -732,17 +744,6 @@ namespace Mono.Debugger.Server
 				if (buffer != IntPtr.Zero)
 					Marshal.FreeHGlobal (buffer);
 			}
-		}
-
-		public override ServerType GetServerType ()
-		{
-			check_disposed ();
-			return mono_debugger_server_get_server_type ();
-		}
-
-		public override ServerCapabilities GetCapabilities ()
-		{
-			return mono_debugger_server_get_capabilities ();
 		}
 
 		public override TargetError RestartNotification (InferiorHandle inferior)

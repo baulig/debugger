@@ -191,8 +191,7 @@ namespace Mono.Debugger.Backend
 
 		public bool HasThreadEvents {
 			get {
-				DebuggerServer.ServerCapabilities capabilities = debugger_server.GetCapabilities ();
-				return (capabilities & DebuggerServer.ServerCapabilities.THREAD_EVENTS) != 0;
+				return (debugger_server.Capabilities & DebuggerServer.ServerCapabilities.THREAD_EVENTS) != 0;
 			}
 		}
 
@@ -207,15 +206,13 @@ namespace Mono.Debugger.Backend
 
 		public bool CanDetachAny {
 			get {
-				DebuggerServer.ServerCapabilities capabilities = debugger_server.GetCapabilities ();
-				return (capabilities & DebuggerServer.ServerCapabilities.CAN_DETACH_ANY) != 0;
+				return (debugger_server.Capabilities & DebuggerServer.ServerCapabilities.CAN_DETACH_ANY) != 0;
 			}
 		}
 
 		public OperatingSystemBackend CreateOperatingSystemBackend (Process process)
 		{
-			DebuggerServer.ServerType type = debugger_server.GetServerType ();
-			switch (type) {
+			switch (debugger_server.Type) {
 			case DebuggerServer.ServerType.LINUX_PTRACE:
 				return new LinuxOperatingSystem (process);
 			case DebuggerServer.ServerType.DARWIN:
@@ -223,7 +220,7 @@ namespace Mono.Debugger.Backend
 			case DebuggerServer.ServerType.WINDOWS:
 				return new WindowsOperatingSystem (process);
 			default:
-				throw new NotSupportedException (String.Format ("Unknown server type {0}.", type));
+				throw new NotSupportedException (String.Format ("Unknown server type {0}.", debugger_server.Type));
 			}
 		}
 

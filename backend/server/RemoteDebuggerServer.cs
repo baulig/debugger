@@ -15,14 +15,26 @@ namespace Mono.Debugger.Server
 	{
 		Connection connection;
 		RemoteThreadManager manager;
+		ServerCapabilities capabilities;
+		ServerType server_type;
 
 		public RemoteDebuggerServer (Debugger debugger)
 		{
 			manager = new RemoteThreadManager (debugger, this);
 
 			connection = new Connection (handle_event);
-
 			connection.Connect ();
+
+			server_type = connection.GetServerType ();
+			capabilities = connection.GetCapabilities ();
+		}
+
+		public override ServerType Type {
+			get { return server_type; }
+		}
+
+		public override ServerCapabilities Capabilities {
+			get { return capabilities; }
 		}
 
 		void handle_event (Connection.EventInfo e)
@@ -298,18 +310,6 @@ namespace Mono.Debugger.Server
 		{
 			info = null;
 			return TargetError.NoCallbackFrame;
-		}
-
-		public override ServerType GetServerType ()
-		{
-			check_disposed ();
-			return connection.GetServerType ();
-		}
-
-		public override ServerCapabilities GetCapabilities ()
-		{
-			check_disposed ();
-			return connection.GetCapabilities ();
 		}
 
 		public override TargetError RestartNotification (InferiorHandle inferior)

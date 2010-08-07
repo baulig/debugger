@@ -20,6 +20,14 @@ namespace Mono.Debugger.Server
 			get;
 		}
 
+		public abstract ServerType Type {
+			get;
+		}
+
+		public abstract ServerCapabilities Capabilities {
+			get;
+		}
+
 		public abstract BreakpointManager CreateBreakpointManager ();
 
 		public abstract InferiorHandle CreateInferior (BreakpointManager breakpoint_manager);
@@ -267,10 +275,6 @@ namespace Mono.Debugger.Server
 						      CallAddress, StackPointer, IsRuntimeInvokeFrame);
 			}
 		}
-
-		public abstract ServerType GetServerType ();
-
-		public abstract ServerCapabilities GetCapabilities ();
 
 		public abstract TargetError RestartNotification (InferiorHandle inferior);
 
