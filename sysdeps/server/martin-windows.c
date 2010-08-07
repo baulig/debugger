@@ -67,12 +67,12 @@ static InferiorDelegate *inferior_delegate;
 
 static DWORD WINAPI debugging_thread_main (LPVOID dummy_arg);
 
-
-static wchar_t windows_error_message [2048];
-static const size_t windows_error_message_len = 2048;
-
 static BOOL win32_get_registers (InferiorHandle *inferior);
+static BOOL win32_set_registers (InferiorHandle *inferior);
 static BOOL read_from_debuggee (ProcessHandle *process, LPVOID start, LPVOID buf, DWORD size, PDWORD read_bytes);
+
+static BOOL check_breakpoint (ServerHandle *server, guint64 address, guint64 *retval);
+static BreakpointInfo *lookup_breakpoint (ServerHandle *server, guint32 idx, BreakpointManager **out_bpm);
 
 static gchar *
 tstring_to_string (const TCHAR *string)
@@ -91,19 +91,27 @@ tstring_to_string (const TCHAR *string)
 }
 
 /* Format a more readable error message on failures which set ErrorCode */
-static void
-format_windows_error_message (DWORD error_code)
+static gchar *
+get_last_error (void)
 {
-	DWORD dw_rval;
-	dw_rval = FormatMessage (FORMAT_MESSAGE_FROM_SYSTEM, NULL,
-				 error_code, 0, windows_error_message,
-				 windows_error_message_len, NULL);
+	DWORD error_code, dw_rval;
+	wchar_t message [2048];
+	gchar *retval, *tmp_buf;
 
-	if (FALSE == dw_rval) {
-		fprintf (stderr, "Could not get error message from windows\n");
-	} else {
-		fwprintf (stderr, L"WINDOWS ERROR (code=%x): %s\n", error_code, windows_error_message);
-	}
+	error_code = GetLastError ();
+
+	dw_rval = FormatMessage (FORMAT_MESSAGE_FROM_SYSTEM, NULL,
+				 error_code, 0, message, 2048, NULL);
+
+	if (dw_rval == 0)
+		return g_strdup_printf ("Could not get error message (0x%x) from windows", error_code);
+
+	tmp_buf = g_malloc0 (dw_rval + 1);
+	wcstombs (tmp_buf, message, 2048);
+
+	retval = g_strdup_printf ("WINDOWS ERROR (code=%x): %s", error_code, tmp_buf);
+	g_free (tmp_buf);
+	return retval;
 }
 
 static void
@@ -263,32 +271,62 @@ static void
 handle_debug_event (DEBUG_EVENT *de)
 {
 	ServerHandle *server;
+	InferiorHandle *inferior;
 	ProcessHandle *process;
 
 	server = g_hash_table_lookup (server_hash, GINT_TO_POINTER (de->dwThreadId));
 	if (!server) {
-		g_warning (G_STRLOC ": Got debug event for unknown thread: %x / %x", de->dwProcessId, de->dwThreadId);
+		g_warning (G_STRLOC ": Got debug event for unknown thread: %d/%d", de->dwProcessId, de->dwThreadId);
+		if (!ContinueDebugEvent (de->dwProcessId, de->dwThreadId, DBG_CONTINUE)) {
+			g_warning (G_STRLOC ": %s", get_last_error ());
+		}
 		return;
 	}
 
+	inferior = server->inferior;
 	process = server->inferior->process;
 
-	g_message (G_STRLOC ": Got debug event: %d - %p", de->dwDebugEventCode, server);
+	g_message (G_STRLOC ": Got debug event: %d - %d/%d - %p", de->dwDebugEventCode, de->dwProcessId, de->dwThreadId, server);
 
 	// show_debug_event (de);
 
 	switch (de->dwDebugEventCode) {
 	case EXCEPTION_DEBUG_EVENT: {
 		DWORD exception_code;
+		PVOID exception_addr;
 
 		exception_code = de->u.Exception.ExceptionRecord.ExceptionCode;
-		if (exception_code == EXCEPTION_BREAKPOINT || exception_code == EXCEPTION_SINGLE_STEP) {
+		exception_addr = de->u.Exception.ExceptionRecord.ExceptionAddress;
+
+		g_message (G_STRLOC ": EXCEPTION (%d/%d): %x - %p - %d", de->dwProcessId, de->dwThreadId,
+			   exception_code, exception_addr, de->u.Exception.dwFirstChance);
+
+		if (exception_code == EXCEPTION_BREAKPOINT) {
+			guint64 arg = 0;
+
+			win32_get_registers (inferior);
+
+			if (check_breakpoint (server, INFERIOR_REG_EIP (inferior->current_context) - 1, &arg)) {
+				INFERIOR_REG_EIP (inferior->current_context)--;
+				win32_set_registers (inferior);
+				mdb_server_process_child_event (MESSAGE_CHILD_HIT_BREAKPOINT, de->dwProcessId, arg, 0, 0, 0, NULL);
+			} else {
+				mdb_server_process_child_event (MESSAGE_CHILD_STOPPED, de->dwProcessId, 0, 0, 0, 0, NULL);
+			}
+
+			ResetEvent (wait_event);
+			return;
+		} else if (exception_code == EXCEPTION_SINGLE_STEP) {
 			mdb_server_process_child_event (MESSAGE_CHILD_STOPPED, de->dwProcessId, 0, 0, 0, 0, NULL);
 			ResetEvent (wait_event);
 			return;
 		}
 
-		break;
+		if (!ContinueDebugEvent (de->dwProcessId, de->dwThreadId, DBG_EXCEPTION_NOT_HANDLED)) {
+			g_warning (G_STRLOC ": %s", get_last_error ());
+		}
+
+		return;
 	}
 
 	case LOAD_DLL_DEBUG_EVENT: {
@@ -312,15 +350,13 @@ handle_debug_event (DEBUG_EVENT *de)
 			if (GetModuleFileNameEx (process->process_handle, de->u.LoadDll.hFile, path, sizeof (path) / sizeof (TCHAR))) {
 				_tprintf (TEXT ("MODULE: %s\n"), path);
 			} else {
-				format_windows_error_message (GetLastError ());
-				fwprintf (stderr, windows_error_message);
+				g_warning (G_STRLOC ": %s", get_last_error ());
 			}
 
 			if (GetModuleFileNameEx (process->process_handle, NULL, path, sizeof (path) / sizeof (TCHAR))) {
 				_tprintf (TEXT ("PROCESS MODULE: %s\n"), path);
 			} else {
-				format_windows_error_message (GetLastError ());
-				fwprintf (stderr, windows_error_message);
+				g_warning (G_STRLOC ": %s", get_last_error ());
 			}
 
 			{
@@ -374,8 +410,7 @@ handle_debug_event (DEBUG_EVENT *de)
 	}
 
 	if (!ContinueDebugEvent (de->dwProcessId, de->dwThreadId, DBG_CONTINUE)) {
-		format_windows_error_message (GetLastError ());
-		fwprintf (stderr, windows_error_message);
+		g_warning (G_STRLOC ": %s", get_last_error ());
 	}
 }
 
@@ -469,7 +504,6 @@ server_win32_spawn (ServerHandle *server, const gchar *working_directory,
 	SECURITY_ATTRIBUTES sa;
 	SECURITY_DESCRIPTOR sd;
 	LPSECURITY_ATTRIBUTES lpsa = NULL;
-	TCHAR path [MAX_PATH];
 	DEBUG_EVENT de;
 	BOOL b_ret;
 
@@ -552,16 +586,12 @@ server_win32_spawn (ServerHandle *server, const gchar *working_directory,
 			       utf16_envp, utf16_working_directory, &si, &pi);
 
 	if (!b_ret) {
-		/* cleanup code where to place here or one function above REMIND */
-		format_windows_error_message (GetLastError ());
-		/* this should find it's way to the proper glib error mesage handler */
-		fwprintf (stderr, windows_error_message);
+		g_warning (G_STRLOC ": %s", get_last_error ());
 		return COMMAND_ERROR_CANNOT_START_TARGET;
 	}
 
 	if (!WaitForDebugEvent (&de, 5000)) {
-		format_windows_error_message (GetLastError ());
-		fwprintf (stderr, windows_error_message);
+		g_warning (G_STRLOC ": %s", get_last_error ());
 		return COMMAND_ERROR_CANNOT_START_TARGET;
 	}
 
@@ -569,6 +599,8 @@ server_win32_spawn (ServerHandle *server, const gchar *working_directory,
 		g_warning (G_STRLOC ": Got unknown debug event: %d", de.dwDebugEventCode);
 		return COMMAND_ERROR_CANNOT_START_TARGET;
 	}
+
+	g_message (G_STRLOC ": SPAWN: %d/%d", pi.dwProcessId, pi.dwThreadId);
 
 	*child_pid = pi.dwProcessId;
 	inferior->process->process_handle = pi.hProcess;
@@ -591,6 +623,12 @@ win32_get_registers (InferiorHandle *inferior)
 	return GetThreadContext (inferior->thread_handle, &inferior->current_context);
 }
 
+static BOOL
+win32_set_registers (InferiorHandle *inferior)
+{
+	return SetThreadContext (inferior->thread_handle, &inferior->current_context);
+}
+
 static ServerCommandError
 server_win32_get_frame (ServerHandle *handle, StackFrame *frame)
 {
@@ -611,24 +649,47 @@ read_from_debuggee (ProcessHandle *process, LPVOID start, LPVOID buf, DWORD size
 {
 	SetLastError (0);
 	if (!ReadProcessMemory (process->process_handle, start, buf, size, read_bytes)) {
-		format_windows_error_message (GetLastError ());
-		fwprintf (stderr, windows_error_message);
+		g_warning (G_STRLOC ": %p/%d - %s", start, size, get_last_error ());
 		return FALSE;
 	}
 
 	return TRUE;
 }
 
-static ServerCommandError
-server_win32_read_memory (ServerHandle *handle, guint64 start, guint32 size, gpointer buffer)
+static BOOL
+write_to_debuggee (ProcessHandle *process, LPVOID start, LPVOID buf, DWORD size, PDWORD read_bytes)
 {
-	return COMMAND_ERROR_NOT_IMPLEMENTED;
+	SetLastError (0);
+	if (!WriteProcessMemory (process->process_handle, start, buf, size, read_bytes)) {
+		g_warning (G_STRLOC ": %s", get_last_error ());
+		return FALSE;
+	}
+
+	if (!FlushInstructionCache (process->process_handle, start, size)) {
+		g_warning (G_STRLOC ": %s", get_last_error ());
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+
+static ServerCommandError
+server_win32_read_memory (ServerHandle *server, guint64 start, guint32 size, gpointer buffer)
+{
+	if (!read_from_debuggee (server->inferior->process, GINT_TO_POINTER (start), buffer, size, NULL))
+		return COMMAND_ERROR_MEMORY_ACCESS;
+
+	return COMMAND_ERROR_NONE;
 }
 
 static ServerCommandError
-server_win32_write_memory (ServerHandle *handle, guint64 start, guint32 size, gconstpointer buffer)
+server_win32_write_memory (ServerHandle *server, guint64 start, guint32 size, gconstpointer buffer)
 {
-	return COMMAND_ERROR_NOT_IMPLEMENTED;
+	if (!write_to_debuggee (server->inferior->process, GINT_TO_POINTER (start), buffer, size, NULL))
+		return COMMAND_ERROR_MEMORY_ACCESS;
+
+	return COMMAND_ERROR_NONE;
 }
 
 static BOOL
@@ -664,8 +725,7 @@ server_win32_step (ServerHandle *server)
 	set_step_flag (inferior, TRUE);
 
 	if (!ContinueDebugEvent (inferior->process->process_id, inferior->thread_id, DBG_CONTINUE)) {
-		format_windows_error_message (GetLastError ());
-		fwprintf (stderr, windows_error_message);
+		g_warning (G_STRLOC ": continue (%d/%d): %s", inferior->process->process_id, inferior->thread_id, get_last_error ());
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 	}
 
@@ -682,8 +742,7 @@ server_win32_continue (ServerHandle *server)
 	set_step_flag (inferior, FALSE);
 
 	if (!ContinueDebugEvent (inferior->process->process_id, inferior->thread_id, DBG_CONTINUE)) {
-		format_windows_error_message (GetLastError ());
-		fwprintf (stderr, windows_error_message);
+		g_warning (G_STRLOC ": %s", get_last_error ());
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 	}
 
@@ -692,16 +751,200 @@ server_win32_continue (ServerHandle *server)
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
-server_win32_insert_breakpoint (ServerHandle *handle, guint64 address, guint32 *bhandle)
+static BOOL
+check_breakpoint (ServerHandle *server, guint64 address, guint64 *retval)
 {
-	return COMMAND_ERROR_NOT_IMPLEMENTED;
+	BreakpointInfo *info;
+
+	mono_debugger_breakpoint_manager_lock ();
+	info = (BreakpointInfo *) mono_debugger_breakpoint_manager_lookup (server->bpm, address);
+	if (!info || !info->enabled) {
+		mono_debugger_breakpoint_manager_unlock ();
+		return FALSE;
+	}
+
+	*retval = info->id;
+	mono_debugger_breakpoint_manager_unlock ();
+	return TRUE;
+}
+
+static BreakpointInfo *
+lookup_breakpoint (ServerHandle *server, guint32 idx, BreakpointManager **out_bpm)
+{
+	BreakpointInfo *info;
+
+	mono_debugger_breakpoint_manager_lock ();
+	info = (BreakpointInfo *) mono_debugger_breakpoint_manager_lookup_by_id (server->bpm, idx);
+	if (info) {
+		if (out_bpm)
+			*out_bpm = server->bpm;
+		mono_debugger_breakpoint_manager_unlock ();
+		return info;
+	}
+
+	if (out_bpm)
+		*out_bpm = NULL;
+
+	mono_debugger_breakpoint_manager_unlock ();
+	return info;
 }
 
 static ServerCommandError
-server_win32_remove_breakpoint (ServerHandle *handle, guint32 bhandle)
+x86_arch_enable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
 {
-	return COMMAND_ERROR_NOT_IMPLEMENTED;
+	ServerCommandError result;
+	char bopcode = 0xcc;
+	guint32 address;
+
+	if (breakpoint->enabled)
+		return COMMAND_ERROR_NONE;
+
+	address = (guint32) breakpoint->address;
+
+	result = server_win32_read_memory (server, address, 1, &breakpoint->saved_insn);
+	if (result != COMMAND_ERROR_NONE)
+		return result;
+
+	result = server_win32_write_memory (server, address, 1, &bopcode);
+	if (result != COMMAND_ERROR_NONE)
+		return result;
+
+	return COMMAND_ERROR_NONE;
+}
+
+static ServerCommandError
+x86_arch_disable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
+{
+	ServerCommandError result;
+	guint32 address;
+
+	if (!breakpoint->enabled)
+		return COMMAND_ERROR_NONE;
+
+	address = (guint32) breakpoint->address;
+
+	result = server_win32_write_memory (server, address, 1, &breakpoint->saved_insn);
+	if (result != COMMAND_ERROR_NONE)
+		return result;
+
+	return COMMAND_ERROR_NONE;
+}
+
+static ServerCommandError
+server_win32_insert_breakpoint (ServerHandle *server, guint64 address, guint32 *bhandle)
+{
+	BreakpointInfo *breakpoint;
+	ServerCommandError result;
+
+	g_message (G_STRLOC ": insert breakpoint: %Lx", address);
+
+	mono_debugger_breakpoint_manager_lock ();
+	breakpoint = (BreakpointInfo *) mono_debugger_breakpoint_manager_lookup (server->bpm, address);
+	if (breakpoint) {
+		/*
+		 * You cannot have a hardware breakpoint and a normal breakpoint on the same
+		 * instruction.
+		 */
+		if (breakpoint->is_hardware_bpt) {
+			mono_debugger_breakpoint_manager_unlock ();
+			return COMMAND_ERROR_DR_OCCUPIED;
+		}
+
+		breakpoint->refcount++;
+		goto done;
+	}
+
+	breakpoint = g_new0 (BreakpointInfo, 1);
+
+	breakpoint->refcount = 1;
+	breakpoint->address = address;
+	breakpoint->is_hardware_bpt = FALSE;
+	breakpoint->id = mono_debugger_breakpoint_manager_get_next_id ();
+	breakpoint->dr_index = -1;
+
+	result = x86_arch_enable_breakpoint (server, breakpoint);
+	if (result != COMMAND_ERROR_NONE) {
+		mono_debugger_breakpoint_manager_unlock ();
+		g_free (breakpoint);
+		return result;
+	}
+
+	breakpoint->enabled = TRUE;
+	mono_debugger_breakpoint_manager_insert (server->bpm, (BreakpointInfo *) breakpoint);
+ done:
+	*bhandle = breakpoint->id;
+	mono_debugger_breakpoint_manager_unlock ();
+
+	return COMMAND_ERROR_NONE;
+}
+
+static ServerCommandError
+server_win32_remove_breakpoint (ServerHandle *server, guint32 idx)
+{
+	BreakpointManager *bpm;
+	BreakpointInfo *breakpoint;
+	ServerCommandError result;
+
+	mono_debugger_breakpoint_manager_lock ();
+	breakpoint = lookup_breakpoint (server, idx, &bpm);
+	if (!breakpoint) {
+		result = COMMAND_ERROR_NO_SUCH_BREAKPOINT;
+		goto out;
+	}
+
+	if (--breakpoint->refcount > 0) {
+		result = COMMAND_ERROR_NONE;
+		goto out;
+	}
+
+	result = x86_arch_disable_breakpoint (server, breakpoint);
+	if (result != COMMAND_ERROR_NONE)
+		goto out;
+
+	breakpoint->enabled = FALSE;
+	mono_debugger_breakpoint_manager_remove (bpm, breakpoint);
+
+ out:
+	mono_debugger_breakpoint_manager_unlock ();
+	return result;
+}
+
+static ServerCommandError
+server_win32_enable_breakpoint (ServerHandle *server, guint32 idx)
+{
+	BreakpointInfo *breakpoint;
+	ServerCommandError result;
+
+	mono_debugger_breakpoint_manager_lock ();
+	breakpoint = lookup_breakpoint (server, idx, NULL);
+	if (!breakpoint) {
+		mono_debugger_breakpoint_manager_unlock ();
+		return COMMAND_ERROR_NO_SUCH_BREAKPOINT;
+	}
+
+	result = x86_arch_enable_breakpoint (server, breakpoint);
+	breakpoint->enabled = TRUE;
+	mono_debugger_breakpoint_manager_unlock ();
+	return result;
+}
+
+static ServerCommandError
+server_win32_disable_breakpoint (ServerHandle *server, guint32 idx)
+{
+	BreakpointInfo *breakpoint;
+	ServerCommandError result;
+
+	mono_debugger_breakpoint_manager_lock ();
+	breakpoint = lookup_breakpoint (server, idx, NULL);
+	if (!breakpoint) {
+		mono_debugger_breakpoint_manager_unlock ();
+		return COMMAND_ERROR_NO_SUCH_BREAKPOINT;
+	}
+
+	result = x86_arch_disable_breakpoint (server, breakpoint);
+	breakpoint->enabled = FALSE;
+	mono_debugger_breakpoint_manager_unlock ();
+	return result;
 }
 
 static ServerCommandError
@@ -945,8 +1188,8 @@ InferiorVTable i386_windows_inferior = {
 	server_win32_insert_breakpoint,		/* insert_breakpoint */
 	NULL,					/* insert_hw_breakpoint */
 	server_win32_remove_breakpoint,		/* remove_breakpoint */
-	NULL,					/* enable_breakpoint */
-	NULL,					/* disable_breakpoint */
+	server_win32_enable_breakpoint,		/* enable_breakpoint */
+	server_win32_disable_breakpoint,	/* disable_breakpoint */
 	server_win32_get_breakpoints,		/* get_breakpoints */
 	server_win32_count_registers,		/* count_registers */
 	server_win32_get_registers,		/* get_registers */

@@ -2954,7 +2954,7 @@ namespace Mono.Debugger.Backend
 		{ }
 
 		public override bool IsSourceOperation {
-			get { return false; }
+			get { return true; }
 		}
 
 		protected override void DoExecute ()
@@ -2962,10 +2962,6 @@ namespace Mono.Debugger.Backend
 			Report.Debug (DebugFlags.SSE,
 				      "{0} test execute start: {1} {2} {3}", sse, sse.Process.IsAttached,
 				      inferior.CurrentFrame, inferior.EntryPoint);
-
-			sse.ProcessEvent (new DebuggerServer.ChildEvent (DebuggerServer.ChildEventType.CHILD_STOPPED, 0, 0, 0));
-			return;
-			sse.do_continue ();
 
 			if (!sse.Process.IsAttached && sse.manager.HasThreadEvents)
 				sse.do_continue (inferior.EntryPoint);
@@ -2985,9 +2981,6 @@ namespace Mono.Debugger.Backend
 			if ((cevent.Type != DebuggerServer.ChildEventType.CHILD_STOPPED) &&
 			    (cevent.Type != DebuggerServer.ChildEventType.CHILD_CALLBACK))
 				return EventResult.Completed;
-
-			Report.Debug (DebugFlags.SSE, "{0} start done", sse);
-			return EventResult.Completed;
 
 			if (sse.Architecture.IsSyscallInstruction (inferior, inferior.CurrentFrame)) {
 				Report.Debug (DebugFlags.SSE,
