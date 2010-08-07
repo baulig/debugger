@@ -20,6 +20,7 @@ typedef struct
 	gchar *exe_path;
 	struct disassemble_info *disassembler;
 	char disasm_buffer [1024];
+	MdbExeReader *main_bfd;
 } ProcessHandle;
 
 struct InferiorHandle
@@ -31,6 +32,7 @@ struct InferiorHandle
 };
 
 static GHashTable *server_hash; // thread id -> ServerHandle *
+static GHashTable *bfd_hash; // filename -> MdbExeReader *
 
 #define INFERIOR_REG_EIP(r)	r.Eip
 #define INFERIOR_REG_ESP(r)	r.Esp
@@ -72,6 +74,22 @@ static const size_t windows_error_message_len = 2048;
 static BOOL win32_get_registers (InferiorHandle *inferior);
 static BOOL read_from_debuggee (ProcessHandle *process, LPVOID start, LPVOID buf, DWORD size, PDWORD read_bytes);
 
+static gchar *
+tstring_to_string (const TCHAR *string)
+{
+	int len;
+	gchar *ret;
+
+	len = _tcslen (string);
+	ret = g_malloc0 (len + 1);
+
+	if (sizeof (TCHAR) == sizeof (wchar_t))
+		wcstombs (ret, string, len);
+	else
+		strncpy (ret, (const char *) string, len);
+	return ret;
+}
+
 /* Format a more readable error message on failures which set ErrorCode */
 static void
 format_windows_error_message (DWORD error_code)
@@ -92,6 +110,7 @@ static void
 server_win32_global_init (void)
 {
 	server_hash = g_hash_table_new (NULL, NULL);
+	bfd_hash = g_hash_table_new (NULL, NULL);
 
 	command_event = CreateEvent (NULL, FALSE, FALSE, NULL);
 	g_assert (command_event);
@@ -227,6 +246,19 @@ show_debug_event (DEBUG_EVENT *debug_event)
     
 }
 
+static MdbExeReader *
+load_dll (const char *filename)
+{
+	MdbExeReader *reader;
+
+	reader = mdb_server_create_exe_reader (filename);
+	g_message (G_STRLOC ": LOAD DLL: %s -> %p", filename, reader);
+	if (reader)
+		g_hash_table_insert (bfd_hash, g_strdup (filename), reader);
+
+	return reader;
+}
+
 static void
 handle_debug_event (DEBUG_EVENT *de)
 {
@@ -260,12 +292,22 @@ handle_debug_event (DEBUG_EVENT *de)
 	}
 
 	case LOAD_DLL_DEBUG_EVENT: {
+		TCHAR path [MAX_PATH];
+
 		g_message (G_STRLOC ": load dll: %p - %p - %d", de->u.LoadDll.lpImageName, de->u.LoadDll.hFile, de->u.LoadDll.fUnicode);
+
+		if (!process->exe_path) {
+			/*
+			 * This fails until kernel32.dll is loaded.
+			 */
+			if (GetModuleFileNameEx (process->process_handle, NULL, path, sizeof (path) / sizeof (TCHAR))) {
+				process->exe_path = tstring_to_string (path);
+				process->main_bfd = load_dll (process->exe_path);
+			}
+		}
 
 #if 0
 		if (de->u.LoadDll.hFile) {
-			TCHAR path [MAX_PATH];
-			char buf [1024];
 
 			if (GetModuleFileNameEx (process->process_handle, de->u.LoadDll.hFile, path, sizeof (path) / sizeof (TCHAR))) {
 				_tprintf (TEXT ("MODULE: %s\n"), path);
@@ -321,6 +363,7 @@ handle_debug_event (DEBUG_EVENT *de)
 			}
 
 			g_message (G_STRLOC ": DLL LOADED: %s", buf);
+			load_dll (buf);
 			break;
 		}
 		break;
@@ -344,8 +387,6 @@ debugging_thread_main (LPVOID dummy_arg)
 		DWORD ret;
 
 		ret = WaitForMultipleObjects (2, wait_handles, FALSE, INFINITE);
-
-		g_message (G_STRLOC ": Main loop got event: %d", ret);
 
 		if (ret == 0) { /* command_event */
 			InferiorDelegate *delegate;
@@ -429,7 +470,6 @@ server_win32_spawn (ServerHandle *server, const gchar *working_directory,
 	SECURITY_DESCRIPTOR sd;
 	LPSECURITY_ATTRIBUTES lpsa = NULL;
 	TCHAR path [MAX_PATH];
-	char buf [MAX_PATH];
 	DEBUG_EVENT de;
 	BOOL b_ret;
 
@@ -519,23 +559,6 @@ server_win32_spawn (ServerHandle *server, const gchar *working_directory,
 		return COMMAND_ERROR_CANNOT_START_TARGET;
 	}
 
-	if (!GetModuleFileNameEx (pi.hProcess, NULL, path, sizeof (path) / sizeof (TCHAR))) {
-		format_windows_error_message (GetLastError ());
-		fwprintf (stderr, windows_error_message);
-	}
-
-	_sntprintf (buf, MAX_PATH, TEXT ("%s"), path);
-	inferior->process->exe_path = g_strdup (buf);
-
-	g_message (G_STRLOC ": SPAWN: %d - %s", pi.dwProcessId, inferior->process->exe_path);
-
-	*child_pid = pi.dwProcessId;
-	inferior->process->process_handle = pi.hProcess;
-	inferior->process->process_id = pi.dwProcessId;
-
-	inferior->thread_handle = pi.hThread;
-	inferior->thread_id = pi.dwThreadId;
-
 	if (!WaitForDebugEvent (&de, 5000)) {
 		format_windows_error_message (GetLastError ());
 		fwprintf (stderr, windows_error_message);
@@ -546,6 +569,13 @@ server_win32_spawn (ServerHandle *server, const gchar *working_directory,
 		g_warning (G_STRLOC ": Got unknown debug event: %d", de.dwDebugEventCode);
 		return COMMAND_ERROR_CANNOT_START_TARGET;
 	}
+
+	*child_pid = pi.dwProcessId;
+	inferior->process->process_handle = pi.hProcess;
+	inferior->process->process_id = pi.dwProcessId;
+
+	inferior->thread_handle = pi.hThread;
+	inferior->thread_id = pi.dwThreadId;
 
 	g_hash_table_insert (server_hash, GINT_TO_POINTER (pi.dwThreadId), server);
 
@@ -818,11 +848,21 @@ disasm_fprintf_func (gpointer stream, const char *message, ...)
 static void
 disasm_print_address_func (bfd_vma addr, struct disassemble_info *info)
 {
+	ProcessHandle *process = info->application_data;
+	const gchar *sym;
 	char buf[30];
 
 	sprintf_vma (buf, addr);
-	g_message (G_STRLOC ": ADDRESS: %s", buf);
-	(*info->fprintf_func) (info->stream, "X:0x%s", buf);
+
+	if (process->main_bfd) {
+		sym = mdb_exe_reader_lookup_symbol_by_addr (process->main_bfd, addr);
+		if (sym) {
+			(*info->fprintf_func) (info->stream, "%s(0x%s)", sym, buf);
+			return;
+		}
+	}
+
+	(*info->fprintf_func) (info->stream, "0x%s", buf);
 }
 
 static void

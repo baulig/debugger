@@ -102,6 +102,39 @@ mdb_exe_reader_get_target_name (MdbExeReader *reader)
 	return g_strdup (reader->bfd->xvec->name);
 }
 
+const gchar *
+mdb_exe_reader_lookup_symbol_by_addr (MdbExeReader *reader, guint64 address)
+{
+	long i;
+
+	for (i = 0; i < reader->num_symbols; i++) {
+		asymbol *symbol = reader->symtab [i];
+		gboolean is_function;
+		gpointer sym_address;
+		int flags;
+
+		if ((symbol->flags & (BSF_WEAK | BSF_DYNAMIC)) == (BSF_WEAK | BSF_DYNAMIC))
+			continue;
+		if ((symbol->flags & BSF_DEBUGGING) || !symbol->name || !strlen (symbol->name))
+			continue;
+
+		flags = symbol->flags & ~(BSF_DYNAMIC | BSF_NOT_AT_END);
+
+		if (flags == (BSF_FUNCTION | BSF_GLOBAL)) {
+			is_function = 1;
+			sym_address = symbol->section->vma + symbol->value;
+		} else {
+			continue;
+		}
+
+		// g_message (G_STRLOC ": %i - %p - %s", i, sym_address, bfd_asymbol_name (reader->symtab [i]));
+		if (bfd_asymbol_value (reader->symtab [i]) == address)
+			return bfd_asymbol_name (reader->symtab [i]);
+	}
+
+	return NULL;
+}
+
 static asection *
 find_section (MdbExeReader *reader, const char *name)
 {

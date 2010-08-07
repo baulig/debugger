@@ -77,6 +77,9 @@ mdb_server_inferior_command (InferiorDelegate *delegate);
 extern gchar *
 mdb_server_disassemble_insn (ServerHandle *inferior, guint64 address, guint32 *out_insn_size);
 
+extern const gchar *
+mdb_exe_reader_lookup_symbol_by_addr (MdbExeReader *reader, guint64 address);
+
 G_END_DECLS
 
 #endif
