@@ -347,6 +347,47 @@ namespace Mono.Debugger.Server
 			var handle = (RemoteInferior) inferior.InferiorHandle;
 			return connection.BfdGetDynamicInfo (handle.IID, bfd_iid);
 		}
+
+		public string DisassembleInsn (Inferior inferior, long address, out int insn_size)
+		{
+			var handle = (RemoteInferior) inferior.InferiorHandle;
+			return connection.DisassembleInsn (handle.IID, address, out insn_size);
+		}
+
+		public Disassembler GetDisassembler ()
+		{
+			return new RemoteDisassembler (this);
+		}
+
+		class RemoteDisassembler : Disassembler
+		{
+			public readonly RemoteDebuggerServer Server;
+
+			public RemoteDisassembler (RemoteDebuggerServer server)
+			{
+				this.Server = server;
+			}
+
+			public override int GetInstructionSize (TargetMemoryAccess memory, TargetAddress address)
+			{
+				int insn_size;
+				Server.DisassembleInsn ((Inferior) memory, address.Address, out insn_size);
+				return insn_size;
+			}
+
+			public override AssemblerMethod DisassembleMethod (TargetMemoryAccess memory, Method method)
+			{
+				throw new NotImplementedException ();
+			}
+
+			public override AssemblerLine DisassembleInstruction (TargetMemoryAccess memory,
+									      Method method, TargetAddress address)
+			{
+				int insn_size;
+				var insn = Server.DisassembleInsn ((Inferior) memory, address.Address, out insn_size);
+				return new AssemblerLine (null, address, (byte) insn_size, insn);
+			}
+		}
 	}
 }
 

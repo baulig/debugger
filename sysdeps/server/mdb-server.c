@@ -80,7 +80,8 @@ typedef enum {
 	CMD_INFERIOR_WRITE_MEMORY = 15,
 	CMD_INFERIOR_GET_PENDING_SIGNAL = 16,
 	CMD_INFERIOR_SET_SIGNAL = 17,
-	CMD_INFERIOR_GET_DYNAMIC_INFO = 18
+	CMD_INFERIOR_GET_DYNAMIC_INFO = 18,
+	CMD_INFERIOR_DISASSEMBLE_INSN = 19
 } CmdInferior;
 
 typedef enum {
@@ -634,7 +635,7 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 	}
 
 	case CMD_INFERIOR_GET_APPLICATION: {
-		gchar *exe_file, *cwd, **cmdline_args;
+		gchar *exe_file = NULL, *cwd = NULL, **cmdline_args = NULL;
 		guint32 nargs, i;
 
 		result = mono_debugger_server_get_application (
@@ -821,6 +822,24 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 #endif
 	}
 
+	case CMD_INFERIOR_DISASSEMBLE_INSN: {
+#if WINDOWS
+		guint64 address;
+		guint32 insn_size;
+		gchar *insn;
+
+		address = decode_long (p, &p, end);
+
+		insn = mdb_server_disassemble_insn (inferior, address, &insn_size);
+		buffer_add_int (buf, insn_size);
+		buffer_add_string (buf, insn);
+		g_free (insn);
+		break;
+#else
+		return ERR_NOT_IMPLEMENTED;
+#endif
+	}
+
 	default:
 		return ERR_NOT_IMPLEMENTED;
 	}
@@ -957,6 +976,28 @@ exe_reader_commands (int command, int id, MdbExeReader *reader, guint8 *p, guint
 	return ERR_NONE;
 }
 
+typedef struct {
+	int command;
+	int id;
+	ServerHandle *inferior;
+	guint8 *p;
+	guint8 *end;
+	Buffer *buf;
+	ErrorCode ret;
+} InferiorData;
+
+static void
+inferior_command_proxy (gpointer user_data)
+{
+	InferiorData *data = (InferiorData *) user_data;
+
+	g_message (G_STRLOC ": PROXY: %d", data->command);
+
+	data->ret = inferior_commands (data->command, data->id, data->inferior, data->p, data->end, data->buf);
+
+	g_message (G_STRLOC ": PROXY DONE: %d", data->ret);
+}
+
 gboolean
 mdb_server_main_loop_iteration (void)
 {
@@ -1010,6 +1051,10 @@ mdb_server_main_loop_iteration (void)
 		break;
 
 	case CMD_SET_INFERIOR: {
+#if WINDOWS
+		InferiorDelegate delegate;
+		InferiorData *inferior_data;
+#endif
 		ServerHandle *inferior;
 		int iid;
 
@@ -1021,7 +1066,29 @@ mdb_server_main_loop_iteration (void)
 			break;
 		}
 
+#if WINDOWS
+		inferior_data = g_new0 (InferiorData, 1);
+
+		inferior_data->command = command;
+		inferior_data->id = id;
+		inferior_data->inferior = inferior;
+		inferior_data->p = p;
+		inferior_data->end = end;
+		inferior_data->buf = &buf;
+
+		delegate.func = inferior_command_proxy;
+		delegate.user_data = inferior_data;
+
+		if (!mdb_server_inferior_command (&delegate))
+			err = ERR_NOT_STOPPED;
+		else
+			err = inferior_data->ret;
+
+		g_free (data);
+		break;
+#else
 		err = inferior_commands (command, id, inferior, p, end, &buf);
+#endif
 		break;
 	}
 

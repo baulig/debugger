@@ -1,5 +1,6 @@
 using System;
 using Mono.Debugger.Backend;
+using Mono.Debugger.Server;
 using Mono.Debugger.Architectures;
 
 namespace Mono.Debugger.Backend
@@ -20,7 +21,10 @@ namespace Mono.Debugger.Backend
 			this.process = process;
 			this.TargetInfo = info;
 
-			if (!Inferior.IsRunningOnWindows)
+			var server = process.ThreadManager.DebuggerServer as RemoteDebuggerServer;
+			if (server != null)
+				disassembler = server.GetDisassembler ();
+			else if (!Inferior.IsRunningOnWindows)
 				disassembler = new BfdDisassembler (process, info.TargetAddressSize == 8);
 			if (info.TargetAddressSize == 8)
 				opcodes = new Opcodes_X86_64 (process);

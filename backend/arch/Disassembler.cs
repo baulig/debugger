@@ -25,10 +25,38 @@ namespace Mono.Debugger
 								      Method method,
 								      TargetAddress address);
 
-		#region IDisposable Members
+		//
+		// IDisposable
+		//
 
-		public abstract void Dispose ();
+		private bool disposed = false;
 
-		#endregion
+		protected virtual void DoDispose ()
+		{ }
+
+		protected virtual void Dispose (bool disposing)
+		{
+			// Check to see if Dispose has already been called.
+			if (!this.disposed) {
+				this.disposed = true;
+
+				// Release unmanaged resources
+				lock (this) {
+					DoDispose ();
+				}
+			}
+		}
+
+		public void Dispose ()
+		{
+			Dispose (true);
+			// Take yourself off the Finalization queue
+			GC.SuppressFinalize (this);
+		}
+
+		~Disassembler ()
+		{
+			Dispose (false);
+		}
 	}
 }

@@ -32,6 +32,8 @@ mdb_server_init_os (void)
 		return -1;
 	}
 
+	mono_debugger_server_global_init ();
+
 	return 0;
 }
 

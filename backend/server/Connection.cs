@@ -76,7 +76,8 @@ namespace Mono.Debugger.Server
 			WRITE_MEMORY = 15,
 			GET_PENDING_SIGNAL = 16,
 			SET_SIGNAL = 17,
-			GET_DYNAMIC_INFO = 18
+			GET_DYNAMIC_INFO = 18,
+			DISASSEMBLE_INSN
 		}
 
 		enum CmdBpm {
@@ -822,6 +823,13 @@ namespace Mono.Debugger.Server
 
 			enabled = reader.ReadByte () != 0;
 			return true;
+		}
+
+		public string DisassembleInsn (int iid, long address, out int insn_size)
+		{
+			var reader = SendReceive (CommandSet.INFERIOR, (int)CmdInferior.DISASSEMBLE_INSN, new PacketWriter ().WriteInt (iid).WriteLong (address));
+			insn_size = reader.ReadInt ();
+			return reader.ReadString ();
 		}
 	}
 }

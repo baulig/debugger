@@ -42,7 +42,7 @@ platform_libs =
 endif
 if PLATFORM_X86_WINDOWS
 platform_sources = \
-	x86-windows.c
+	martin-windows.c
 platform_server = \
 	mdb-server-bfd.c \
 	mdb-server-windows.c
@@ -97,7 +97,7 @@ mdb_server_CPPFLAGS = \
 	-I$(top_srcdir)/sysdeps/bfd/include \
 	-I$(top_srcdir)/sysdeps/bfd/opcodes \
 	@SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@ \
-	$(eglib_cflags)
+	$(eglib_cflags) -DTRANSPORT_DEBUG
 
 EXTRA_mdb_server_SOURCES = \
 	i386-arch.c			\

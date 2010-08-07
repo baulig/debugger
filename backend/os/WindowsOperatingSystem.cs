@@ -14,7 +14,7 @@ namespace Mono.Debugger.Backend
 
 		internal override bool CheckForPendingMonoInit (Inferior inferior)
 		{
-			throw new NotImplementedException();
+			return false;
 		}
 
 		public override bool GetTrampoline (TargetMemoryAccess memory, TargetAddress address,
