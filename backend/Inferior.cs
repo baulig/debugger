@@ -465,8 +465,10 @@ namespace Mono.Debugger.Backend
 
 		protected void SetupInferior ()
 		{
-			signal_info = server.GetSignalInfo (inferior);
-			has_signals = true;
+			if ((server.Capabilities & DebuggerServer.ServerCapabilities.HAS_SIGNALS) != 0) {
+				signal_info = server.GetSignalInfo (inferior);
+				has_signals = true;
+			}
 
 			target_info = thread_manager.GetTargetMemoryInfo (address_domain);
 

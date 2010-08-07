@@ -1007,21 +1007,6 @@ server_win32_set_registers (ServerHandle *handle, guint64 *values)
 }     
 
 static ServerCommandError
-server_win32_get_signal_info (ServerHandle *handle, SignalInfo **sinfo_out)
-{
-	SignalInfo *sinfo = g_new0 (SignalInfo, 1);
-
-	sinfo->sigkill = 0xffff;
-	sinfo->sigstop = 0xffff;
-	sinfo->sigint = 0xffff;
-	sinfo->sigchld = 0xffff;
-
-	*sinfo_out = sinfo;
-
-	return COMMAND_ERROR_NONE;
-}
-
-static ServerCommandError
 server_win32_get_application (ServerHandle *server, gchar **exe_file, gchar **cwd,
 			      guint32 *nargs, gchar ***cmdline_args)
 {
@@ -1198,7 +1183,7 @@ InferiorVTable i386_windows_inferior = {
 	NULL,					/* set_signal */
 	NULL,					/* server_ptrace_get_pending_signal */
 	NULL,					/* kill */
-	server_win32_get_signal_info,		/* get_signal_info */
+	NULL,					/* get_signal_info */
 	NULL,					/* get_threads */
 	server_win32_get_application,		/* get_application */
 	NULL,					/* detach_after_fork */

@@ -123,7 +123,8 @@ namespace Mono.Debugger.Server
 		{
 			NONE = 0,
 			THREAD_EVENTS = 1,
-			CAN_DETACH_ANY = 2
+			CAN_DETACH_ANY = 2,
+			HAS_SIGNALS = 4
 		}
 
 		[StructLayout(LayoutKind.Sequential)]

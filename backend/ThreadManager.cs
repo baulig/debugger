@@ -108,18 +108,20 @@ namespace Mono.Debugger.Backend
 			}
 
 			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) {
-				if (cevent.Argument == inferior.SIGCHLD) {
-					cevent = new DebuggerServer.ChildEvent (
-						DebuggerServer.ChildEventType.CHILD_STOPPED, 0, 0, 0);
-					resume_target = true;
-					return true;
-				} else if (inferior.Has_SIGWINCH && (cevent.Argument == inferior.SIGWINCH)) {
-					resume_target = true;
-					return true;
-				} else if (inferior.HasSignals && (cevent.Argument == inferior.Kernel_SIGRTMIN+1)) {
-					// __SIGRTMIN and __SIGRTMIN+1 are used internally by the threading library
-					resume_target = true;
-					return true;
+				if (inferior.HasSignals) {
+					if (cevent.Argument == inferior.SIGCHLD) {
+						cevent = new DebuggerServer.ChildEvent (
+							DebuggerServer.ChildEventType.CHILD_STOPPED, 0, 0, 0);
+						resume_target = true;
+						return true;
+					} else if (inferior.Has_SIGWINCH && (cevent.Argument == inferior.SIGWINCH)) {
+						resume_target = true;
+						return true;
+					} else if (cevent.Argument == inferior.Kernel_SIGRTMIN+1) {
+						// __SIGRTMIN and __SIGRTMIN+1 are used internally by the threading library
+						resume_target = true;
+						return true;
+					}
 				}
 			}
 
