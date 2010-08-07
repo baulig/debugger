@@ -991,11 +991,7 @@ inferior_command_proxy (gpointer user_data)
 {
 	InferiorData *data = (InferiorData *) user_data;
 
-	g_message (G_STRLOC ": PROXY: %d", data->command);
-
 	data->ret = inferior_commands (data->command, data->id, data->inferior, data->p, data->end, data->buf);
-
-	g_message (G_STRLOC ": PROXY DONE: %d", data->ret);
 }
 
 gboolean

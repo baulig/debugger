@@ -80,7 +80,7 @@ if test x$remote_only != xyes; then
 		if test x$server_only != xyes; then
 			AC_MSG_ERROR([*** This platform is not yet supported.])
 		fi
-		server_cflags='-DWINDOWS -DUNICODE'
+		server_cflags='-DWINDOWS -DUNICODE -D_UNICODE'
 		platform=x86_windows
 		;;
 	*)

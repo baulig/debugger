@@ -3,24 +3,34 @@
 #include <string.h>
 #include <assert.h>
 #include <windows.h>
+#include <tchar.h>
+#include <Psapi.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <glib.h>
 #include <bfd.h>
 #include <dis-asm.h>
 
-struct InferiorHandle
+typedef struct
 {
 	HANDLE process_handle;
-	HANDLE thread_handle;
 	DWORD process_id;
-	DWORD thread_id;
-	CONTEXT current_context;
 	gint argc;
 	gchar **argv;
+	gchar *exe_path;
 	struct disassemble_info *disassembler;
 	char disasm_buffer [1024];
+} ProcessHandle;
+
+struct InferiorHandle
+{
+	ProcessHandle *process;
+	HANDLE thread_handle;
+	DWORD thread_id;
+	CONTEXT current_context;
 };
+
+static GHashTable *server_hash; // thread id -> ServerHandle *
 
 #define INFERIOR_REG_EIP(r)	r.Eip
 #define INFERIOR_REG_ESP(r)	r.Esp
@@ -60,6 +70,7 @@ static wchar_t windows_error_message [2048];
 static const size_t windows_error_message_len = 2048;
 
 static BOOL win32_get_registers (InferiorHandle *inferior);
+static BOOL read_from_debuggee (ProcessHandle *process, LPVOID start, LPVOID buf, DWORD size, PDWORD read_bytes);
 
 /* Format a more readable error message on failures which set ErrorCode */
 static void
@@ -80,6 +91,8 @@ format_windows_error_message (DWORD error_code)
 static void
 server_win32_global_init (void)
 {
+	server_hash = g_hash_table_new (NULL, NULL);
+
 	command_event = CreateEvent (NULL, FALSE, FALSE, NULL);
 	g_assert (command_event);
 
@@ -217,9 +230,20 @@ show_debug_event (DEBUG_EVENT *debug_event)
 static void
 handle_debug_event (DEBUG_EVENT *de)
 {
-	g_message (G_STRLOC ": Got debug event: %d", de->dwDebugEventCode);
+	ServerHandle *server;
+	ProcessHandle *process;
 
-	show_debug_event (de);
+	server = g_hash_table_lookup (server_hash, GINT_TO_POINTER (de->dwThreadId));
+	if (!server) {
+		g_warning (G_STRLOC ": Got debug event for unknown thread: %x / %x", de->dwProcessId, de->dwThreadId);
+		return;
+	}
+
+	process = server->inferior->process;
+
+	g_message (G_STRLOC ": Got debug event: %d - %p", de->dwDebugEventCode, server);
+
+	// show_debug_event (de);
 
 	switch (de->dwDebugEventCode) {
 	case EXCEPTION_DEBUG_EVENT: {
@@ -232,6 +256,73 @@ handle_debug_event (DEBUG_EVENT *de)
 			return;
 		}
 
+		break;
+	}
+
+	case LOAD_DLL_DEBUG_EVENT: {
+		g_message (G_STRLOC ": load dll: %p - %p - %d", de->u.LoadDll.lpImageName, de->u.LoadDll.hFile, de->u.LoadDll.fUnicode);
+
+#if 0
+		if (de->u.LoadDll.hFile) {
+			TCHAR path [MAX_PATH];
+			char buf [1024];
+
+			if (GetModuleFileNameEx (process->process_handle, de->u.LoadDll.hFile, path, sizeof (path) / sizeof (TCHAR))) {
+				_tprintf (TEXT ("MODULE: %s\n"), path);
+			} else {
+				format_windows_error_message (GetLastError ());
+				fwprintf (stderr, windows_error_message);
+			}
+
+			if (GetModuleFileNameEx (process->process_handle, NULL, path, sizeof (path) / sizeof (TCHAR))) {
+				_tprintf (TEXT ("PROCESS MODULE: %s\n"), path);
+			} else {
+				format_windows_error_message (GetLastError ());
+				fwprintf (stderr, windows_error_message);
+			}
+
+			{
+				HMODULE hMods [1024];
+				DWORD cbNeeded;
+				int ret, i;
+
+				if (EnumProcessModules (process->process_handle, hMods, sizeof (hMods), &cbNeeded)) {
+					g_message (G_STRLOC ": ENUM MODULES !");
+
+					for (i = 0; i < (cbNeeded / sizeof(HMODULE)); i++) {
+						// Get the full path to the module's file.
+						if (GetModuleFileNameEx (process->process_handle, hMods[i], path, sizeof (path) / sizeof (TCHAR))) {
+							_tprintf (TEXT ("MODULE: |%s|\n"), path);
+						}
+					}
+				}
+			}
+		}
+#endif
+
+		if (de->u.LoadDll.lpImageName) {
+			char buf [1024];
+			DWORD exc_code;
+
+			if (!read_from_debuggee (process, de->u.LoadDll.lpImageName, &exc_code, 4, NULL) || !exc_code)
+				break;
+
+			if (de->u.LoadDll.fUnicode) {
+				wchar_t w_buf [1024];
+				size_t ret;
+
+				if (!read_from_debuggee (server->inferior->process, (LPVOID) exc_code, w_buf, 300, NULL))
+					break;
+
+				ret = wcstombs (buf, w_buf, 300);
+			} else {
+				if (!read_from_debuggee (server->inferior->process, (LPVOID) exc_code, buf, 300, NULL))
+					break;
+			}
+
+			g_message (G_STRLOC ": DLL LOADED: %s", buf);
+			break;
+		}
 		break;
 	}
 
@@ -263,8 +354,6 @@ debugging_thread_main (LPVOID dummy_arg)
 			inferior_delegate = NULL;
 
 			delegate->func (delegate->user_data);
-
-			g_message (G_STRLOC ": Command event done");
 
 			SetEvent (ready_event);
 		} else if (ret == 1) { /* wait_event */
@@ -302,6 +391,7 @@ server_win32_create_inferior (BreakpointManager *bpm)
 
 	handle->bpm = bpm;
 	handle->inferior = g_new0 (InferiorHandle, 1);
+	handle->inferior->process = g_new0 (ProcessHandle, 1);
 
 	return handle;
 }
@@ -325,19 +415,21 @@ server_win32_get_target_info (guint32 *target_int_size, guint32 *target_long_siz
 }
 
 static ServerCommandError
-server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
+server_win32_spawn (ServerHandle *server, const gchar *working_directory,
 		    const gchar **argv, const gchar **envp, gboolean redirect_fds,
 		    gint *child_pid, IOThreadData **io_data, gchar **error)
 {
 	gunichar2* utf16_argv = NULL;
 	gunichar2* utf16_envp = NULL;
 	gunichar2* utf16_working_directory = NULL;
-	InferiorHandle *inferior = handle->inferior;
+	InferiorHandle *inferior = server->inferior;
 	STARTUPINFO si = {0};
 	PROCESS_INFORMATION pi = {0};
 	SECURITY_ATTRIBUTES sa;
 	SECURITY_DESCRIPTOR sd;
 	LPSECURITY_ATTRIBUTES lpsa = NULL;
+	TCHAR path [MAX_PATH];
+	char buf [MAX_PATH];
 	DEBUG_EVENT de;
 	BOOL b_ret;
 
@@ -385,15 +477,15 @@ server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
 			argv_temp++;
 			argc++;
 		}
-		inferior->argc = argc;
-		inferior->argv = g_malloc0 ( (argc+1) * sizeof (gpointer));
+		inferior->process->argc = argc;
+		inferior->process->argv = g_malloc0 ( (argc+1) * sizeof (gpointer));
 		argv_concat = utf16_argv = g_malloc (len*sizeof (gunichar2));
 
 		argv_temp = argv;
 		while (*argv_temp) {
 			gunichar2* utf16_argv_temp = g_utf8_to_utf16 (*argv_temp, -1, NULL, NULL, NULL);
 			int written = snwprintf (argv_concat, len, L"%s ", utf16_argv_temp);
-			inferior->argv [index++] = g_strdup (*argv_temp);
+			inferior->process->argv [index++] = g_strdup (*argv_temp);
 			g_free (utf16_argv_temp);
 			argv_concat += written;
 			len -= written;
@@ -427,10 +519,21 @@ server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
 		return COMMAND_ERROR_CANNOT_START_TARGET;
 	}
 
+	if (!GetModuleFileNameEx (pi.hProcess, NULL, path, sizeof (path) / sizeof (TCHAR))) {
+		format_windows_error_message (GetLastError ());
+		fwprintf (stderr, windows_error_message);
+	}
+
+	_sntprintf (buf, MAX_PATH, TEXT ("%s"), path);
+	inferior->process->exe_path = g_strdup (buf);
+
+	g_message (G_STRLOC ": SPAWN: %d - %s", pi.dwProcessId, inferior->process->exe_path);
+
 	*child_pid = pi.dwProcessId;
-	inferior->process_handle = pi.hProcess;
+	inferior->process->process_handle = pi.hProcess;
+	inferior->process->process_id = pi.dwProcessId;
+
 	inferior->thread_handle = pi.hThread;
-	inferior->process_id = pi.dwProcessId;
 	inferior->thread_id = pi.dwThreadId;
 
 	if (!WaitForDebugEvent (&de, 5000)) {
@@ -443,6 +546,8 @@ server_win32_spawn (ServerHandle *handle, const gchar *working_directory,
 		g_warning (G_STRLOC ": Got unknown debug event: %d", de.dwDebugEventCode);
 		return COMMAND_ERROR_CANNOT_START_TARGET;
 	}
+
+	g_hash_table_insert (server_hash, GINT_TO_POINTER (pi.dwThreadId), server);
 
 	return COMMAND_ERROR_NONE;
 }
@@ -472,10 +577,10 @@ server_win32_get_frame (ServerHandle *handle, StackFrame *frame)
 }
 
 static BOOL
-read_from_debuggee (InferiorHandle *inferior, LPVOID start, LPVOID buf, DWORD size, PDWORD read_bytes) 
+read_from_debuggee (ProcessHandle *process, LPVOID start, LPVOID buf, DWORD size, PDWORD read_bytes)
 {
 	SetLastError (0);
-	if (!ReadProcessMemory (inferior->process_handle, start, buf, size, read_bytes)) {
+	if (!ReadProcessMemory (process->process_handle, start, buf, size, read_bytes)) {
 		format_windows_error_message (GetLastError ());
 		fwprintf (stderr, windows_error_message);
 		return FALSE;
@@ -522,13 +627,13 @@ set_step_flag (InferiorHandle *inferior, BOOL on)
 }
 
 static ServerCommandError
-server_win32_step (ServerHandle *handle)
+server_win32_step (ServerHandle *server)
 {
-	InferiorHandle *inferior = handle->inferior;
+	InferiorHandle *inferior = server->inferior;
 
 	set_step_flag (inferior, TRUE);
 
-	if (!ContinueDebugEvent (inferior->process_id, inferior->thread_id, DBG_CONTINUE)) {
+	if (!ContinueDebugEvent (inferior->process->process_id, inferior->thread_id, DBG_CONTINUE)) {
 		format_windows_error_message (GetLastError ());
 		fwprintf (stderr, windows_error_message);
 		return COMMAND_ERROR_UNKNOWN_ERROR;
@@ -540,13 +645,13 @@ server_win32_step (ServerHandle *handle)
 }
 
 static ServerCommandError
-server_win32_continue (ServerHandle *handle)
+server_win32_continue (ServerHandle *server)
 {
-	InferiorHandle *inferior = handle->inferior;
+	InferiorHandle *inferior = server->inferior;
 
 	set_step_flag (inferior, FALSE);
 
-	if (!ContinueDebugEvent (inferior->process_id, inferior->thread_id, DBG_CONTINUE)) {
+	if (!ContinueDebugEvent (inferior->process->process_id, inferior->thread_id, DBG_CONTINUE)) {
 		format_windows_error_message (GetLastError ());
 		fwprintf (stderr, windows_error_message);
 		return COMMAND_ERROR_UNKNOWN_ERROR;
@@ -591,7 +696,7 @@ server_win32_get_breakpoints (ServerHandle *handle, guint32 *count, guint32 **re
 }
 
 static ServerCommandError
-server_win32_count_registers (InferiorHandle *inferior, guint32 *out_count)
+server_win32_count_registers (ServerHandle *server, guint32 *out_count)
 {
 	*out_count = DEBUGGER_REG_LAST;
 	return COMMAND_ERROR_NONE;
@@ -644,12 +749,14 @@ server_win32_get_signal_info (ServerHandle *handle, SignalInfo **sinfo_out)
 }
 
 static ServerCommandError
-server_win32_get_application (ServerHandle *handle, gchar **exe_file, gchar **cwd,
-			       guint32 *nargs, gchar ***cmdline_args)
+server_win32_get_application (ServerHandle *server, gchar **exe_file, gchar **cwd,
+			      guint32 *nargs, gchar ***cmdline_args)
 {
+	ProcessHandle *process = server->inferior->process;
 	gint index = 0;
 	GPtrArray *array;
 	gchar **ptr;
+
 	/* No supported way to get command line of a process
 	   see http://blogs.msdn.com/oldnewthing/archive/2009/02/23/9440784.aspx */
 
@@ -662,14 +769,14 @@ server_win32_get_application (ServerHandle *handle, gchar **exe_file, gchar **cw
 		return COMMAND_ERROR_INTERNAL_ERROR;
 	}
 	*/
-	*exe_file = g_strdup (handle->inferior->argv [0]);
-	*nargs = handle->inferior->argc;
+	*exe_file = g_strdup (process->argv [0]);
+	*nargs = process->argc;
 	*cwd = NULL;
 
 	array = g_ptr_array_new ();
 
-	for (index = 0; index < handle->inferior->argc; index++)
-		g_ptr_array_add (array, handle->inferior->argv [index]);
+	for (index = 0; index < process->argc; index++)
+		g_ptr_array_add (array, process->argv [index]);
 
 	*cmdline_args = ptr = g_new0 (gchar *, array->len + 1);
 
@@ -684,21 +791,21 @@ server_win32_get_application (ServerHandle *handle, gchar **exe_file, gchar **cw
 static int
 disasm_read_memory_func (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length, struct disassemble_info *info)
 {
-	InferiorHandle *inferior = info->application_data;
+	ProcessHandle *process = info->application_data;
 
-	return read_from_debuggee (inferior, memaddr, myaddr, length, NULL) ? 0 : 1;
+	return read_from_debuggee (process, GUINT_TO_POINTER (memaddr), myaddr, length, NULL) ? 0 : 1;
 }
 
 static int
 disasm_fprintf_func (gpointer stream, const char *message, ...)
 {
-	InferiorHandle *inferior = stream;
+	ProcessHandle *process = stream;
 	va_list args;
 	char *start;
 	int len, max, retval;
 
-	len = strlen (inferior->disasm_buffer);
-	start = inferior->disasm_buffer + len;
+	len = strlen (process->disasm_buffer);
+	start = process->disasm_buffer + len;
 	max = 1024 - len;
 
 	va_start (args, message);
@@ -709,11 +816,21 @@ disasm_fprintf_func (gpointer stream, const char *message, ...)
 }
 
 static void
-init_disassembler (InferiorHandle *inferior)
+disasm_print_address_func (bfd_vma addr, struct disassemble_info *info)
+{
+	char buf[30];
+
+	sprintf_vma (buf, addr);
+	g_message (G_STRLOC ": ADDRESS: %s", buf);
+	(*info->fprintf_func) (info->stream, "X:0x%s", buf);
+}
+
+static void
+init_disassembler (ProcessHandle *process)
 {
 	struct disassemble_info *info;
 
-	if (inferior->disassembler)
+	if (process->disassembler)
 		return;
 
 	info = g_new0 (struct disassemble_info, 1);
@@ -724,30 +841,31 @@ init_disassembler (InferiorHandle *inferior)
 	info->octets_per_byte = 1;
 	info->display_endian = info->endian = BFD_ENDIAN_LITTLE;
 
-	info->application_data = inferior;
+	info->application_data = process;
 	info->read_memory_func = disasm_read_memory_func;
+	info->print_address_func = disasm_print_address_func;
 	info->fprintf_func = disasm_fprintf_func;
-	info->stream = inferior;
+	info->stream = process;
 
-	inferior->disassembler = info;
+	process->disassembler = info;
 }
 
 gchar *
-mdb_server_disassemble_insn (ServerHandle *handle, guint64 address, guint32 *out_insn_size)
+mdb_server_disassemble_insn (ServerHandle *server, guint64 address, guint32 *out_insn_size)
 {
-	InferiorHandle *inferior = handle->inferior;
+	ProcessHandle *process = server->inferior->process;
 	int ret;
 
-	init_disassembler (inferior);
+	init_disassembler (process);
 
-	memset (inferior->disasm_buffer, 0, 1024);
+	memset (process->disasm_buffer, 0, 1024);
 
-	ret = print_insn_i386 (address, inferior->disassembler);
+	ret = print_insn_i386 (address, process->disassembler);
 
 	if (out_insn_size)
 		*out_insn_size = ret;
 
-	return g_strdup (inferior->disasm_buffer);
+	return g_strdup (process->disasm_buffer);
 }
 
 InferiorVTable i386_windows_inferior = {
