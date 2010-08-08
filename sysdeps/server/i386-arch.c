@@ -4,6 +4,10 @@
 
 #include "i386-arch.h"
 
+#if defined(__linux__) || defined(__FreeBSD__)
+#include <signal.h>
+#endif
+
 struct _ArchInfo
 {
 	INFERIOR_REGS_TYPE current_regs;

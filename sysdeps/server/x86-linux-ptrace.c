@@ -173,7 +173,7 @@ mdb_inferior_write_memory (InferiorHandle *inferior, guint64 start,
 		long word = *ptr++;
 
 		errno = 0;
-		if (ptrace (PT_WRITE_D, inferior->pid, GSIZE_TO_POINTER (addr), word) != 0)
+		if (ptrace (PT_WRITE_D, inferior->pid, GUINT_TO_POINTER (addr), word) != 0)
 			return _server_ptrace_check_errno (inferior);
 
 		addr += sizeof (long);
@@ -196,7 +196,7 @@ ServerCommandError
 mdb_inferior_poke_word (InferiorHandle *inferior, guint64 addr, gsize value)
 {
 	errno = 0;
-	if (ptrace (PT_WRITE_D, inferior->pid, GSIZE_TO_POINTER (addr), value) != 0)
+	if (ptrace (PT_WRITE_D, inferior->pid, GUINT_TO_POINTER (addr), value) != 0)
 		return _server_ptrace_check_errno (inferior);
 
 	return COMMAND_ERROR_NONE;
@@ -303,7 +303,7 @@ mdb_server_get_signal_info (ServerHandle *handle, SignalInfo **sinfo_out)
 	 * user-visible real-time signal.  __SIGRTMIN and __SIGRTMIN+1 are used
 	 * internally by glibc. */
 	sinfo->kernel_sigrtmin = __SIGRTMIN;
-#ifdef USING_MONO_FROM_TRUNK
+#if defined(USING_MONO_FROM_TRUNK) || defined(MDB_SERVER)
 	sinfo->mono_thread_abort = -1;
 #else
 	sinfo->mono_thread_abort = mono_thread_get_abort_signal ();

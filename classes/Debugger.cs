@@ -41,7 +41,7 @@ namespace Mono.Debugger
 
 			kill_event = new ManualResetEvent (false);
 
-#if REMOTE_ONLY
+#if REMOTE_BACKEND
 			server = new RemoteDebuggerServer (this);
 #else
 			server = new NativeDebuggerServer (this);

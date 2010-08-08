@@ -32,19 +32,35 @@ if test "x${build_warnings}" != x && test "x$GCC" = xyes ; then
 fi
 AC_SUBST(WARN_CFLAGS)
 
-server_only=no
-remote_only=no
+check_mono=yes
+csharp_library=yes
+library_backend=yes
+build_sysdeps=yes
+remote_backend=no
 
 AC_ARG_WITH(backend,
 [  --backend Select backend (EXPERIMENTAL).],
 [case "${withval}" in
  server-only)
-   server_only=yes
-   remote_only=no
+   csharp_library=no
+   library_backend=no
+   build_sysdeps=yes
+   remote_backend=no
+   check_mono=no
    ;;
  remote-only)
-   server_only=no
-   remote_only=yes
+   csharp_library=no
+   library_backend=no
+   build_sysdeps=no
+   remote_backend=yes
+   check_mono=no
+   ;;
+ local-server)
+   csharp_library=yes
+   library_backend=no
+   build_sysdeps=yes
+   remote_backend=yes
+   check_mono=no
    ;;
  *)
  AC_MSG_ERROR([Invalid --backend argument])
@@ -60,7 +76,7 @@ AC_SUBST(CC_FOR_BUILD)
 AC_SUBST(HOST_CC)
 AC_SUBST(BUILD_EXEEXT)
 
-if test x$remote_only != xyes; then
+if test x$build_sysdeps = xyes; then
 	AC_MSG_CHECKING([host platform characteristics])
 	case "$host" in
 	x86_64-*-linux*)
@@ -89,7 +105,7 @@ if test x$remote_only != xyes; then
 		using_eglib=yes
 		;;
 	i386-pc-mingw32*)
-		if test x$server_only != xyes; then
+		if test x$build_sysdeps != xyes; then
 			AC_MSG_ERROR([*** This platform is not yet supported.])
 		fi
 		server_cflags='-DWINDOWS -DUNICODE -D_UNICODE'
@@ -97,7 +113,6 @@ if test x$remote_only != xyes; then
 		using_eglib=yes
 		;;
 	*)
-		echo "FUCK: |$host|"
 		AC_MSG_ERROR([*** This platform is not yet supported.])
 		;;
 	esac
@@ -107,6 +122,7 @@ if test x$remote_only != xyes; then
 else
 	server_cflags=
 	platform=none
+	using_eglib=no
 fi
 
 AM_CONDITIONAL(PLATFORM_X86_DARWIN, test x$platform = xx86_darwin)
@@ -121,6 +137,8 @@ if test x$using_eglib = xyes; then
 	ac_configure_args="$ac_configure_args \"CPPFLAGS_FOR_EGLIB=$EGLIB_CPPFLAGS\" \"CFLAGS_FOR_EGLIB=$CFLAGS_FOR_EGLIB\""
 	AC_CONFIG_SUBDIRS(sysdeps/eglib)
 	AC_DEFINE([USING_EGLIB], [1], [Whether we're using eglib])
+else
+	check_mono=yes
 fi
 AC_MSG_CHECKING([whether we're using eglib])
 AC_MSG_RESULT($using_eglib)
@@ -166,16 +184,12 @@ GLIB_REQUIRED_VERSION=2.0.0
 MONO_REQUIRED_VERSION=2.0
 XSP_REQUIRED_VERSION=2.0
 
-PKG_CHECK_MODULES(BASE_DEPENDENCIES, glib-2.0 >= $GLIB_REQUIRED_VERSION)
-AC_SUBST(BASE_DEPENDENCIES_CFLAGS)
-AC_SUBST(BASE_DEPENDENCIES_LIBS)
-
 debugger_major_version=81
 min_debugger_minor_version=0
 symfile_major_version=50
 min_symfile_minor_version=0
 
-if test x$server_only != xyes; then
+if test x$check_mono = xyes; then
 	AC_MSG_CHECKING([Whether we're using Mono from trunk])
 	## Check for Mono from trunk
 	if pkg-config --modversion mono-2>/dev/null; then
@@ -218,7 +232,7 @@ AC_SUBST(CECIL_ASM)
 
 AC_SUBST(CFLAGS)
 
-if test x$server_only != xyes; then
+if test x$csharp_library = xyes; then
 	mono_prefix="`$PKG_CONFIG --variable=prefix mono`"
 	monodoc_prefix="`$PKG_CONFIG --variable=prefix monodoc`"
 	AC_SUBST(mono_prefix)
@@ -309,7 +323,7 @@ AC_HEADER_DIRENT
 AC_CHECK_FUNCS(fcntl getpagesize setitimer sysconf fdopen getuid getgid)
 AC_CHECK_FUNCS(strlcpy strlcat fgetln)
 
-if test x$server_only != xyes -a x$remote_only != xyes; then
+if test x$check_mono = xyes; then
 	PKG_CHECK_MODULES(MONO, $mono_pc >= $MONO_REQUIRED_VERSION)
 	AC_SUBST(MONO_CFLAGS)
 	AC_SUBST(MONO_LIBS)
@@ -403,8 +417,10 @@ AM_CONDITIONAL(MARTIN_PRIVATE, test x$martin_private = xyes)
 
 AM_CONDITIONAL(DISABLED, false)
 
-AM_CONDITIONAL(SERVER_ONLY, test "x$server_only" = "xyes")
-AM_CONDITIONAL(REMOTE_ONLY, test "x$remote_only" = "xyes")
+AM_CONDITIONAL(BUILD_SYSDEPS, test "x$build_sysdeps" = "xyes")
+AM_CONDITIONAL(REMOTE_BACKEND, test "x$remote_backend" = "xyes")
+AM_CONDITIONAL(LIBRARY_BACKEND, test "x$library_backend" = "xyes")
+AM_CONDITIONAL(CSHARP_LIBRARY, test "x$csharp_library" = "xyes")
 
 AC_OUTPUT([
 Makefile

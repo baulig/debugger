@@ -4,6 +4,10 @@
 
 #include "x86_64-arch.h"
 
+#if defined(__linux__) || defined(__FreeBSD__)
+#include <signal.h>
+#endif
+
 struct _ArchInfo
 {
 	INFERIOR_REGS_TYPE current_regs;
@@ -73,8 +77,10 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig,
 
 	mdb_arch_get_registers (server);
 
+#if defined(__linux__) || defined(__FreeBSD__)
 	if (stopsig == SIGSTOP)
 		return STOP_ACTION_INTERRUPTED;
+#endif
 
 	/*
 	 * By default, when the NX-flag is set in the BIOS, we stop at the `cdata->call_address'
@@ -150,10 +156,8 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig,
 		return STOP_ACTION_CALLBACK;
 	}
 
-#if defined(__linux__) || defined(__FreeBSD__)
 	if (stopsig != SIGTRAP)
 		return STOP_ACTION_STOPPED;
-#endif
 
 	if (server->mono_runtime &&
 	    (INFERIOR_REG_RIP (arch->current_regs) - 1 == server->mono_runtime->notification_address)) {
@@ -215,7 +219,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig,
 		return STOP_ACTION_STOPPED;
 	}
 
-	if (mdb_inferior_peek_word (inferior, GPOINTER_TO_SIZE(INFERIOR_REG_RIP (arch->current_regs) - 1), &code) != COMMAND_ERROR_NONE)
+	if (mdb_inferior_peek_word (inferior, GPOINTER_TO_UINT(INFERIOR_REG_RIP (arch->current_regs) - 1), &code) != COMMAND_ERROR_NONE)
 		return STOP_ACTION_STOPPED;
 
 	if ((code & 0xff) == 0xcc) {

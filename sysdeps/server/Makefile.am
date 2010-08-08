@@ -5,14 +5,14 @@ eglib_cflags = -I$(top_srcdir)/sysdeps/eglib/src -I../eglib/src
 eglib_static_libs = ../eglib/src/libeglib-static.la
 eglib_libs = ../eglib/src/libeglib.la
 else
-eglib_cflags =
-eglib_libs =
+eglib_cflags = $(GLIB_CFLAGS)
+eglib_libs = $(GLIB_LIBS)
 endif
 
-if SERVER_ONLY
-server_libraries =
-else
+if LIBRARY_BACKEND
 server_libraries = libmonodebuggerserver.la
+else
+server_libraries =
 endif
 
 lib_LTLIBRARIES = $(server_libraries)

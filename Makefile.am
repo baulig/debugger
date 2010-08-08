@@ -1,13 +1,13 @@
-if SERVER_ONLY
-csharp_dirs =
-else
+if CSHARP_LIBRARY
 csharp_dirs = interface languages classes backend symbolwriter frontend test build
+else
+csharp_dirs =
 endif
 
-if REMOTE_ONLY
-sysdeps_dir =
-else
+if BUILD_SYSDEPS
 sysdeps_dir = sysdeps
+else
+sysdeps_dir =
 endif
 
 SUBDIRS = $(sysdeps_dir) $(csharp_dirs)
