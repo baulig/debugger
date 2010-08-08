@@ -392,8 +392,10 @@ main (int argc, char *argv[])
 
 	if (mdb_server_init_os ()) {
 		g_warning (G_STRLOC ": Failed to initialize OS backend.");
-		return -1;
+		exit (-1);
 	}
+
+	mono_debugger_server_global_init ();
 
 	fd = socket (AF_INET, SOCK_STREAM, 0);
 #ifdef TRANSPORT_DEBUG
@@ -409,7 +411,7 @@ main (int argc, char *argv[])
 	res = bind (fd, (struct sockaddr *) &serv_addr, sizeof (serv_addr));
 	if (res < 0) {
 		g_warning (G_STRLOC ": bind() failed: %s", g_strerror (errno));
-		return -1;
+		exit (-1);
 	}
 
 	listen (fd, 1);
@@ -419,7 +421,7 @@ main (int argc, char *argv[])
 	conn_fd = accept (fd, (struct sockaddr *) &cli_addr, &cli_len);
 	if (res < 0) {
 		g_warning (G_STRLOC ": accept() failed: %s", g_strerror (errno));
-		return -1;
+		exit (-1);
 	}
 
 #ifdef TRANSPORT_DEBUG
@@ -433,7 +435,7 @@ main (int argc, char *argv[])
 
 	if (res < 0) {
 		g_error (G_STRLOC ": Handshake failed!");
-		return -1;
+		exit (-1);
 	}
 
 #ifdef TRANSPORT_DEBUG
@@ -444,7 +446,7 @@ main (int argc, char *argv[])
 	res = recv_length (conn_fd, buf, strlen (handshake_msg), 0);
 	if ((res != strlen (handshake_msg)) || (memcmp (buf, handshake_msg, strlen (handshake_msg) != 0))) {
 		g_error (G_STRLOC ": Handshake failed!");
-		return -1;
+		exit (-1);
 	}
 
 #ifdef TRANSPORT_DEBUG
@@ -594,8 +596,8 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		g_message (G_STRLOC);
 
 		// argv [0] = g_strdup_printf ("X:\\Work\\Martin\\mdb\\testnativetypes.exe");
-		argv [0] = g_strdup_printf ("/data/martin/testnativetypes");
-		cwd = g_get_current_dir (); // FIXME
+		// argv [0] = g_strdup_printf ("/data/martin/testnativetypes");
+		// cwd = g_get_current_dir (); // FIXME
 
 		result = mono_debugger_server_spawn (inferior, cwd, (const gchar **) argv, NULL, FALSE, &child_pid, NULL, &error);
 		g_message (G_STRLOC ": %d - %d - %s", result, child_pid, error);
