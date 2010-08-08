@@ -675,9 +675,6 @@ _mdb_inferior_get_last_signal (InferiorHandle *inferior)
 	return inferior->last_signal;
 }
 
-extern void GC_start_blocking (void);
-extern void GC_end_blocking (void);
-
 #ifdef __linux__
 #include "x86-linux-ptrace.c"
 #endif
