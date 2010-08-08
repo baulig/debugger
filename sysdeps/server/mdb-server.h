@@ -44,7 +44,7 @@ extern gboolean
 mdb_server_main_loop_iteration (void);
 
 extern void
-mdb_server_process_child_event (ServerStatusMessageType message, guint32 pid,
+mdb_server_process_child_event (ServerEventType message, guint32 pid,
 				guint64 arg, guint64 data1, guint64 data2,
 				guint32 opt_data_size, gpointer opt_data);
 

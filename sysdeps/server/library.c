@@ -117,7 +117,7 @@ mono_debugger_server_global_wait (guint32 *status)
 	return (* global_vtable->global_wait) (status);
 }
 
-ServerStatusMessageType
+ServerEventType
 mono_debugger_server_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg,
 				     guint64 *data1, guint64 *data2, guint32 *opt_data_size,
 				     gpointer *opt_data)
@@ -126,7 +126,7 @@ mono_debugger_server_dispatch_event (ServerHandle *handle, guint32 status, guint
 		handle, status, arg, data1, data2, opt_data_size, opt_data);
 }
 
-ServerStatusMessageType
+ServerEventType
 mono_debugger_server_dispatch_simple (guint32 status, guint32 *arg)
 {
 	return (*global_vtable->dispatch_simple) (status, arg);

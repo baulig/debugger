@@ -1192,7 +1192,7 @@ out_write:
 static void format_windows_error_message (DWORD error_code)
 {
 	DWORD dw_rval;
-	dw_rval = FormatMessage (FORMAT_MESSAGE_FROM_SYSTEM, NULL,
+	dw_rval = FormatMessage (FORMAT_SERVER_EVENT_FROM_SYSTEM, NULL,
 				 error_code, 0, windows_error_message,
 				 windows_error_message_len, NULL);
 
@@ -2206,11 +2206,11 @@ server_win32_initialize_process (ServerHandle *handle)
 
 
 
-static ServerStatusMessageType
+static ServerEventType
 server_win32_dispatch_simple (guint32 status, guint32 *arg)
 {
 	if (status >> 16)
-		return MESSAGE_UNKNOWN_ERROR;
+		return SERVER_EVENT_UNKNOWN_ERROR;
 #if 0
 	if (WIFSTOPPED (status)) {
 		int stopsig = WSTOPSIG (status);
@@ -2219,26 +2219,26 @@ server_win32_dispatch_simple (guint32 status, guint32 *arg)
 			stopsig = 0;
 
 		*arg = stopsig;
-		return MESSAGE_CHILD_STOPPED;
+		return SERVER_EVENT_CHILD_STOPPED;
 	} else if (WIFEXITED (status)) {
 		*arg = WEXITSTATUS (status);
-		return MESSAGE_CHILD_EXITED;
+		return SERVER_EVENT_CHILD_EXITED;
 	} else if (WIFSIGNALED (status)) {
 		if ( (WTERMSIG (status) == SIGTRAP) || (WTERMSIG (status) == SIGKILL)) {
 			*arg = 0;
-			return MESSAGE_CHILD_EXITED;
+			return SERVER_EVENT_CHILD_EXITED;
 		} else {
 			*arg = WTERMSIG (status);
-			return MESSAGE_CHILD_SIGNALED;
+			return SERVER_EVENT_CHILD_SIGNALED;
 		}
 	}
 #endif
 
-	return MESSAGE_UNKNOWN_ERROR;
+	return SERVER_EVENT_UNKNOWN_ERROR;
 }
 
 
-static ServerStatusMessageType
+static ServerEventType
 server_win32_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg,
 			      guint64 *data1, guint64 *data2, guint32 *opt_data_size,
 			      gpointer *opt_data)
@@ -2246,13 +2246,13 @@ server_win32_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg,
 {
 	switch (status) {
 		case CREATE_PROCESS_DEBUG_EVENT:
-			return MESSAGE_CHILD_EXECD;
+			return SERVER_EVENT_CHILD_EXECD;
 		case CREATE_THREAD_DEBUG_EVENT:
-			return MESSAGE_CHILD_CREATED_THREAD;
+			return SERVER_EVENT_CHILD_CREATED_THREAD;
 		case EXIT_PROCESS_DEBUG_EVENT:
-			return MESSAGE_CHILD_CALLED_EXIT;
+			return SERVER_EVENT_CHILD_CALLED_EXIT;
 		default:
-			return MESSAGE_UNKNOWN_ERROR;
+			return SERVER_EVENT_UNKNOWN_ERROR;
 				
 	}
 }

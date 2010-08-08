@@ -352,7 +352,7 @@ mdb_server_get_inferior_by_pid (int pid)
 }
 
 void
-mdb_server_process_child_event (ServerStatusMessageType message, guint32 pid, guint64 arg,
+mdb_server_process_child_event (ServerEventType message, guint32 pid, guint64 arg,
 				guint64 data1, guint64 data2, guint32 opt_data_size, gpointer opt_data)
 {
 	Buffer buf;

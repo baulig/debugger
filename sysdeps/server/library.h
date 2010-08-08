@@ -39,27 +39,27 @@ typedef enum {
 } ServerCommandError;
 
 typedef enum {
-	MESSAGE_NONE,
-	MESSAGE_UNKNOWN_ERROR = 1,
-	MESSAGE_CHILD_EXITED = 2,
-	MESSAGE_CHILD_STOPPED,
-	MESSAGE_CHILD_SIGNALED,
-	MESSAGE_CHILD_CALLBACK,
-	MESSAGE_CHILD_CALLBACK_COMPLETED,
-	MESSAGE_CHILD_HIT_BREAKPOINT,
-	MESSAGE_CHILD_MEMORY_CHANGED,
-	MESSAGE_CHILD_CREATED_THREAD,
-	MESSAGE_CHILD_FORKED,
-	MESSAGE_CHILD_EXECD,
-	MESSAGE_CHILD_CALLED_EXIT,
-	MESSAGE_CHILD_NOTIFICATION,
-	MESSAGE_CHILD_INTERRUPTED,
-	MESSAGE_RUNTIME_INVOKE_DONE,
-	MESSAGE_INTERNAL_ERROR
-} ServerStatusMessageType;
+	SERVER_EVENT_NONE,
+	SERVER_EVENT_UNKNOWN_ERROR = 1,
+	SERVER_EVENT_CHILD_EXITED = 2,
+	SERVER_EVENT_CHILD_STOPPED,
+	SERVER_EVENT_CHILD_SIGNALED,
+	SERVER_EVENT_CHILD_CALLBACK,
+	SERVER_EVENT_CHILD_CALLBACK_COMPLETED,
+	SERVER_EVENT_CHILD_HIT_BREAKPOINT,
+	SERVER_EVENT_CHILD_MEMORY_CHANGED,
+	SERVER_EVENT_CHILD_CREATED_THREAD,
+	SERVER_EVENT_CHILD_FORKED,
+	SERVER_EVENT_CHILD_EXECD,
+	SERVER_EVENT_CHILD_CALLED_EXIT,
+	SERVER_EVENT_CHILD_NOTIFICATION,
+	SERVER_EVENT_CHILD_INTERRUPTED,
+	SERVER_EVENT_RUNTIME_INVOKE_DONE,
+	SERVER_EVENT_INTERNAL_ERROR
+} ServerEventType;
 
 typedef struct {
-	ServerStatusMessageType type;
+	ServerEventType type;
 	guint32 arg;
 } ServerStatusMessage;
 
@@ -192,7 +192,7 @@ struct InferiorVTable {
 	ServerCommandError    (* stop_and_wait)       (ServerHandle        *handle,
 						       guint32             *status);
 
-	ServerStatusMessageType (* dispatch_event)    (ServerHandle        *handle,
+	ServerEventType (* dispatch_event)    (ServerHandle        *handle,
 						       guint32              status,
 						       guint64             *arg,
 						       guint64             *data1,
@@ -200,7 +200,7 @@ struct InferiorVTable {
 						       guint32             *opt_data_size,
 						       gpointer            *opt_data);
 
-	ServerStatusMessageType (* dispatch_simple)   (guint32              status,
+	ServerEventType (* dispatch_simple)   (guint32              status,
 						       guint32             *arg);
 
 	/* Get sizeof (int), sizeof (long) and sizeof (void *) from the target. */
@@ -262,7 +262,7 @@ struct InferiorVTable {
 
 	/*
 	 * Call `guint64 (*func) (guint64)' function at address `method' in the target address
-	 * space, pass it argument `method_argument', send a MESSAGE_CHILD_CALLBACK with the
+	 * space, pass it argument `method_argument', send a SERVER_EVENT_CHILD_CALLBACK with the
 	 * `callback_argument' and the function's return value when the function returns.
 	 * This function must return immediately without waiting for the target !
 	 */
@@ -275,7 +275,7 @@ struct InferiorVTable {
 	/*
 	 * Call `guint64 (*func) (guint64, const gchar *)' function at address `method' in the
 	 * target address space, pass it arguments `method_argument' and `string_argument' , send
-	 * a MESSAGE_CHILD_CALLBACK with the `callback_argument' and the function's return value
+	 * a SERVER_EVENT_CHILD_CALLBACK with the `callback_argument' and the function's return value
 	 * when the function returns.
 	 * This function must return immediately without waiting for the target !
 	 */
@@ -493,7 +493,7 @@ mono_debugger_server_finalize             (ServerHandle       *handle);
 guint32
 mono_debugger_server_global_wait          (guint32                 *status);
 
-ServerStatusMessageType
+ServerEventType
 mono_debugger_server_dispatch_event       (ServerHandle            *handle,
 					   guint32                  status,
 					   guint64                 *arg,

@@ -57,7 +57,7 @@ static void
 handle_wait_event (void)
 {
 	ServerHandle *server;
-	ServerStatusMessageType message;
+	ServerEventType message;
 	guint64 arg, data1, data2;
 	guint32 opt_data_size;
 	gpointer opt_data;
@@ -83,7 +83,7 @@ handle_wait_event (void)
 			}
 
 			// *arg = new_pid;
-			//return MESSAGE_CHILD_CREATED_THREAD;
+			//return SERVER_EVENT_CHILD_CREATED_THREAD;
 			break;
 		}
 
@@ -96,14 +96,14 @@ handle_wait_event (void)
 			}
 
 			// *arg = new_pid;
-			//return MESSAGE_CHILD_FORKED;
+			//return SERVER_EVENT_CHILD_FORKED;
 			break;
 		}
 
 #if 0
 
 		case PTRACE_EVENT_EXEC:
-			return MESSAGE_CHILD_EXECD;
+			return SERVER_EVENT_CHILD_EXECD;
 
 		case PTRACE_EVENT_EXIT: {
 			int exitcode;
@@ -115,7 +115,7 @@ handle_wait_event (void)
 			}
 
 			*arg = 0;
-			return MESSAGE_CHILD_CALLED_EXIT;
+			return SERVER_EVENT_CHILD_CALLED_EXIT;
 		}
 #endif
 

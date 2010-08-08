@@ -169,7 +169,7 @@ mdb_server_write_memory (ServerHandle *handle, guint64 start, guint32 size, gcon
 	return mdb_inferior_write_memory (handle->inferior, start, size, buffer);
 }
 
-static ServerStatusMessageType
+static ServerEventType
 mdb_server_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg,
 			      guint64 *data1, guint64 *data2, guint32 *opt_data_size,
 			      gpointer *opt_data)
@@ -187,7 +187,7 @@ mdb_server_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg,
 			}
 
 			*arg = new_pid;
-			return MESSAGE_CHILD_CREATED_THREAD;
+			return SERVER_EVENT_CHILD_CREATED_THREAD;
 		}
 
 		case PTRACE_EVENT_FORK: {
@@ -200,11 +200,11 @@ mdb_server_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg,
 			}
 
 			*arg = new_pid;
-			return MESSAGE_CHILD_FORKED;
+			return SERVER_EVENT_CHILD_FORKED;
 		}
 
 		case PTRACE_EVENT_EXEC:
-			return MESSAGE_CHILD_EXECD;
+			return SERVER_EVENT_CHILD_EXECD;
 
 		case PTRACE_EVENT_EXIT: {
 			int exitcode;
@@ -216,13 +216,13 @@ mdb_server_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg,
 			}
 
 			*arg = 0;
-			return MESSAGE_CHILD_CALLED_EXIT;
+			return SERVER_EVENT_CHILD_CALLED_EXIT;
 		}
 
 		default:
 			g_warning (G_STRLOC ": Received unknown wait result %x on child %d",
 				   status, handle->inferior->pid);
-			return MESSAGE_UNKNOWN_ERROR;
+			return SERVER_EVENT_UNKNOWN_ERROR;
 		}
 	}
 	#endif
@@ -254,67 +254,67 @@ mdb_server_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg,
 				handle->inferior->last_signal = stopsig;
 				*arg = stopsig;
 			}
-			return MESSAGE_CHILD_STOPPED;
+			return SERVER_EVENT_CHILD_STOPPED;
 
 		case STOP_ACTION_INTERRUPTED:
 			*arg = 0;
-			return MESSAGE_CHILD_INTERRUPTED;
+			return SERVER_EVENT_CHILD_INTERRUPTED;
 
 		case STOP_ACTION_BREAKPOINT_HIT:
 			*arg = (int) retval;
-			return MESSAGE_CHILD_HIT_BREAKPOINT;
+			return SERVER_EVENT_CHILD_HIT_BREAKPOINT;
 
 		case STOP_ACTION_CALLBACK:
 			*arg = callback_arg;
 			*data1 = retval;
 			*data2 = retval2;
-			return MESSAGE_CHILD_CALLBACK;
+			return SERVER_EVENT_CHILD_CALLBACK;
 
 		case STOP_ACTION_CALLBACK_COMPLETED:
 			*arg = callback_arg;
 			*data1 = retval;
 			*data2 = retval2;
-			return MESSAGE_CHILD_CALLBACK_COMPLETED;
+			return SERVER_EVENT_CHILD_CALLBACK_COMPLETED;
 
 		case STOP_ACTION_NOTIFICATION:
 			*arg = callback_arg;
 			*data1 = retval;
 			*data2 = retval2;
-			return MESSAGE_CHILD_NOTIFICATION;
+			return SERVER_EVENT_CHILD_NOTIFICATION;
 
 		case STOP_ACTION_RTI_DONE:
 			*arg = callback_arg;
 			*data1 = retval;
 			*data2 = retval2;
-			return MESSAGE_RUNTIME_INVOKE_DONE;
+			return SERVER_EVENT_RUNTIME_INVOKE_DONE;
 
 		case STOP_ACTION_INTERNAL_ERROR:
-			return MESSAGE_INTERNAL_ERROR;
+			return SERVER_EVENT_INTERNAL_ERROR;
 		}
 
 		g_assert_not_reached ();
 	} else if (WIFEXITED (status)) {
 		*arg = WEXITSTATUS (status);
-		return MESSAGE_CHILD_EXITED;
+		return SERVER_EVENT_CHILD_EXITED;
 	} else if (WIFSIGNALED (status)) {
 		if ((WTERMSIG (status) == SIGTRAP) || (WTERMSIG (status) == SIGKILL)) {
 			*arg = 0;
-			return MESSAGE_CHILD_EXITED;
+			return SERVER_EVENT_CHILD_EXITED;
 		} else {
 			*arg = WTERMSIG (status);
-			return MESSAGE_CHILD_SIGNALED;
+			return SERVER_EVENT_CHILD_SIGNALED;
 		}
 	}
 
 	g_warning (G_STRLOC ": Got unknown waitpid() result: %x", status);
-	return MESSAGE_UNKNOWN_ERROR;
+	return SERVER_EVENT_UNKNOWN_ERROR;
 }
 
-static ServerStatusMessageType
+static ServerEventType
 mdb_server_dispatch_simple (guint32 status, guint32 *arg)
 {
 	if (status >> 16)
-		return MESSAGE_UNKNOWN_ERROR;
+		return SERVER_EVENT_UNKNOWN_ERROR;
 
 	if (WIFSTOPPED (status)) {
 		int stopsig = WSTOPSIG (status);
@@ -323,21 +323,21 @@ mdb_server_dispatch_simple (guint32 status, guint32 *arg)
 			stopsig = 0;
 
 		*arg = stopsig;
-		return MESSAGE_CHILD_STOPPED;
+		return SERVER_EVENT_CHILD_STOPPED;
 	} else if (WIFEXITED (status)) {
 		*arg = WEXITSTATUS (status);
-		return MESSAGE_CHILD_EXITED;
+		return SERVER_EVENT_CHILD_EXITED;
 	} else if (WIFSIGNALED (status)) {
 		if ((WTERMSIG (status) == SIGTRAP) || (WTERMSIG (status) == SIGKILL)) {
 			*arg = 0;
-			return MESSAGE_CHILD_EXITED;
+			return SERVER_EVENT_CHILD_EXITED;
 		} else {
 			*arg = WTERMSIG (status);
-			return MESSAGE_CHILD_SIGNALED;
+			return SERVER_EVENT_CHILD_SIGNALED;
 		}
 	}
 
-	return MESSAGE_UNKNOWN_ERROR;
+	return SERVER_EVENT_UNKNOWN_ERROR;
 }
 
 
