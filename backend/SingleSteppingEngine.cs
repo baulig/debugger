@@ -2990,7 +2990,6 @@ namespace Mono.Debugger.Backend
 				      inferior.CurrentFrame, inferior.EntryPoint);
 
 			args = null;
-			return EventResult.Completed;
 			if ((cevent.Type != DebuggerServer.ChildEventType.CHILD_STOPPED) &&
 			    (cevent.Type != DebuggerServer.ChildEventType.CHILD_CALLBACK))
 				return EventResult.Completed;
