@@ -16,3 +16,5 @@
 /Makefile.in
 /INSTALL
 /autom4te.cache
+/bfd_stdint.h
+/stamp-*
