@@ -675,6 +675,85 @@ _mdb_inferior_get_last_signal (InferiorHandle *inferior)
 	return inferior->last_signal;
 }
 
+static int
+disasm_read_memory_func (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length, struct disassemble_info *info)
+{
+	ServerHandle *server = info->application_data;
+
+	return mdb_server_read_memory (server, memaddr, length, myaddr);
+}
+
+static int
+disasm_fprintf_func (gpointer stream, const char *message, ...)
+{
+	ServerHandle *server = stream;
+	va_list args;
+	char *start;
+	int len, max, retval;
+
+	len = strlen (server->inferior->disasm_buffer);
+	start = server->inferior->disasm_buffer + len;
+	max = 1024 - len;
+
+	va_start (args, message);
+	retval = vsnprintf (start, max, message, args);
+	va_end (args);
+
+	return retval;
+}
+
+static void
+disasm_print_address_func (bfd_vma addr, struct disassemble_info *info)
+{
+	ServerHandle *server = info->application_data;
+	char buf[30];
+
+	sprintf_vma (buf, addr);
+	(*info->fprintf_func) (info->stream, "0x%s", buf);
+}
+
+static void
+init_disassembler (ServerHandle *server)
+{
+	struct disassemble_info *info;
+
+	if (server->inferior->disassembler)
+		return;
+
+	info = g_new0 (struct disassemble_info, 1);
+	INIT_DISASSEMBLE_INFO (*info, stderr, fprintf);
+	info->flavour = bfd_target_coff_flavour;
+	info->arch = bfd_arch_i386;
+	info->mach = bfd_mach_i386_i386;
+	info->octets_per_byte = 1;
+	info->display_endian = info->endian = BFD_ENDIAN_LITTLE;
+
+	info->application_data = server;
+	info->read_memory_func = disasm_read_memory_func;
+	info->print_address_func = disasm_print_address_func;
+	info->fprintf_func = disasm_fprintf_func;
+	info->stream = server;
+
+	server->inferior->disassembler = info;
+}
+
+gchar *
+mdb_server_disassemble_insn (ServerHandle *server, guint64 address, guint32 *out_insn_size)
+{
+	int ret;
+
+	init_disassembler (server);
+
+	memset (server->inferior->disasm_buffer, 0, 1024);
+
+	ret = print_insn_i386 (address, server->inferior->disassembler);
+
+	if (out_insn_size)
+		*out_insn_size = ret;
+
+	return g_strdup (server->inferior->disasm_buffer);
+}
+
 #ifdef __linux__
 #include "x86-linux-ptrace.c"
 #endif

@@ -1,6 +1,9 @@
 #ifndef __MONO_DEBUGGER_X86_64_PTRACE_H__
 #define __MONO_DEBUGGER_X86_64_PTRACE_H__
 
+#include <bfd.h>
+#include <dis-asm.h>
+
 typedef struct OSData OSData;
 
 struct InferiorHandle
@@ -13,6 +16,9 @@ struct InferiorHandle
 	int redirect_fds;
 	int output_fd [2], error_fd [2];
 	int is_thread;
+
+	struct disassemble_info *disassembler;
+	char disasm_buffer [1024];
 };
 
 #include "linux-ptrace.h"

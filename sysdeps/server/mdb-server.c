@@ -835,7 +835,6 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 	}
 
 	case CMD_INFERIOR_DISASSEMBLE_INSN: {
-#if defined(__arm__) || WINDOWS
 		guint64 address;
 		guint32 insn_size;
 		gchar *insn;
@@ -847,9 +846,6 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		buffer_add_string (buf, insn);
 		g_free (insn);
 		break;
-#else
-		return ERR_NOT_IMPLEMENTED;
-#endif
 	}
 
 	default:
