@@ -218,7 +218,7 @@ namespace Mono.Debugger.Server
 			return new NativeBreakpointManager ();
 		}
 
-		public override InferiorHandle CreateInferior (BreakpointManager bpm)
+		public override InferiorHandle CreateInferior (SingleSteppingEngine sse, Inferior inferior, BreakpointManager bpm)
 		{
 			var handle = mono_debugger_server_create_inferior (((NativeBreakpointManager) bpm).Manager);
 			if (handle == IntPtr.Zero)

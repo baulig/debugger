@@ -30,7 +30,8 @@ namespace Mono.Debugger.Server
 
 		public abstract BreakpointManager CreateBreakpointManager ();
 
-		public abstract InferiorHandle CreateInferior (BreakpointManager breakpoint_manager);
+		public abstract InferiorHandle CreateInferior (SingleSteppingEngine sse, Inferior inferior,
+							       BreakpointManager breakpoint_manager);
 
 		public abstract void InitializeProcess (InferiorHandle inferior);
 

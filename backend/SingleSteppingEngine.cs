@@ -92,24 +92,38 @@ namespace Mono.Debugger.Backend
 					     ProcessStart start)
 			: this (manager, process)
 		{
-			inferior = Inferior.CreateInferior (manager, process, start);
+			inferior = Inferior.CreateInferior (manager, process, this, start);
 
+#if FIXME
 			if (start.PID != 0) {
 				this.pid = start.PID;
 				inferior.Attach (pid);
 			} else {
 				pid = inferior.Run ();
 			}
+#endif
 
 			manager.AddEngine (this);
 		}
 
 		public SingleSteppingEngine (ThreadManager manager, Process process,
-					     Inferior inferior, int pid)
+					     int pid, bool do_attach)
 			: this (manager, process)
 		{
-			this.inferior = inferior;
 			this.pid = pid;
+
+			inferior = inferior.CreateThread (this, pid, do_attach);
+
+			engine_stopped = true;
+			manager.AddEngine (this);
+		}
+
+		internal SingleSteppingEngine (ThreadManager manager, Process process, int pid)
+			: this (manager, process)
+		{
+			this.pid = pid;
+
+			inferior = Inferior.CreateInferior (manager, process, this, process.ProcessStart);
 
 			engine_stopped = true;
 			manager.AddEngine (this);
@@ -119,6 +133,7 @@ namespace Mono.Debugger.Backend
 		{
 			engine_stopped = false;
 			current_operation = new OperationStart (this, result);
+			pid = inferior.Run ();
 			current_operation.Execute ();
 			return result;
 		}
@@ -518,7 +533,7 @@ namespace Mono.Debugger.Backend
 			try {
 				status = current_operation.ProcessEvent (cevent, out result);
 			} catch (TargetException ex) {
-				Report.Error ("{0} caught exception while processing event {1}: {2}", this, cevent, ex.Message);
+				Report.Error ("{0} caught exception while processing event {1}: {2}", this, cevent, ex);
 				killed = true;
 				inferior.Kill ();
 				OperationCompleted (null);
@@ -2962,6 +2977,8 @@ namespace Mono.Debugger.Backend
 			Report.Debug (DebugFlags.SSE,
 				      "{0} test execute start: {1} {2} {3}", sse, sse.Process.IsAttached,
 				      inferior.CurrentFrame, inferior.EntryPoint);
+
+			return;
 
 			sse.ProcessEvent (new DebuggerServer.ChildEvent (DebuggerServer.ChildEventType.CHILD_STOPPED, 0, 0, 0));
 			return;

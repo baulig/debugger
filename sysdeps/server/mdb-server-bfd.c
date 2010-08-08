@@ -39,8 +39,6 @@ mdb_server_create_exe_reader (const char *filename)
 		reader->num_symbols = bfd_canonicalize_symtab (reader->bfd, reader->symtab);
 	}
 
-	g_message (G_STRLOC ": %ld - %ld - %p", reader->symtab_size, reader->num_symbols, reader->symtab);
-
 	return reader;
 }
 
@@ -128,7 +126,6 @@ mdb_exe_reader_lookup_symbol_by_addr (MdbExeReader *reader, guint64 address)
 			continue;
 		}
 
-		// g_message (G_STRLOC ": %i - %p - %s", i, sym_address, bfd_asymbol_name (reader->symtab [i]));
 		if (bfd_asymbol_value (reader->symtab [i]) == address)
 			return bfd_asymbol_name (reader->symtab [i]);
 	}
@@ -141,10 +138,7 @@ find_section (MdbExeReader *reader, const char *name)
 {
 	asection *section;
 
-	g_message (G_STRLOC ": %s - %p", name, reader->bfd->sections);
-
 	for (section = reader->bfd->sections; section; section = section->next) {
-		g_message (G_STRLOC ": %p - %s - %lx", section, section->name, section->vma);
 		if (!strcmp (section->name, name))
 			return section;
 	}

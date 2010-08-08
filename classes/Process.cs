@@ -330,9 +330,8 @@ namespace Mono.Debugger
 
 		internal void ThreadCreated (Inferior inferior, int pid, bool do_attach, bool resume_thread)
 		{
-			Inferior new_inferior = inferior.CreateThread (pid, do_attach);
-
-			SingleSteppingEngine new_thread = new SingleSteppingEngine (manager, this, new_inferior, pid);
+			SingleSteppingEngine new_thread = new SingleSteppingEngine (manager, this, pid, do_attach);
+			Inferior new_inferior = new_thread.Inferior;
 
 			Report.Debug (DebugFlags.Threads, "Thread created: {0} {1} {2}", pid, new_thread, do_attach);
 
@@ -357,17 +356,15 @@ namespace Mono.Debugger
 			Process new_process = new Process (this, pid);
 			new_process.ProcessStart.StopInMain = false;
 
-			Inferior new_inferior = Inferior.CreateInferior (
-				manager, new_process, new_process.ProcessStart);
+			SingleSteppingEngine new_thread = new SingleSteppingEngine (manager, new_process, pid);
+
+			Inferior new_inferior = new_thread.Inferior;
 			new_inferior.InitializeThread (pid);
 
 			if (!manager.Debugger.Configuration.FollowFork) {
 				new_inferior.DetachAfterFork ();
 				return;
 			}
-
-			SingleSteppingEngine new_thread = new SingleSteppingEngine (
-				manager, new_process, new_inferior, pid);
 
 			Report.Debug (DebugFlags.Threads, "Child forked: {0} {1}", pid, new_thread);
 
@@ -412,7 +409,9 @@ namespace Mono.Debugger
 			os = manager.CreateOperatingSystemBackend (this);
 			native_language = new NativeLanguage (this, os, target_info);
 
-			Inferior new_inferior = Inferior.CreateInferior (manager, this, start);
+			SingleSteppingEngine new_thread = new SingleSteppingEngine (manager, this, inferior.PID);
+			Inferior new_inferior = new_thread.Inferior;
+
 			try {
 				new_inferior.InitializeAfterExec (inferior.PID);
 			} catch (Exception ex) {
@@ -425,9 +424,6 @@ namespace Mono.Debugger
 				new_inferior.DetachAfterFork ();
 				return;
 			}
-
-			SingleSteppingEngine new_thread = new SingleSteppingEngine (
-				manager, this, new_inferior, inferior.PID);
 
 			ThreadServant[] threads;
 			lock (thread_hash.SyncRoot) {

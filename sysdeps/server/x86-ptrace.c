@@ -260,7 +260,7 @@ handle_inferior_event (ServerHandle *server, int status)
 			return e;
 		}
 
-		return mdb_arch_child_stopped_2 (server, stopsig);
+		return mdb_arch_child_stopped (server, stopsig);
 	} else if (WIFEXITED (status)) {
 		e = g_new0 (ServerEvent, 1);
 		e->sender_iid = server->iid;
@@ -292,6 +292,8 @@ handle_inferior_event (ServerHandle *server, int status)
 	e->arg = status;
 	return e;
 }
+
+#ifndef MDB_SERVER
 
 static ServerEventType
 mdb_server_dispatch_event (ServerHandle *server, guint32 status, guint64 *arg,
@@ -351,6 +353,8 @@ mdb_server_dispatch_simple (guint32 status, guint32 *arg)
 	return SERVER_EVENT_UNKNOWN_ERROR;
 }
 
+#endif
+
 ServerEvent *
 mdb_server_handle_wait_event (void)
 {
@@ -376,6 +380,8 @@ mdb_server_handle_wait_event (void)
 		g_warning (G_STRLOC ": Got wait event for unknown pid: %d", pid);
 		return NULL;
 	}
+
+	g_message (G_STRLOC ": %p - %d", server, status);
 
 	return handle_inferior_event (server, status);
 }
@@ -503,6 +509,8 @@ mdb_server_spawn (ServerHandle *handle, const gchar *working_directory,
 
 	inferior->pid = *child_pid;
 
+	g_message (G_STRLOC ": spawn %p - %d", pthread_self (), *child_pid);
+
 #if !defined(__MACH__) && !defined(MDB_SERVER)
 	if (!_linux_wait_for_new_thread (handle))
 		return COMMAND_ERROR_INTERNAL_ERROR;
@@ -521,6 +529,7 @@ mdb_server_spawn (ServerHandle *handle, const gchar *working_directory,
 	*child_pid = COMPOSED_PID(inferior->pid, inferior->os.thread_index);
 #endif
 
+	g_message (G_STRLOC ": spawn done %p - %d", pthread_self (), *child_pid);
 	return COMMAND_ERROR_NONE;
 }
 

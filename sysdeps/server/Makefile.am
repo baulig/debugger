@@ -94,7 +94,7 @@ server_cppflags = \
 	-I$(top_srcdir)/sysdeps/bfd/include \
 	-I$(top_srcdir)/sysdeps/bfd/opcodes \
 	@SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@ \
-	$(eglib_cflags) -DTRANSPORT_DEBUG
+	$(eglib_cflags)
 
 EXTRA_libmonodebuggerserver_la_SOURCES = $(extra_sources)
 libmonodebuggerserver_la_CPPFLAGS = $(server_cppflags)

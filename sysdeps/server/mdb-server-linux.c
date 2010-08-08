@@ -53,92 +53,6 @@ mdb_server_init_os (void)
 	return 0;
 }
 
-static void
-handle_wait_event (void)
-{
-	ServerHandle *server;
-	ServerEventType message;
-	guint64 arg, data1, data2;
-	guint32 opt_data_size;
-	gpointer opt_data;
-	int pid, status;
-
-	pid = waitpid (-1, &status, WUNTRACED | __WALL | __WCLONE | WNOHANG);
-	if (pid < 0) {
-		g_warning (G_STRLOC ": waitpid() failed: %s", g_strerror (errno));
-		return;
-	} else if (pid == 0)
-		return;
-
-	g_message (G_STRLOC ": waitpid(): %d - %x", pid, status);
-
-	if (status >> 16) {
-		switch (status >> 16) {
-		case PTRACE_EVENT_CLONE: {
-			int new_pid;
-
-			if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &new_pid)) {
-				g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
-				return;
-			}
-
-			// *arg = new_pid;
-			//return SERVER_EVENT_CHILD_CREATED_THREAD;
-			break;
-		}
-
-		case PTRACE_EVENT_FORK: {
-			int new_pid;
-
-			if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &new_pid)) {
-				g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
-				return;
-			}
-
-			// *arg = new_pid;
-			//return SERVER_EVENT_CHILD_FORKED;
-			break;
-		}
-
-#if 0
-
-		case PTRACE_EVENT_EXEC:
-			return SERVER_EVENT_CHILD_EXECD;
-
-		case PTRACE_EVENT_EXIT: {
-			int exitcode;
-
-			if (ptrace (PTRACE_GETEVENTMSG, handle->inferior->pid, 0, &exitcode)) {
-				g_warning (G_STRLOC ": %d - %s", handle->inferior->pid,
-					   g_strerror (errno));
-				return FALSE;
-			}
-
-			*arg = 0;
-			return SERVER_EVENT_CHILD_CALLED_EXIT;
-		}
-#endif
-
-		default:
-			g_warning (G_STRLOC ": Received unknown wait result %x on child %d",
-				   status, pid);
-			return;
-		}
-	}
-
-	server = mdb_server_get_inferior_by_pid (pid);
-	if (!server) {
-		g_warning (G_STRLOC ": Got wait event for unknown pid: %d", pid);
-		return;
-	}
-
-	message = mono_debugger_server_dispatch_event (
-		server, status, &arg, &data1, &data2, &opt_data_size, &opt_data);
-
-	mdb_server_process_child_event (
-		message, pid, arg, data1, data2, opt_data_size, opt_data);
-}
-
 void
 mdb_server_main_loop (int conn_fd)
 {
@@ -163,8 +77,15 @@ mdb_server_main_loop (int conn_fd)
 #endif
 
 		if (FD_ISSET (self_pipe[0], &readfds)) {
+			ServerEvent *e;
+
 			read (self_pipe[0], &ret, 1);
-			handle_wait_event ();
+
+			e = mdb_server_handle_wait_event ();
+			if (e) {
+				mdb_server_process_child_event (e);
+				g_free (e);
+			}
 		}
 
 		if (FD_ISSET (conn_fd, &readfds)) {

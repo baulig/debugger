@@ -44,9 +44,7 @@ extern gboolean
 mdb_server_main_loop_iteration (void);
 
 extern void
-mdb_server_process_child_event (ServerEventType message, guint32 pid,
-				guint64 arg, guint64 data1, guint64 data2,
-				guint32 opt_data_size, gpointer opt_data);
+mdb_server_process_child_event (ServerEvent *e);
 
 typedef struct _MdbExeReader MdbExeReader;
 

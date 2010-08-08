@@ -129,11 +129,6 @@ mdb_server_call_method_invoke (ServerHandle *handle, guint64 invoke_method,
 			       gint32 *offset_data, gconstpointer blob_data,
 			       guint64 callback_argument, gboolean debug);
 
-extern ChildStoppedAction
-mdb_arch_child_stopped (ServerHandle *handle, int stopsig,
-			guint64 *callback_arg, guint64 *retval, guint64 *retval2,
-			guint32 *opt_data_size, gpointer *opt_data);
-
 extern ServerCommandError
 mdb_server_get_registers (ServerHandle *handle, guint64 *values);
 
@@ -196,11 +191,6 @@ mdb_arch_check_breakpoint (ServerHandle *server, guint64 address, guint64 *retva
 extern BreakpointInfo *
 mdb_arch_lookup_breakpoint (ServerHandle *server, guint32 idx, BreakpointManager **out_bpm);
 
-extern ChildStoppedAction
-mdb_arch_child_stopped (ServerHandle *server, int stopsig,
-			guint64 *callback_arg, guint64 *retval, guint64 *retval2,
-			guint32 *opt_data_size, gpointer *opt_data);
-
 extern ServerCommandError
 mdb_arch_disable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint);
 
@@ -212,6 +202,9 @@ mdb_arch_enable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint);
 
 extern ServerCommandError
 mdb_arch_disable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint);
+
+extern ServerEvent *
+mdb_arch_child_stopped (ServerHandle *server, int stopsig);
 
 /*
  * Inferior

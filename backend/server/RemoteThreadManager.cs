@@ -61,16 +61,5 @@ namespace Mono.Debugger.Server
 		{
 			throw new InvalidOperationException ();
 		}
-
-		internal void OnTargetEvent (int pid, DebuggerServer.ChildEvent cevent)
-		{
-			Console.WriteLine ("ON TARGET EVENT: {0} {1}", pid, cevent);
-			SingleSteppingEngine engine = (SingleSteppingEngine) thread_hash [pid];
-			try {
-				engine.ProcessEvent (cevent);
-			} catch (Exception ex) {
-				Console.WriteLine ("ON TARGET EVENT EX: {0}", ex);
-			}
-		}
 	}
 }

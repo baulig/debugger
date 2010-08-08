@@ -1,4 +1,3 @@
-#define TRANSPORT_DEBUG 1
 #include <config.h>
 #include <mdb-server.h>
 #include <debugger-mutex.h>
@@ -352,21 +351,20 @@ mdb_server_get_inferior_by_pid (int pid)
 }
 
 void
-mdb_server_process_child_event (ServerEventType message, guint32 pid, guint64 arg,
-				guint64 data1, guint64 data2, guint32 opt_data_size, gpointer opt_data)
+mdb_server_process_child_event (ServerEvent *e)
 {
 	Buffer buf;
 
-	buffer_init (&buf, 128 + opt_data_size);
+	buffer_init (&buf, 128 + e->opt_data_size);
 	buffer_add_byte (&buf, EVENT_KIND_TARGET_EVENT);
-	buffer_add_int (&buf, pid);
-	buffer_add_byte (&buf, message);
-	buffer_add_long (&buf, arg);
-	buffer_add_long (&buf, data1);
-	buffer_add_long (&buf, data2);
-	buffer_add_int (&buf, opt_data_size);
-	if (opt_data)
-		buffer_add_data (&buf, opt_data, opt_data_size);
+	buffer_add_int (&buf, e->sender_iid);
+	buffer_add_byte (&buf, e->type);
+	buffer_add_long (&buf, e->arg);
+	buffer_add_long (&buf, e->data1);
+	buffer_add_long (&buf, e->data2);
+	buffer_add_int (&buf, e->opt_data_size);
+	if (e->opt_data)
+		buffer_add_data (&buf, e->opt_data, e->opt_data_size);
 
 	debugger_mutex_lock (main_mutex);
 	send_packet (CMD_SET_EVENT, CMD_COMPOSITE, &buf);

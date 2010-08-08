@@ -4,6 +4,7 @@ using System.Text;
 using ST = System.Threading;
 using System.Configuration;
 using System.Collections;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Runtime.InteropServices;
 
@@ -17,6 +18,8 @@ namespace Mono.Debugger.Server
 		RemoteThreadManager manager;
 		ServerCapabilities capabilities;
 		ServerType server_type;
+
+		Dictionary<int,SingleSteppingEngine> sse_hash = new Dictionary<int,SingleSteppingEngine> ();
 
 		public RemoteDebuggerServer (Debugger debugger)
 		{
@@ -39,12 +42,20 @@ namespace Mono.Debugger.Server
 
 		void handle_event (Connection.EventInfo e)
 		{
-			Console.WriteLine ("EVENT: {0} {1}", e.EventKind, e.ReqId);
+			SingleSteppingEngine sse = null;
+			if (e.ReqId > 0)
+				sse = sse_hash [e.ReqId];
+
+			Console.WriteLine ("EVENT: {0} {1} {2}", e.EventKind, e.ReqId, sse);
 
 			switch (e.EventKind) {
 			case Connection.EventKind.TARGET_EVENT:
-				Console.WriteLine ("TARGET EVENT: {0}", e.ChildEvent);
-				manager.OnTargetEvent (e.ReqId, e.ChildEvent);
+				Console.WriteLine ("TARGET EVENT: {0} {1}", e.ChildEvent, sse);
+				try {
+					sse.ProcessEvent (e.ChildEvent);
+				} catch (Exception ex) {
+					Console.WriteLine ("ON TARGET EVENT EX: {0}", ex);
+				}
 				break;
 			default:
 				throw new InternalError ();
@@ -74,10 +85,14 @@ namespace Mono.Debugger.Server
 			return new RemoteBreakpointManager (this);
 		}
 
-		public override InferiorHandle CreateInferior (BreakpointManager breakpoint_manager)
+		public override InferiorHandle CreateInferior (SingleSteppingEngine sse, Inferior inferior,
+							       BreakpointManager breakpoint_manager)
 		{
 			var bpm = (RemoteBreakpointManager) breakpoint_manager;
-			return new RemoteInferior (connection.CreateInferior (bpm.IID));
+			int iid = connection.CreateInferior (bpm.IID);
+			sse_hash.Add (iid, sse);
+			Console.WriteLine ("CREATE INFERIOR: {0}", iid);
+			return new RemoteInferior (iid);
 		}
 
 		public override ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,

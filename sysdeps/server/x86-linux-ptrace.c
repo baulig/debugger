@@ -84,10 +84,10 @@ mdb_inferior_get_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
 	ServerCommandError result;
 	int i;
 
-	if (ptrace (PT_GETREGS, inferior->pid, NULL, regs->regs) != 0)
+	if (ptrace (PT_GETREGS, inferior->pid, NULL, &regs->regs) != 0)
 		return _server_ptrace_check_errno (inferior);
 
-	if (ptrace (PT_SETREGS, inferior->pid, NULL, regs->fpregs) != 0)
+	if (ptrace (PT_GETFPREGS, inferior->pid, NULL, &regs->fpregs) != 0)
 		return _server_ptrace_check_errno (inferior);
 
 	result = _ptrace_get_dr (inferior, DR_CONTROL, &regs->dr_control);
@@ -113,10 +113,10 @@ mdb_inferior_set_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
 	ServerCommandError result;
 	int i;
 
-	if (ptrace (PT_SETREGS, inferior->pid, NULL, regs->regs) != 0)
+	if (ptrace (PT_SETREGS, inferior->pid, NULL, &regs->regs) != 0)
 		return _server_ptrace_check_errno (inferior);
 
-	if (ptrace (PT_SETREGS, inferior->pid, NULL, regs->fpregs) != 0)
+	if (ptrace (PT_SETFPREGS, inferior->pid, NULL, &regs->fpregs) != 0)
 		return _server_ptrace_check_errno (inferior);
 
 	result = _ptrace_set_dr (inferior, DR_CONTROL, regs->dr_control);
@@ -243,7 +243,7 @@ _server_ptrace_setup_inferior (ServerHandle *handle)
 {
 	gchar *filename = g_strdup_printf ("/proc/%d/mem", handle->inferior->pid);
 
-	mdb_server_remove_hardware_breakpoints (handle);
+	// mdb_server_remove_hardware_breakpoints (handle);
 
 	handle->inferior->os.mem_fd = open64 (filename, O_RDONLY);
 

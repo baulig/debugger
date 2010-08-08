@@ -75,8 +75,8 @@ namespace Mono.Debugger.Backend
 		}
 
 		protected Inferior (ThreadManager thread_manager, Process process,
-				    ProcessStart start, BreakpointManager bpm,
-				    DebuggerErrorHandler error_handler,
+				    SingleSteppingEngine sse, ProcessStart start,
+				    BreakpointManager bpm, DebuggerErrorHandler error_handler,
 				    AddressDomain address_domain)
 		{
 			this.thread_manager = thread_manager;
@@ -88,21 +88,21 @@ namespace Mono.Debugger.Backend
 			this.address_domain = address_domain;
 
 			server = thread_manager.DebuggerServer;
-			inferior = server.CreateInferior (bpm);
+			inferior = server.CreateInferior (sse, this, bpm);
 		}
 
-		public static Inferior CreateInferior (ThreadManager thread_manager,
-						       Process process, ProcessStart start)
+		public static Inferior CreateInferior (ThreadManager thread_manager, Process process,
+						       SingleSteppingEngine sse, ProcessStart start)
 		{
 			return new Inferior (
-				thread_manager, process, start, process.BreakpointManager, null,
+				thread_manager, process, sse, start, process.BreakpointManager, null,
 				thread_manager.AddressDomain);
 		}
 
-		public Inferior CreateThread (int pid, bool do_attach)
+		public Inferior CreateThread (SingleSteppingEngine sse, int pid, bool do_attach)
 		{
 			Inferior inferior = new Inferior (
-				thread_manager, process, start, breakpoint_manager,
+				thread_manager, process, sse, start, breakpoint_manager,
 				error_handler, address_domain);
 
 			inferior.child_pid = pid;
