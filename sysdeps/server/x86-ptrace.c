@@ -173,6 +173,74 @@ mdb_server_write_memory (ServerHandle *handle, guint64 start, guint32 size, gcon
 	return mdb_inferior_write_memory (handle->inferior, start, size, buffer);
 }
 
+static ServerEvent *
+handle_extended_event (int pid, int status)
+{
+	ServerEvent *e;
+
+	if ((status >> 16) == 0)
+		return NULL;
+
+	e = g_new0 (ServerEvent, 1);
+
+	switch (status >> 16) {
+	case PTRACE_EVENT_CLONE: {
+		int new_pid;
+
+		if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &new_pid)) {
+			g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
+			e->type = SERVER_EVENT_UNKNOWN_ERROR;
+			return e;
+		}
+
+		e->type = SERVER_EVENT_CHILD_CREATED_THREAD;
+		e->arg = new_pid;
+		return e;
+	}
+
+	case PTRACE_EVENT_FORK: {
+		int new_pid;
+
+		if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &new_pid)) {
+			g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
+			e->type = SERVER_EVENT_UNKNOWN_ERROR;
+			return e;
+		}
+
+		e->type = SERVER_EVENT_CHILD_FORKED;
+		e->arg = new_pid;
+		return e;
+	}
+
+	case PTRACE_EVENT_EXEC: {
+		e = g_new0 (ServerEvent, 1);
+		e->type = SERVER_EVENT_CHILD_EXECD;
+		return e;
+	}
+
+	case PTRACE_EVENT_EXIT: {
+		int exitcode;
+
+		if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &exitcode)) {
+			g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
+			e->type = SERVER_EVENT_UNKNOWN_ERROR;
+			return e;
+		}
+
+		e->type = SERVER_EVENT_CHILD_CALLED_EXIT;
+		e->arg = exitcode;
+		return e;
+	}
+
+	default:
+		g_warning (G_STRLOC ": Received unknown wait result %x on child %d", status, pid);
+		e->type = SERVER_EVENT_UNKNOWN_ERROR;
+		e->arg = pid;
+		return e;
+	}
+}
+
+
 #ifndef MDB_SERVER
 
 static ServerEventType
@@ -433,74 +501,33 @@ mdb_server_handle_wait_event (void)
 		return NULL;
 	}
 
-	e = g_new0 (ServerEvent, 1);
-	e->sender_iid = server->iid;
-
 	if (WIFSTOPPED (status)) {
 #if __MACH__
 		server->inferior->os.wants_to_run = FALSE;
 #endif
-		ChildStoppedAction action;
 		int stopsig;
 
 		stopsig = WSTOPSIG (status);
 		if (stopsig == SIGCONT)
 			stopsig = 0;
 
-		action = mdb_arch_child_stopped (
-			server, stopsig, &e->arg, &e->data1, &e->data2, &e->opt_data_size, &e->opt_data);
-
-		if (action != STOP_ACTION_STOPPED)
-			server->inferior->last_signal = 0;
-
-		switch (action) {
-		case STOP_ACTION_STOPPED:
-			if (stopsig == SIGTRAP) {
-				server->inferior->last_signal = 0;
-				e->arg = 0;
-			} else {
-				server->inferior->last_signal = stopsig;
-				e->arg = stopsig;
-			}
-			e->type = SERVER_EVENT_CHILD_STOPPED;
-			return e;
-
-		case STOP_ACTION_INTERRUPTED:
-			e->arg = 0;
+		if (stopsig == SIGSTOP) {
 			e->type = SERVER_EVENT_CHILD_INTERRUPTED;
-			return e;
-
-		case STOP_ACTION_BREAKPOINT_HIT:
-			e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
-			return e;
-
-		case STOP_ACTION_CALLBACK:
-			e->type = SERVER_EVENT_CHILD_CALLBACK;
-			return e;
-
-		case STOP_ACTION_CALLBACK_COMPLETED:
-			e->type = SERVER_EVENT_CHILD_CALLBACK_COMPLETED;
-			return e;
-
-		case STOP_ACTION_NOTIFICATION:
-			e->type = SERVER_EVENT_CHILD_NOTIFICATION;
-			return e;
-
-		case STOP_ACTION_RTI_DONE:
-			e->type = SERVER_EVENT_RUNTIME_INVOKE_DONE;
-			return e;
-
-		case STOP_ACTION_INTERNAL_ERROR:
-			e->type = SERVER_EVENT_INTERNAL_ERROR;
 			return e;
 		}
 
-		g_assert_not_reached ();
+		return mdb_arch_child_stopped_2 (server, stopsig);
 	} else if (WIFEXITED (status)) {
+		e = g_new0 (ServerEvent, 1);
+		e->sender_iid = server->iid;
+
 		e->type = SERVER_EVENT_CHILD_EXITED;
 		e->arg = WEXITSTATUS (status);
 		return e;
 	} else if (WIFSIGNALED (status)) {
+		e = g_new0 (ServerEvent, 1);
+		e->sender_iid = server->iid;
+
 		if ((WTERMSIG (status) == SIGTRAP) || (WTERMSIG (status) == SIGKILL)) {
 			e->type = SERVER_EVENT_CHILD_EXITED;
 			e->arg = 0;
@@ -513,6 +540,9 @@ mdb_server_handle_wait_event (void)
 	}
 
 	g_warning (G_STRLOC ": Got unknown waitpid() result: %x", status);
+
+	e = g_new0 (ServerEvent, 1);
+	e->sender_iid = server->iid;
 
 	e->type = SERVER_EVENT_UNKNOWN_ERROR;
 	e->arg = status;

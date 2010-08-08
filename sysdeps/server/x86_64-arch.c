@@ -230,6 +230,178 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig,
 	return STOP_ACTION_STOPPED;
 }
 
+ServerEvent *
+mdb_arch_child_stopped_2 (ServerHandle *server, int stopsig)
+{
+	ArchInfo *arch = server->arch;
+	InferiorHandle *inferior = server->inferior;
+	CodeBufferData *cbuffer = NULL;
+	CallbackData *cdata;
+	ServerEvent *e;
+	guint64 code;
+	int i;
+
+	mdb_arch_get_registers (server);
+
+	e = g_new0 (ServerEvent, 1);
+	e->sender_iid = server->iid;
+	e->type = SERVER_EVENT_CHILD_STOPPED;
+
+	/*
+	 * By default, when the NX-flag is set in the BIOS, we stop at the `cdata->call_address'
+	 * (which contains an `int 3' instruction) with a SIGSEGV.
+	 *
+	 * When the NX-flag is turned off, that `int 3' instruction is actually executed and we
+	 * stop normally.
+	 */
+
+	cdata = get_callback_data (arch);
+	if (cdata &&
+	    (((stopsig == SIGSEGV) && (cdata->call_address == INFERIOR_REG_RIP (arch->current_regs))) ||
+	     (cdata->call_address == INFERIOR_REG_RIP (arch->current_regs) - 1))) {
+		if (cdata->pushed_registers) {
+			guint64 pushed_regs [13];
+
+			if (mdb_inferior_read_memory (inferior, cdata->pushed_registers, 104, &pushed_regs))
+				g_error (G_STRLOC ": Can't restore registers after returning from a call");
+
+			INFERIOR_REG_RAX (cdata->saved_regs) = pushed_regs [0];
+			INFERIOR_REG_RBX (cdata->saved_regs) = pushed_regs [1];
+			INFERIOR_REG_RCX (cdata->saved_regs) = pushed_regs [2];
+			INFERIOR_REG_RDX (cdata->saved_regs) = pushed_regs [3];
+			INFERIOR_REG_RBP (cdata->saved_regs) = pushed_regs [4];
+			INFERIOR_REG_RSP (cdata->saved_regs) = pushed_regs [5];
+			INFERIOR_REG_RSI (cdata->saved_regs) = pushed_regs [6];
+			INFERIOR_REG_RDI (cdata->saved_regs) = pushed_regs [7];
+			INFERIOR_REG_RIP (cdata->saved_regs) = pushed_regs [8];
+			INFERIOR_REG_R12 (cdata->saved_regs) = pushed_regs [9];
+			INFERIOR_REG_R13 (cdata->saved_regs) = pushed_regs [10];
+			INFERIOR_REG_R14 (cdata->saved_regs) = pushed_regs [11];
+			INFERIOR_REG_R15 (cdata->saved_regs) = pushed_regs [12];
+		}
+
+		if (mdb_inferior_set_registers (inferior, &cdata->saved_regs) != COMMAND_ERROR_NONE)
+			g_error (G_STRLOC ": Can't restore registers after returning from a call");
+
+		e->arg = cdata->callback_argument;
+		e->data1 = INFERIOR_REG_RAX (arch->current_regs);
+
+		if (cdata->data_pointer) {
+			e->opt_data_size = cdata->data_size;
+			e->opt_data = g_malloc0 (cdata->data_size);
+
+			if (mdb_inferior_read_memory (inferior, cdata->data_pointer, cdata->data_size, e->opt_data))
+				g_error (G_STRLOC ": Can't read data buffer after returning from a call");
+		}
+
+		if (cdata->exc_address &&
+		    (mdb_inferior_peek_word (inferior, cdata->exc_address, &e->data2) != COMMAND_ERROR_NONE))
+			g_error (G_STRLOC ": Can't get exc object");
+
+		_mdb_inferior_set_last_signal (inferior, cdata->saved_signal);
+		g_ptr_array_remove (arch->callback_stack, cdata);
+
+		mdb_arch_get_registers (server);
+
+		if (cdata->is_rti) {
+			g_free (cdata);
+			e->type = SERVER_EVENT_RUNTIME_INVOKE_DONE;
+			return e;
+		}
+
+		if (cdata->debug) {
+			e->data1 = 0;
+			g_free (cdata);
+			e->type = SERVER_EVENT_CHILD_CALLBACK_COMPLETED;
+			return e;
+		}
+
+		g_free (cdata);
+		e->type = SERVER_EVENT_CHILD_CALLBACK;
+		return e;
+	}
+
+	if (stopsig != SIGTRAP) {
+		_mdb_inferior_set_last_signal (server->inferior, stopsig);
+		e->arg = stopsig;
+		return e;
+	}
+
+	if (server->mono_runtime &&
+	    (INFERIOR_REG_RIP (arch->current_regs) - 1 == server->mono_runtime->notification_address)) {
+		e->arg = INFERIOR_REG_RDI (arch->current_regs);
+		e->data1 = INFERIOR_REG_RSI (arch->current_regs);
+		e->data2 = INFERIOR_REG_RDX (arch->current_regs);
+		e->type = SERVER_EVENT_CHILD_NOTIFICATION;
+		return e;
+	}
+
+	for (i = 0; i < DR_NADDR; i++) {
+		if (X86_DR_WATCH_HIT (arch->current_regs, i)) {
+			INFERIOR_REG_DR_STATUS (arch->current_regs) = 0;
+			mdb_inferior_set_registers (inferior, &arch->current_regs);
+			e->arg = arch->dr_index [i];
+			e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
+			return e;
+		}
+	}
+
+	if (mdb_arch_check_breakpoint (server, INFERIOR_REG_RIP (arch->current_regs) - 1, &e->arg)) {
+		INFERIOR_REG_RIP (arch->current_regs)--;
+		mdb_inferior_set_registers (inferior, &arch->current_regs);
+		e->arg = 0;
+		e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
+		return e;
+	}
+
+	cbuffer = arch->code_buffer;
+	if (cbuffer) {
+		server->mono_runtime->executable_code_bitfield [cbuffer->slot] = 0;
+
+		if (cbuffer->code_address + cbuffer->insn_size != INFERIOR_REG_RIP (arch->current_regs)) {
+			char buffer [1024];
+
+			g_warning (G_STRLOC ": %d - %lx,%d - %lx - %lx", cbuffer->slot,
+				   (long) cbuffer->code_address, cbuffer->insn_size,
+				   (long) cbuffer->code_address + cbuffer->insn_size,
+				   INFERIOR_REG_RIP (arch->current_regs));
+
+			mdb_inferior_read_memory (inferior, cbuffer->code_address, 8, buffer);
+			g_warning (G_STRLOC ": %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx",
+				   buffer [0], buffer [1], buffer [2], buffer [3], buffer [4],
+				   buffer [5], buffer [6], buffer [7]);
+
+			e->type = SERVER_EVENT_INTERNAL_ERROR;
+			return e;
+		}
+
+		INFERIOR_REG_RIP (arch->current_regs) = cbuffer->original_rip;
+		if (cbuffer->update_ip)
+			INFERIOR_REG_RIP (arch->current_regs) += cbuffer->insn_size;
+		if (mdb_inferior_set_registers (inferior, &arch->current_regs) != COMMAND_ERROR_NONE) {
+			g_warning (G_STRLOC ": Can't restore registers");
+			e->type = SERVER_EVENT_INTERNAL_ERROR;
+			return e;
+		}
+
+		g_free (cbuffer);
+		arch->code_buffer = NULL;
+		e->type = SERVER_EVENT_CHILD_STOPPED;
+		return e;
+	}
+
+	if (mdb_inferior_peek_word (inferior, GPOINTER_TO_UINT(INFERIOR_REG_RIP (arch->current_regs) - 1), &code) != COMMAND_ERROR_NONE)
+		return e;
+
+	if ((code & 0xff) == 0xcc) {
+		e->arg = 0;
+		e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
+		return e;
+	}
+
+	return e;
+}
+
 ServerCommandError
 mdb_server_get_registers (ServerHandle *handle, guint64 *values)
 {
