@@ -166,13 +166,6 @@ mdb_server_write_memory (ServerHandle *handle, guint64 start, guint32 size, gcon
 	return mdb_inferior_write_memory (handle->inferior, start, size, buffer);
 }
 
-ServerCommandError
-mdb_server_count_registers (ServerHandle *server, guint32 *out_count)
-{
-	*out_count = DEBUGGER_REG_LAST;
-	return COMMAND_ERROR_NONE;
-}
-
 static ServerStatusMessageType
 mdb_server_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg,
 			      guint64 *data1, guint64 *data2, guint32 *opt_data_size,
@@ -375,10 +368,10 @@ child_setup_func (InferiorHandle *inferior)
 	}
 }
 
-static ServerCommandError
+ServerCommandError
 mdb_server_spawn (ServerHandle *handle, const gchar *working_directory,
-		     const gchar **argv, const gchar **envp, gboolean redirect_fds,
-		     gint *child_pid, IOThreadData **io_data, gchar **error)
+		  const gchar **argv, const gchar **envp, gboolean redirect_fds,
+		  gint *child_pid, IOThreadData **io_data, gchar **error)
 {	
 	InferiorHandle *inferior = handle->inferior;
 	int fd[2], ret, len, i;

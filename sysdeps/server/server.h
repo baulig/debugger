@@ -171,6 +171,11 @@ mdb_server_detach_after_fork (ServerHandle *handle);
 extern ServerCommandError
 mdb_server_count_registers (ServerHandle *server, guint32 *out_count);
 
+extern ServerCommandError
+mdb_server_spawn (ServerHandle *handle, const gchar *working_directory,
+		  const gchar **argv, const gchar **envp, gboolean redirect_fds,
+		  gint *child_pid, IOThreadData **io_data, gchar **error);
+
 /*
  * Arch-specific methods
  */
@@ -183,6 +188,12 @@ mdb_arch_finalize (ArchInfo *arch);
 
 extern ServerCommandError
 mdb_arch_get_registers (ServerHandle *server);
+
+extern gboolean
+mdb_arch_check_breakpoint (ServerHandle *server, guint64 address, guint64 *retval);
+
+extern BreakpointInfo *
+mdb_arch_lookup_breakpoint (ServerHandle *server, guint32 idx, BreakpointManager **out_bpm);
 
 extern ChildStoppedAction
 mdb_arch_child_stopped (ServerHandle *server, int stopsig,

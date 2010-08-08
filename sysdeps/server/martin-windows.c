@@ -11,6 +11,8 @@
 #include <bfd.h>
 #include <dis-asm.h>
 
+#include "i386-arch.h"
+
 typedef struct
 {
 	HANDLE process_handle;
@@ -28,30 +30,11 @@ struct InferiorHandle
 	ProcessHandle *process;
 	HANDLE thread_handle;
 	DWORD thread_id;
-	CONTEXT current_context;
+	INFERIOR_REGS_TYPE current_regs;
 };
 
 static GHashTable *server_hash; // thread id -> ServerHandle *
 static GHashTable *bfd_hash; // filename -> MdbExeReader *
-
-#define INFERIOR_REG_EIP(r)	r.Eip
-#define INFERIOR_REG_ESP(r)	r.Esp
-#define INFERIOR_REG_EBP(r)	r.Ebp
-#define INFERIOR_REG_EAX(r)	r.Eax
-#define INFERIOR_REG_EBX(r)	r.Ebx
-#define INFERIOR_REG_ECX(r)	r.Ecx
-#define INFERIOR_REG_EDX(r)	r.Edx
-#define INFERIOR_REG_ESI(r)	r.Esi
-#define INFERIOR_REG_EDI(r)	r.Edi
-#define INFERIOR_REG_EFLAGS(r)	r.EFlags
-#define INFERIOR_REG_ESP(r)	r.Esp
-
-#define INFERIOR_REG_FS(r)	r.SegFs
-#define INFERIOR_REG_ES(r)	r.SegEs
-#define INFERIOR_REG_DS(r)	r.SegDs
-#define INFERIOR_REG_CS(r)	r.SegCs
-#define INFERIOR_REG_SS(r)	r.SegSs
-#define INFERIOR_REG_GS(r)	r.SegGs
 
 #define DEBUG_EVENT_WAIT_TIMEOUT 5000
 #define BP_OPCODE 0xCC  /* INT 3 instruction */
@@ -66,13 +49,6 @@ static HANDLE command_mutex;
 static InferiorDelegate *inferior_delegate;
 
 static DWORD WINAPI debugging_thread_main (LPVOID dummy_arg);
-
-static BOOL win32_get_registers (InferiorHandle *inferior);
-static BOOL win32_set_registers (InferiorHandle *inferior);
-static BOOL read_from_debuggee (ProcessHandle *process, LPVOID start, LPVOID buf, DWORD size, PDWORD read_bytes);
-
-static BOOL check_breakpoint (ServerHandle *server, guint64 address, guint64 *retval);
-static BreakpointInfo *lookup_breakpoint (ServerHandle *server, guint32 idx, BreakpointManager **out_bpm);
 
 static gchar *
 tstring_to_string (const TCHAR *string)
@@ -115,7 +91,7 @@ get_last_error (void)
 }
 
 static void
-server_win32_global_init (void)
+mdb_server_global_init (void)
 {
 	server_hash = g_hash_table_new (NULL, NULL);
 	bfd_hash = g_hash_table_new (NULL, NULL);
@@ -304,11 +280,11 @@ handle_debug_event (DEBUG_EVENT *de)
 		if (exception_code == EXCEPTION_BREAKPOINT) {
 			guint64 arg = 0;
 
-			win32_get_registers (inferior);
+			mdb_arch_get_registers (server);
 
-			if (check_breakpoint (server, INFERIOR_REG_EIP (inferior->current_context) - 1, &arg)) {
-				INFERIOR_REG_EIP (inferior->current_context)--;
-				win32_set_registers (inferior);
+			if (mdb_arch_check_breakpoint (server, INFERIOR_REG_RIP (inferior->current_regs) - 1, &arg)) {
+				INFERIOR_REG_RIP (inferior->current_regs)--;
+				mdb_inferior_set_registers (inferior, &inferior->current_regs);
 				mdb_server_process_child_event (MESSAGE_CHILD_HIT_BREAKPOINT, de->dwProcessId, arg, 0, 0, 0, NULL);
 			} else {
 				mdb_server_process_child_event (MESSAGE_CHILD_STOPPED, de->dwProcessId, 0, 0, 0, 0, NULL);
@@ -382,19 +358,22 @@ handle_debug_event (DEBUG_EVENT *de)
 			char buf [1024];
 			DWORD exc_code;
 
-			if (!read_from_debuggee (process, de->u.LoadDll.lpImageName, &exc_code, 4, NULL) || !exc_code)
+			if (mdb_inferior_read_memory (inferior, GPOINTER_TO_UINT (de->u.LoadDll.lpImageName), 4, &exc_code))
+				break;
+
+			if (!exc_code)
 				break;
 
 			if (de->u.LoadDll.fUnicode) {
 				wchar_t w_buf [1024];
 				size_t ret;
 
-				if (!read_from_debuggee (server->inferior->process, (LPVOID) exc_code, w_buf, 300, NULL))
+				if (mdb_inferior_read_memory (server->inferior, exc_code, 300, w_buf))
 					break;
 
 				ret = wcstombs (buf, w_buf, 300);
 			} else {
-				if (!read_from_debuggee (server->inferior->process, (LPVOID) exc_code, buf, 300, NULL))
+				if (mdb_inferior_read_memory (server->inferior, exc_code, 300, buf))
 					break;
 			}
 
@@ -448,24 +427,25 @@ debugging_thread_main (LPVOID dummy_arg)
 	return 0;
 }
 
-static ServerType
-server_win32_get_server_type (void)
+ServerType
+mdb_server_get_server_type (void)
 {
 	return SERVER_TYPE_WIN32;
 }
 
-static ServerCapabilities
-server_win32_get_capabilities (void)
+ServerCapabilities
+mdb_server_get_capabilities (void)
 {
 	return SERVER_CAPABILITIES_NONE;
 }
 
 static ServerHandle *
-server_win32_create_inferior (BreakpointManager *bpm)
+mdb_server_create_inferior (BreakpointManager *bpm)
 {
 	ServerHandle *handle = g_new0 (ServerHandle, 1);
 
 	handle->bpm = bpm;
+	handle->arch = mdb_arch_initialize ();
 	handle->inferior = g_new0 (InferiorHandle, 1);
 	handle->inferior->process = g_new0 (ProcessHandle, 1);
 
@@ -473,27 +453,15 @@ server_win32_create_inferior (BreakpointManager *bpm)
 }
 
 static ServerCommandError
-server_win32_initialize_process (ServerHandle *handle)
+mdb_server_initialize_process (ServerHandle *handle)
 {
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
-server_win32_get_target_info (guint32 *target_int_size, guint32 *target_long_size,
-			      guint32 *target_address_size, guint32 *is_bigendian)
-{
-	*target_int_size = sizeof (guint32);
-	*target_long_size = sizeof (guint32);
-	*target_address_size = sizeof (void *);
-	*is_bigendian = 0;
-
-	return COMMAND_ERROR_NONE;
-}
-
-static ServerCommandError
-server_win32_spawn (ServerHandle *server, const gchar *working_directory,
-		    const gchar **argv, const gchar **envp, gboolean redirect_fds,
-		    gint *child_pid, IOThreadData **io_data, gchar **error)
+ServerCommandError
+mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
+		  const gchar **argv, const gchar **envp, gboolean redirect_fds,
+		  gint *child_pid, IOThreadData **io_data, gchar **error)
 {
 	gunichar2* utf16_argv = NULL;
 	gunichar2* utf16_envp = NULL;
@@ -614,82 +582,110 @@ server_win32_spawn (ServerHandle *server, const gchar *working_directory,
 	return COMMAND_ERROR_NONE;
 }
 
-static BOOL
-win32_get_registers (InferiorHandle *inferior)
+ServerCommandError
+mdb_inferior_get_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
 {
-	memset (&inferior->current_context, 0, sizeof (inferior->current_context));
-	inferior->current_context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS | CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS;
+	memset (regs, 0, sizeof (regs));
+	regs->context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS |
+		CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS | CONTEXT_DEBUG_REGISTERS;
 
-	return GetThreadContext (inferior->thread_handle, &inferior->current_context);
-}
+	if (!GetThreadContext (inferior->thread_handle, &regs->context))
+		return COMMAND_ERROR_MEMORY_ACCESS;
 
-static BOOL
-win32_set_registers (InferiorHandle *inferior)
-{
-	return SetThreadContext (inferior->thread_handle, &inferior->current_context);
-}
-
-static ServerCommandError
-server_win32_get_frame (ServerHandle *handle, StackFrame *frame)
-{
-	if (!win32_get_registers (handle->inferior))
-		return COMMAND_ERROR_UNKNOWN_ERROR;
-
-	frame->address = (guint32) INFERIOR_REG_EIP (handle->inferior->current_context);
-	frame->stack_pointer = (guint32) INFERIOR_REG_ESP (handle->inferior->current_context);
-	frame->frame_address = (guint32) INFERIOR_REG_EBP (handle->inferior->current_context);
-
-	g_message (G_STRLOC ": %Lx - %Lx - %Lx", frame->address, frame->stack_pointer, frame->frame_address);
+	regs->dr_status = regs->context.Dr6;
+	regs->dr_control = regs->context.Dr7;
+	regs->dr_regs[0] = regs->context.Dr0;
+	regs->dr_regs[1] = regs->context.Dr1;
+	regs->dr_regs[2] = regs->context.Dr2;
+	regs->dr_regs[3] = regs->context.Dr3;
 
 	return COMMAND_ERROR_NONE;
 }
 
-static BOOL
-read_from_debuggee (ProcessHandle *process, LPVOID start, LPVOID buf, DWORD size, PDWORD read_bytes)
+ServerCommandError
+mdb_inferior_set_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
+{
+	regs->context.Dr6 = regs->dr_status;
+	regs->context.Dr7 = regs->dr_control;
+	regs->context.Dr0 = regs->dr_regs[0];
+	regs->context.Dr1 = regs->dr_regs[1];
+	regs->context.Dr2 = regs->dr_regs[2];
+	regs->context.Dr3 = regs->dr_regs[3];
+
+	regs->context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS |
+		CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS | CONTEXT_DEBUG_REGISTERS;
+
+	if (!SetThreadContext (inferior->thread_handle, &regs->context))
+		return COMMAND_ERROR_MEMORY_ACCESS;
+
+	return COMMAND_ERROR_NONE;
+}
+
+static ServerCommandError
+mdb_process_read_memory (ProcessHandle *process, guint64 start, guint32 size, gpointer buffer)
 {
 	SetLastError (0);
-	if (!ReadProcessMemory (process->process_handle, start, buf, size, read_bytes)) {
+	if (!ReadProcessMemory (process->process_handle, GINT_TO_POINTER ((guint) start), buffer, size, NULL)) {
 		g_warning (G_STRLOC ": %p/%d - %s", start, size, get_last_error ());
-		return FALSE;
+		return COMMAND_ERROR_MEMORY_ACCESS;
 	}
 
-	return TRUE;
+	return COMMAND_ERROR_NONE;
 }
 
-static BOOL
-write_to_debuggee (ProcessHandle *process, LPVOID start, LPVOID buf, DWORD size, PDWORD read_bytes)
+extern ServerCommandError
+mdb_inferior_read_memory (InferiorHandle *inferior, guint64 start, guint32 size, gpointer buffer)
+{
+	return mdb_process_read_memory (inferior->process, start, size, buffer);
+}
+
+extern ServerCommandError
+mdb_inferior_write_memory (InferiorHandle *inferior, guint64 start, guint32 size, gconstpointer buffer)
 {
 	SetLastError (0);
-	if (!WriteProcessMemory (process->process_handle, start, buf, size, read_bytes)) {
+	if (!WriteProcessMemory (inferior->process->process_handle, GINT_TO_POINTER ((guint32) start), buffer, size, NULL)) {
 		g_warning (G_STRLOC ": %s", get_last_error ());
-		return FALSE;
+		return COMMAND_ERROR_MEMORY_ACCESS;
 	}
 
-	if (!FlushInstructionCache (process->process_handle, start, size)) {
+	if (!FlushInstructionCache (inferior->process->process_handle, GINT_TO_POINTER ((guint32) start), size)) {
 		g_warning (G_STRLOC ": %s", get_last_error ());
-		return FALSE;
+		return COMMAND_ERROR_MEMORY_ACCESS;
 	}
 
-	return TRUE;
+	return COMMAND_ERROR_NONE;
 }
 
 
-static ServerCommandError
-server_win32_read_memory (ServerHandle *server, guint64 start, guint32 size, gpointer buffer)
+ServerCommandError
+mdb_server_read_memory (ServerHandle *server, guint64 start, guint32 size, gpointer buffer)
 {
-	if (!read_from_debuggee (server->inferior->process, GINT_TO_POINTER (start), buffer, size, NULL))
+	if (mdb_inferior_read_memory (server->inferior, start, size, buffer))
+		return COMMAND_ERROR_MEMORY_ACCESS;
+
+	mdb_server_remove_breakpoints_from_target_memory (server, start, size, buffer);
+	return COMMAND_ERROR_NONE;
+}
+
+ServerCommandError
+mdb_server_write_memory (ServerHandle *server, guint64 start, guint32 size, gconstpointer buffer)
+{
+	if (mdb_inferior_write_memory (server->inferior, start, size, buffer));
 		return COMMAND_ERROR_MEMORY_ACCESS;
 
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
-server_win32_write_memory (ServerHandle *server, guint64 start, guint32 size, gconstpointer buffer)
+ServerCommandError
+mdb_inferior_peek_word (InferiorHandle *inferior, guint64 start, guint64 *retval)
 {
-	if (!write_to_debuggee (server->inferior->process, GINT_TO_POINTER (start), buffer, size, NULL))
-		return COMMAND_ERROR_MEMORY_ACCESS;
+	return mdb_inferior_read_memory (inferior, start, sizeof (gsize), retval);
+}
 
-	return COMMAND_ERROR_NONE;
+ServerCommandError
+mdb_inferior_poke_word (InferiorHandle *inferior, guint64 start, gsize word)
+{
+	return mdb_inferior_write_memory (inferior, start, sizeof (gsize), &word);
 }
 
 static BOOL
@@ -717,8 +713,8 @@ set_step_flag (InferiorHandle *inferior, BOOL on)
 	return TRUE;
 }
 
-static ServerCommandError
-server_win32_step (ServerHandle *server)
+ServerCommandError
+mdb_server_step (ServerHandle *server)
 {
 	InferiorHandle *inferior = server->inferior;
 
@@ -734,8 +730,8 @@ server_win32_step (ServerHandle *server)
 	return COMMAND_ERROR_NONE;
 }
 
-static ServerCommandError
-server_win32_continue (ServerHandle *server)
+ServerCommandError
+mdb_server_continue (ServerHandle *server)
 {
 	InferiorHandle *inferior = server->inferior;
 
@@ -751,264 +747,9 @@ server_win32_continue (ServerHandle *server)
 	return COMMAND_ERROR_NONE;
 }
 
-static BOOL
-check_breakpoint (ServerHandle *server, guint64 address, guint64 *retval)
-{
-	BreakpointInfo *info;
-
-	mono_debugger_breakpoint_manager_lock ();
-	info = (BreakpointInfo *) mono_debugger_breakpoint_manager_lookup (server->bpm, address);
-	if (!info || !info->enabled) {
-		mono_debugger_breakpoint_manager_unlock ();
-		return FALSE;
-	}
-
-	*retval = info->id;
-	mono_debugger_breakpoint_manager_unlock ();
-	return TRUE;
-}
-
-static BreakpointInfo *
-lookup_breakpoint (ServerHandle *server, guint32 idx, BreakpointManager **out_bpm)
-{
-	BreakpointInfo *info;
-
-	mono_debugger_breakpoint_manager_lock ();
-	info = (BreakpointInfo *) mono_debugger_breakpoint_manager_lookup_by_id (server->bpm, idx);
-	if (info) {
-		if (out_bpm)
-			*out_bpm = server->bpm;
-		mono_debugger_breakpoint_manager_unlock ();
-		return info;
-	}
-
-	if (out_bpm)
-		*out_bpm = NULL;
-
-	mono_debugger_breakpoint_manager_unlock ();
-	return info;
-}
-
-static ServerCommandError
-x86_arch_enable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
-{
-	ServerCommandError result;
-	char bopcode = 0xcc;
-	guint32 address;
-
-	if (breakpoint->enabled)
-		return COMMAND_ERROR_NONE;
-
-	address = (guint32) breakpoint->address;
-
-	result = server_win32_read_memory (server, address, 1, &breakpoint->saved_insn);
-	if (result != COMMAND_ERROR_NONE)
-		return result;
-
-	result = server_win32_write_memory (server, address, 1, &bopcode);
-	if (result != COMMAND_ERROR_NONE)
-		return result;
-
-	return COMMAND_ERROR_NONE;
-}
-
-static ServerCommandError
-x86_arch_disable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
-{
-	ServerCommandError result;
-	guint32 address;
-
-	if (!breakpoint->enabled)
-		return COMMAND_ERROR_NONE;
-
-	address = (guint32) breakpoint->address;
-
-	result = server_win32_write_memory (server, address, 1, &breakpoint->saved_insn);
-	if (result != COMMAND_ERROR_NONE)
-		return result;
-
-	return COMMAND_ERROR_NONE;
-}
-
-static ServerCommandError
-server_win32_insert_breakpoint (ServerHandle *server, guint64 address, guint32 *bhandle)
-{
-	BreakpointInfo *breakpoint;
-	ServerCommandError result;
-
-	g_message (G_STRLOC ": insert breakpoint: %Lx", address);
-
-	mono_debugger_breakpoint_manager_lock ();
-	breakpoint = (BreakpointInfo *) mono_debugger_breakpoint_manager_lookup (server->bpm, address);
-	if (breakpoint) {
-		/*
-		 * You cannot have a hardware breakpoint and a normal breakpoint on the same
-		 * instruction.
-		 */
-		if (breakpoint->is_hardware_bpt) {
-			mono_debugger_breakpoint_manager_unlock ();
-			return COMMAND_ERROR_DR_OCCUPIED;
-		}
-
-		breakpoint->refcount++;
-		goto done;
-	}
-
-	breakpoint = g_new0 (BreakpointInfo, 1);
-
-	breakpoint->refcount = 1;
-	breakpoint->address = address;
-	breakpoint->is_hardware_bpt = FALSE;
-	breakpoint->id = mono_debugger_breakpoint_manager_get_next_id ();
-	breakpoint->dr_index = -1;
-
-	result = x86_arch_enable_breakpoint (server, breakpoint);
-	if (result != COMMAND_ERROR_NONE) {
-		mono_debugger_breakpoint_manager_unlock ();
-		g_free (breakpoint);
-		return result;
-	}
-
-	breakpoint->enabled = TRUE;
-	mono_debugger_breakpoint_manager_insert (server->bpm, (BreakpointInfo *) breakpoint);
- done:
-	*bhandle = breakpoint->id;
-	mono_debugger_breakpoint_manager_unlock ();
-
-	return COMMAND_ERROR_NONE;
-}
-
-static ServerCommandError
-server_win32_remove_breakpoint (ServerHandle *server, guint32 idx)
-{
-	BreakpointManager *bpm;
-	BreakpointInfo *breakpoint;
-	ServerCommandError result;
-
-	mono_debugger_breakpoint_manager_lock ();
-	breakpoint = lookup_breakpoint (server, idx, &bpm);
-	if (!breakpoint) {
-		result = COMMAND_ERROR_NO_SUCH_BREAKPOINT;
-		goto out;
-	}
-
-	if (--breakpoint->refcount > 0) {
-		result = COMMAND_ERROR_NONE;
-		goto out;
-	}
-
-	result = x86_arch_disable_breakpoint (server, breakpoint);
-	if (result != COMMAND_ERROR_NONE)
-		goto out;
-
-	breakpoint->enabled = FALSE;
-	mono_debugger_breakpoint_manager_remove (bpm, breakpoint);
-
- out:
-	mono_debugger_breakpoint_manager_unlock ();
-	return result;
-}
-
-static ServerCommandError
-server_win32_enable_breakpoint (ServerHandle *server, guint32 idx)
-{
-	BreakpointInfo *breakpoint;
-	ServerCommandError result;
-
-	mono_debugger_breakpoint_manager_lock ();
-	breakpoint = lookup_breakpoint (server, idx, NULL);
-	if (!breakpoint) {
-		mono_debugger_breakpoint_manager_unlock ();
-		return COMMAND_ERROR_NO_SUCH_BREAKPOINT;
-	}
-
-	result = x86_arch_enable_breakpoint (server, breakpoint);
-	breakpoint->enabled = TRUE;
-	mono_debugger_breakpoint_manager_unlock ();
-	return result;
-}
-
-static ServerCommandError
-server_win32_disable_breakpoint (ServerHandle *server, guint32 idx)
-{
-	BreakpointInfo *breakpoint;
-	ServerCommandError result;
-
-	mono_debugger_breakpoint_manager_lock ();
-	breakpoint = lookup_breakpoint (server, idx, NULL);
-	if (!breakpoint) {
-		mono_debugger_breakpoint_manager_unlock ();
-		return COMMAND_ERROR_NO_SUCH_BREAKPOINT;
-	}
-
-	result = x86_arch_disable_breakpoint (server, breakpoint);
-	breakpoint->enabled = FALSE;
-	mono_debugger_breakpoint_manager_unlock ();
-	return result;
-}
-
-static ServerCommandError
-server_win32_get_breakpoints (ServerHandle *handle, guint32 *count, guint32 **retval)
-{
-	int i;
-	GPtrArray *breakpoints;
-
-	mono_debugger_breakpoint_manager_lock ();
-	breakpoints = mono_debugger_breakpoint_manager_get_breakpoints (handle->bpm);
-	*count = breakpoints->len;
-	*retval = g_new0 (guint32, breakpoints->len);
-
-	for (i = 0; i < breakpoints->len; i++) {
-		BreakpointInfo *info = g_ptr_array_index (breakpoints, i);
-
-		 (*retval) [i] = info->id;
-	}
-	mono_debugger_breakpoint_manager_unlock ();
-
-	return COMMAND_ERROR_NONE;	
-}
-
-static ServerCommandError
-server_win32_count_registers (ServerHandle *server, guint32 *out_count)
-{
-	*out_count = DEBUGGER_REG_LAST;
-	return COMMAND_ERROR_NONE;
-}
-
-static ServerCommandError
-server_win32_get_registers (ServerHandle *handle, guint64 *values) 
-{
-	InferiorHandle *inferior = handle->inferior;
-
-	values [DEBUGGER_REG_RBX] = (guint32) INFERIOR_REG_EBX (inferior->current_context);
-	values [DEBUGGER_REG_RCX] = (guint32) INFERIOR_REG_ECX (inferior->current_context);
-	values [DEBUGGER_REG_RDX] = (guint32) INFERIOR_REG_EDX (inferior->current_context);
-	values [DEBUGGER_REG_RSI] = (guint32) INFERIOR_REG_ESI (inferior->current_context);
-	values [DEBUGGER_REG_RDI] = (guint32) INFERIOR_REG_EDI (inferior->current_context);
-	values [DEBUGGER_REG_RBP] = (guint32) INFERIOR_REG_EBP (inferior->current_context);
-	values [DEBUGGER_REG_RAX] = (guint32) INFERIOR_REG_EAX (inferior->current_context);
-	values [DEBUGGER_REG_DS] = (guint32) INFERIOR_REG_DS (inferior->current_context);
-	values [DEBUGGER_REG_ES] = (guint32) INFERIOR_REG_ES (inferior->current_context);
-	values [DEBUGGER_REG_FS] = (guint32) INFERIOR_REG_FS (inferior->current_context);
-	values [DEBUGGER_REG_GS] = (guint32) INFERIOR_REG_GS (inferior->current_context);
-	values [DEBUGGER_REG_RIP] = (guint32) INFERIOR_REG_EIP (inferior->current_context);
-	values [DEBUGGER_REG_CS] = (guint32) INFERIOR_REG_CS (inferior->current_context);
-	values [DEBUGGER_REG_EFLAGS] = (guint32) INFERIOR_REG_EFLAGS (inferior->current_context);
-	values [DEBUGGER_REG_RSP] = (guint32) INFERIOR_REG_ESP (inferior->current_context);
-	values [DEBUGGER_REG_SS] = (guint32) INFERIOR_REG_SS (inferior->current_context);
-
-	return COMMAND_ERROR_NONE;
-}
-
-static ServerCommandError
-server_win32_set_registers (ServerHandle *handle, guint64 *values) 
-{
-	return COMMAND_ERROR_NOT_IMPLEMENTED;
-}     
-
-static ServerCommandError
-server_win32_get_application (ServerHandle *server, gchar **exe_file, gchar **cwd,
-			      guint32 *nargs, gchar ***cmdline_args)
+ServerCommandError
+mdb_server_get_application (ServerHandle *server, gchar **exe_file, gchar **cwd,
+			    guint32 *nargs, gchar ***cmdline_args)
 {
 	ProcessHandle *process = server->inferior->process;
 	gint index = 0;
@@ -1046,12 +787,18 @@ server_win32_get_application (ServerHandle *server, gchar **exe_file, gchar **cw
 	return COMMAND_ERROR_NONE;
 }
 
+ServerCommandError
+mdb_inferior_make_memory_executable (InferiorHandle *inferior, guint64 start, guint32 size)
+{
+	return COMMAND_ERROR_NONE;
+}
+
 static int
 disasm_read_memory_func (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length, struct disassemble_info *info)
 {
 	ProcessHandle *process = info->application_data;
 
-	return read_from_debuggee (process, GUINT_TO_POINTER (memaddr), myaddr, length, NULL) ? 0 : 1;
+	return mdb_process_read_memory (process, memaddr, length, myaddr);
 }
 
 static int
@@ -1137,15 +884,15 @@ mdb_server_disassemble_insn (ServerHandle *server, guint64 address, guint32 *out
 }
 
 InferiorVTable i386_windows_inferior = {
-	server_win32_global_init,
-	server_win32_get_server_type,
-	server_win32_get_capabilities,
-	server_win32_create_inferior,
-	server_win32_initialize_process,
+	mdb_server_global_init,
+	mdb_server_get_server_type,
+	mdb_server_get_capabilities,
+	mdb_server_create_inferior,
+	mdb_server_initialize_process,
 	NULL,					/* initialize_thread */
 	NULL,					/* set_runtime_info */
 	NULL,					/* io_thread_main */
-	server_win32_spawn,			/* spawn */
+	mdb_server_spawn,			/* spawn */
 	NULL,					/* attach */
 	NULL,					/* detach */
 	NULL,					/* finalize */
@@ -1153,15 +900,15 @@ InferiorVTable i386_windows_inferior = {
 	NULL,					/* stop_and_wait, */
 	NULL,					/* dispatch_event */
 	NULL,					/* dispatch_simple */
-	server_win32_get_target_info,		/* get_target_info */
-	server_win32_continue,			/* continue */
-	server_win32_step,			/* step */
+	mdb_server_get_target_info,		/* get_target_info */
+	mdb_server_continue,			/* continue */
+	mdb_server_step,			/* step */
 	NULL,					/* resume */
-	server_win32_get_frame,			/* get_frame */
+	mdb_server_get_frame,			/* get_frame */
 	NULL,					/* current_insn_is_bpt */
 	NULL,					/* peek_word */
-	server_win32_read_memory,		/* read_memory, */
-	server_win32_write_memory,		/* write_memory */
+	mdb_server_read_memory,			/* read_memory, */
+	mdb_server_write_memory,		/* write_memory */
 	NULL,					/* call_method */
 	NULL,					/* call_method_1 */
 	NULL,					/* call_method_2 */
@@ -1170,22 +917,22 @@ InferiorVTable i386_windows_inferior = {
 	NULL,					/* execute_instruction */
 	NULL,					/* mark_rti_frame */
 	NULL,					/* abort_invoke */
-	server_win32_insert_breakpoint,		/* insert_breakpoint */
+	mdb_server_insert_breakpoint,		/* insert_breakpoint */
 	NULL,					/* insert_hw_breakpoint */
-	server_win32_remove_breakpoint,		/* remove_breakpoint */
-	server_win32_enable_breakpoint,		/* enable_breakpoint */
-	server_win32_disable_breakpoint,	/* disable_breakpoint */
-	server_win32_get_breakpoints,		/* get_breakpoints */
-	server_win32_count_registers,		/* count_registers */
-	server_win32_get_registers,		/* get_registers */
-	server_win32_set_registers,		/* set_registers */
+	mdb_server_remove_breakpoint,		/* remove_breakpoint */
+	mdb_server_enable_breakpoint,		/* enable_breakpoint */
+	mdb_server_disable_breakpoint,		/* disable_breakpoint */
+	mdb_server_get_breakpoints,		/* get_breakpoints */
+	mdb_server_count_registers,		/* count_registers */
+	mdb_server_get_registers,		/* get_registers */
+	mdb_server_set_registers,		/* set_registers */
 	NULL,					/* stop */
 	NULL,					/* set_signal */
 	NULL,					/* server_ptrace_get_pending_signal */
 	NULL,					/* kill */
 	NULL,					/* get_signal_info */
 	NULL,					/* get_threads */
-	server_win32_get_application,		/* get_application */
+	mdb_server_get_application,		/* get_application */
 	NULL,					/* detach_after_fork */
 	NULL,					/* push_registers */
 	NULL,					/* pop_registers */

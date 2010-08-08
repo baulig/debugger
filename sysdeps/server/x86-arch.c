@@ -1,11 +1,6 @@
 #define X86_ARCH_C 1
 #include <server.h>
 #include <breakpoints.h>
-#include <sys/stat.h>
-#include <sys/ptrace.h>
-#include <sys/socket.h>
-#include <sys/wait.h>
-#include <signal.h>
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
@@ -87,9 +82,6 @@ typedef struct
 
 #define AMD64_RED_ZONE_SIZE 128
 
-static gboolean
-check_breakpoint (ServerHandle *server, guint64 address, guint64 *retval);
-
 #if defined(__x86_64__)
 #include "x86_64-arch.c"
 #elif defined(__i386__)
@@ -154,8 +146,8 @@ mdb_server_get_frame (ServerHandle *server, StackFrame *frame)
 	return COMMAND_ERROR_NONE;
 }
 
-static gboolean
-check_breakpoint (ServerHandle *server, guint64 address, guint64 *retval)
+gboolean
+mdb_arch_check_breakpoint (ServerHandle *server, guint64 address, guint64 *retval)
 {
 	BreakpointInfo *info;
 
@@ -171,8 +163,8 @@ check_breakpoint (ServerHandle *server, guint64 address, guint64 *retval)
 	return TRUE;
 }
 
-static BreakpointInfo *
-lookup_breakpoint (ServerHandle *server, guint32 idx, BreakpointManager **out_bpm)
+BreakpointInfo *
+mdb_arch_lookup_breakpoint (ServerHandle *server, guint32 idx, BreakpointManager **out_bpm)
 {
 	BreakpointInfo *info;
 
@@ -204,6 +196,13 @@ ServerCommandError
 mdb_arch_get_registers (ServerHandle *server)
 {
 	return mdb_inferior_get_registers (server->inferior, &server->arch->current_regs);
+}
+
+ServerCommandError
+mdb_server_count_registers (ServerHandle *server, guint32 *out_count)
+{
+	*out_count = DEBUGGER_REG_LAST;
+	return COMMAND_ERROR_NONE;
 }
 
 ServerCommandError
@@ -480,7 +479,7 @@ mdb_server_remove_breakpoint (ServerHandle *server, guint32 idx)
 	ServerCommandError result;
 
 	mono_debugger_breakpoint_manager_lock ();
-	breakpoint = lookup_breakpoint (server, idx, &bpm);
+	breakpoint = mdb_arch_lookup_breakpoint (server, idx, &bpm);
 	if (!breakpoint) {
 		result = COMMAND_ERROR_NO_SUCH_BREAKPOINT;
 		goto out;
@@ -578,7 +577,7 @@ mdb_server_enable_breakpoint (ServerHandle *server, guint32 idx)
 	ServerCommandError result;
 
 	mono_debugger_breakpoint_manager_lock ();
-	breakpoint = lookup_breakpoint (server, idx, NULL);
+	breakpoint = mdb_arch_lookup_breakpoint (server, idx, NULL);
 	if (!breakpoint) {
 		mono_debugger_breakpoint_manager_unlock ();
 		return COMMAND_ERROR_NO_SUCH_BREAKPOINT;
@@ -597,7 +596,7 @@ mdb_server_disable_breakpoint (ServerHandle *server, guint32 idx)
 	ServerCommandError result;
 
 	mono_debugger_breakpoint_manager_lock ();
-	breakpoint = lookup_breakpoint (server, idx, NULL);
+	breakpoint = mdb_arch_lookup_breakpoint (server, idx, NULL);
 	if (!breakpoint) {
 		mono_debugger_breakpoint_manager_unlock ();
 		return COMMAND_ERROR_NO_SUCH_BREAKPOINT;
@@ -697,7 +696,9 @@ mdb_server_execute_instruction (ServerHandle *server, const guint8 *instruction,
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
+#if defined(__linux__)
 	INFERIOR_REG_ORIG_RAX (server->arch->current_regs) = -1;
+#endif
 	INFERIOR_REG_RIP (server->arch->current_regs) = code_address;
 
 	result = mdb_inferior_set_registers (server->inferior, &server->arch->current_regs);

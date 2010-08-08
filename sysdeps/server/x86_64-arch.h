@@ -54,7 +54,7 @@ struct _InferiorRegsType {
 #define INFERIOR_REG_GS(r)		r.regs.gs
 
 #define INFERIOR_REG_DR_CONTROL(r)	r.dr_control
-#define INFERIOR_REG_DR_STATUS(r)	r.dr_control
+#define INFERIOR_REG_DR_STATUS(r)	r.dr_status
 #define INFERIOR_REG_DR_N(r,n)		r.dr_regs[n]
 
 #define AMD64_RED_ZONE_SIZE 128

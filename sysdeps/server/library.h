@@ -2,7 +2,6 @@
 #define __MONO_DEBUGGER_LIBRARY_H__
 
 #include <breakpoints.h>
-#include <signal.h>
 #include <glib.h>
 
 G_BEGIN_DECLS
@@ -401,7 +400,7 @@ struct InferiorVTable {
 						       guint32           send_it);
 
 	ServerCommandError    (* get_pending_signal)  (ServerHandle     *handle,
-						       guint32          *signal);
+						       guint32          *out_signal);
 
 	/*
 	 * Kill the target.
@@ -653,7 +652,7 @@ mono_debugger_server_set_signal          (ServerHandle        *handle,
 
 ServerCommandError
 mono_debugger_server_get_pending_signal  (ServerHandle        *handle,
-					  guint32             *signal);
+					  guint32             *out_signal);
 
 ServerCommandError
 mono_debugger_server_kill                (ServerHandle        *handle);

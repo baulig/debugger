@@ -9,22 +9,47 @@
 
 G_BEGIN_DECLS
 
+/* Debug registers' indices.  */
+#define DR_NADDR		4  /* the number of debug address registers */
+#define DR_STATUS		6  /* index of debug status register (DR6) */
+#define DR_CONTROL		7  /* index of debug control register (DR7) */
+
 #if defined(WINDOWS)
 
 #include <windows.h>
 
 struct _InferiorRegsType {
 	CONTEXT context;
+	DWORD dr_control;
+	DWORD dr_status;
+	DWORD dr_regs [DR_NADDR];
 };
+
+#define INFERIOR_REG_RBP(r)		r.context.Ebp
+#define INFERIOR_REG_RBX(r)		r.context.Ebx
+#define INFERIOR_REG_RAX(r)		r.context.Eax
+#define INFERIOR_REG_RCX(r)		r.context.Ecx
+#define INFERIOR_REG_RDX(r)		r.context.Edx
+#define INFERIOR_REG_RSI(r)		r.context.Esi
+#define INFERIOR_REG_RDI(r)		r.context.Edi
+#define INFERIOR_REG_RIP(r)		r.context.Eip
+#define INFERIOR_REG_CS(r)		r.context.SegCs
+#define INFERIOR_REG_EFLAGS(r)		r.context.EFlags
+#define INFERIOR_REG_RSP(r)		r.context.Esp
+#define INFERIOR_REG_SS(r)		r.context.SegSs
+
+#define INFERIOR_REG_DS(r)		r.context.SegDs
+#define INFERIOR_REG_ES(r)		r.context.SegEs
+#define INFERIOR_REG_FS(r)		r.context.SegFs
+#define INFERIOR_REG_GS(r)		r.context.SegGs
+
+#define INFERIOR_REG_DR_CONTROL(r)	r.dr_control
+#define INFERIOR_REG_DR_STATUS(r)	r.dr_status
+#define INFERIOR_REG_DR_N(r,n)		r.dr_regs[n]
 
 #elif defined(__linux__) || defined(__FreeBSD__)
 
 #include <sys/user.h>
-
-/* Debug registers' indices.  */
-#define DR_NADDR		4  /* the number of debug address registers */
-#define DR_STATUS		6  /* index of debug status register (DR6) */
-#define DR_CONTROL		7  /* index of debug control register (DR7) */
 
 struct _InferiorRegsType {
 	struct user_regs_struct regs;
@@ -56,7 +81,7 @@ struct _InferiorRegsType {
 #define INFERIOR_REG_GS(r)		r.regs.xgs
 
 #define INFERIOR_REG_DR_CONTROL(r)	r.dr_control
-#define INFERIOR_REG_DR_STATUS(r)	r.dr_control
+#define INFERIOR_REG_DR_STATUS(r)	r.dr_status
 #define INFERIOR_REG_DR_N(r,n)		r.dr_regs[n]
 
 #else
