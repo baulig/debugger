@@ -31,4 +31,7 @@
 
 #endif /* PTRACE_EVENT_FORK */
 
+static gboolean
+_server_ptrace_wait_for_new_thread (ServerHandle *handle);
+
 #endif

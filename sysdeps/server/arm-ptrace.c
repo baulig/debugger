@@ -22,7 +22,7 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#include "linux-wait.h"
+#include "linux-ptrace.h"
 
 struct _InferiorRegsType {
 	struct pt_regs regs;
@@ -56,7 +56,6 @@ mdb_server_get_arch_type (void)
 static void
 mdb_server_global_init (void)
 {
-	_linux_wait_global_init ();
 }
 
 static ServerHandle *
@@ -180,7 +179,7 @@ mdb_server_spawn (ServerHandle *handle, const gchar *working_directory,
 
 	inferior->pid = *child_pid;
 
-	if (!_linux_wait_for_new_thread (handle))
+	if (!_server_ptrace_wait_for_new_thread (handle))
 		return COMMAND_ERROR_INTERNAL_ERROR;
 
 	return COMMAND_ERROR_NONE;
@@ -851,7 +850,21 @@ mdb_arch_disable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
 	return COMMAND_ERROR_NOT_IMPLEMENTED;
 }
 
-#include "linux-wait.c"
+ServerEvent *
+mdb_arch_child_stopped (ServerHandle *server, int stopsig)
+{
+	ServerEvent *e;
+
+	mdb_arch_get_registers (server);
+
+	e = g_new0 (ServerEvent, 1);
+	e->sender_iid = server->iid;
+	e->type = SERVER_EVENT_CHILD_STOPPED;
+
+	return e;
+}
+
+#include "linux-ptrace.c"
 
 InferiorVTable arm_ptrace_inferior = {
 	mdb_server_global_init,

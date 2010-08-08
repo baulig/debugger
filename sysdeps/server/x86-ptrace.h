@@ -32,9 +32,6 @@ _server_ptrace_setup_inferior (ServerHandle *handle);
 static void
 _server_ptrace_finalize_inferior (ServerHandle *handle);
 
-static gboolean
-_server_ptrace_wait_for_new_thread (ServerHandle *handle);
-
 #ifndef MDB_SERVER
 
 static void

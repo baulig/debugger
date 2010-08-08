@@ -444,49 +444,6 @@ mdb_server_get_application (ServerHandle *handle, gchar **exe_file, gchar **cwd,
 
 #if !defined(MDB_SERVER)
 #include "linux-wait.c"
-#else
-
-gboolean
-_server_ptrace_wait_for_new_thread (ServerHandle *handle)
-{
-	guint32 ret = 0;
-	int status;
-
-	/*
-	 * There is a race condition in the Linux kernel which shows up on >= 2.6.27:
-	 *
-	 * When creating a new thread, the initial stopping event of that thread is sometimes
-	 * sent before sending the `PTRACE_EVENT_CLONE' for it.
-	 *
-	 * Because of this, we wait here until the new thread has been stopped and ignore
-	 * any "early" stopping events.
-	 *
-	 * See also bugs #423518 and #466012.
-.	 *
-	 */
-
-	ret = waitpid (handle->inferior->pid, &status, WUNTRACED | __WALL | __WCLONE);
-
-	/*
-	 * Safety check: make sure we got the correct event.
-	 */
-
-	if ((ret != handle->inferior->pid) || !WIFSTOPPED (status) ||
-	    ((WSTOPSIG (status) != SIGSTOP) && (WSTOPSIG (status) != SIGTRAP))) {
-		g_warning (G_STRLOC ": Wait failed: %d, got pid %d, status %x", handle->inferior->pid, ret, status);
-		return FALSE;
-	}
-
-	/*
-	 * Just as an extra safety check.
-	 */
-
-	if (mdb_arch_get_registers (handle) != COMMAND_ERROR_NONE) {
-		g_warning (G_STRLOC ": Failed to get registers: %d", handle->inferior->pid);
-		return FALSE;
-	}
-
-	return TRUE;
-}
-
 #endif
+
+#include "linux-ptrace.c"
