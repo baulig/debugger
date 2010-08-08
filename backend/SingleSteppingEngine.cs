@@ -94,14 +94,12 @@ namespace Mono.Debugger.Backend
 		{
 			inferior = Inferior.CreateInferior (manager, process, this, start);
 
-#if FIXME
 			if (start.PID != 0) {
 				this.pid = start.PID;
 				inferior.Attach (pid);
 			} else {
 				pid = inferior.Run ();
 			}
-#endif
 
 			manager.AddEngine (this);
 		}
@@ -133,7 +131,6 @@ namespace Mono.Debugger.Backend
 		{
 			engine_stopped = false;
 			current_operation = new OperationStart (this, result);
-			pid = inferior.Run ();
 			current_operation.Execute ();
 			return result;
 		}
@@ -2978,11 +2975,6 @@ namespace Mono.Debugger.Backend
 				      "{0} test execute start: {1} {2} {3}", sse, sse.Process.IsAttached,
 				      inferior.CurrentFrame, inferior.EntryPoint);
 
-			return;
-
-			sse.ProcessEvent (new DebuggerServer.ChildEvent (DebuggerServer.ChildEventType.CHILD_STOPPED, 0, 0, 0));
-			return;
-
 			if (!sse.Process.IsAttached && sse.manager.HasThreadEvents)
 				sse.do_continue (inferior.EntryPoint);
 			else
@@ -2993,7 +2985,7 @@ namespace Mono.Debugger.Backend
 							       out TargetEventArgs args)
 		{
 			Report.Debug (DebugFlags.SSE,
-				      "{0} test start: {1} {2} {3} {4}", sse,
+				      "{0} start: {1} {2} {3} {4}", sse,
 				      cevent, sse.Process.IsAttached,
 				      inferior.CurrentFrame, inferior.EntryPoint);
 

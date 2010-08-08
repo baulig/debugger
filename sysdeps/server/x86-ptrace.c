@@ -369,8 +369,6 @@ mdb_server_handle_wait_event (void)
 	} else if (pid == 0)
 		return NULL;
 
-	g_message (G_STRLOC ": waitpid(): %d - %x", pid, status);
-
 	e = handle_extended_event (pid, status);
 	if (e)
 		return e;
@@ -380,8 +378,6 @@ mdb_server_handle_wait_event (void)
 		g_warning (G_STRLOC ": Got wait event for unknown pid: %d", pid);
 		return NULL;
 	}
-
-	g_message (G_STRLOC ": %p - %d", server, status);
 
 	return handle_inferior_event (server, status);
 }
@@ -509,8 +505,6 @@ mdb_server_spawn (ServerHandle *handle, const gchar *working_directory,
 
 	inferior->pid = *child_pid;
 
-	g_message (G_STRLOC ": spawn %p - %d", pthread_self (), *child_pid);
-
 #if !defined(__MACH__)
 	if (!_server_ptrace_wait_for_new_thread (handle))
 		return COMMAND_ERROR_INTERNAL_ERROR;
@@ -529,7 +523,6 @@ mdb_server_spawn (ServerHandle *handle, const gchar *working_directory,
 	*child_pid = COMPOSED_PID(inferior->pid, inferior->os.thread_index);
 #endif
 
-	g_message (G_STRLOC ": spawn done %p - %d", pthread_self (), *child_pid);
 	return COMMAND_ERROR_NONE;
 }
 

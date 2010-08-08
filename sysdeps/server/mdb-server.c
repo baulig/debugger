@@ -599,14 +599,11 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 			argv [i] = decode_string (p, &p, end);
 		argv [argc] = NULL;
 
-		g_message (G_STRLOC);
-
 		// argv [0] = g_strdup_printf ("X:\\Work\\Martin\\mdb\\testnativetypes.exe");
 		// argv [0] = g_strdup_printf ("/data/martin/testnativetypes");
 		// cwd = g_get_current_dir (); // FIXME
 
 		result = mono_debugger_server_spawn (inferior, cwd, (const gchar **) argv, NULL, FALSE, &child_pid, NULL, &error);
-		g_message (G_STRLOC ": %d - %d - %s", result, child_pid, error);
 
 		if (result != COMMAND_ERROR_NONE)
 			return result;

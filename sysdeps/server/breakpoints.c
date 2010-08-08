@@ -10,14 +10,21 @@
 #include <fcntl.h>
 #include <errno.h>
 
+/*
+ * There is only one thread in the server, so we don't need any mutex there.
+ */
+#ifndef MDB_SERVER
 static DebuggerMutex *bpm_mutex;
+#endif
 
 static int last_breakpoint_id = 0;
 
 void
 mono_debugger_breakpoint_manager_init (void)
 {
+#ifndef MDB_SERVER
 	bpm_mutex = debugger_mutex_new ();
+#endif
 }
 
 BreakpointManager *
@@ -60,13 +67,17 @@ mono_debugger_breakpoint_manager_free (BreakpointManager *bpm)
 void
 mono_debugger_breakpoint_manager_lock (void)
 {
+#ifndef MDB_SERVER
 	debugger_mutex_lock (bpm_mutex);
+#endif
 }
 
 void
 mono_debugger_breakpoint_manager_unlock (void)
 {
+#ifndef MDB_SERVER
 	debugger_mutex_unlock (bpm_mutex);
+#endif
 }
 
 void
