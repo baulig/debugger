@@ -36,6 +36,9 @@
 
 #ifdef __linux__
 #include "x86-linux-ptrace.h"
+#if !defined(MDB_SERVER)
+#include "linux-wait.h"
+#endif
 #endif
 
 #ifdef __FreeBSD__
@@ -461,7 +464,7 @@ mdb_server_spawn (ServerHandle *handle, const gchar *working_directory,
 
 	inferior->pid = *child_pid;
 
-#ifndef __MACH__
+#if !defined(__MACH__) && !defined(MDB_SERVER)
 	if (!_linux_wait_for_new_thread (handle))
 		return COMMAND_ERROR_INTERNAL_ERROR;
 #endif
@@ -494,8 +497,10 @@ mdb_server_initialize_thread (ServerHandle *handle, guint32 pid, gboolean do_wai
 	inferior->os.thread = get_thread_from_index(GET_THREAD_INDEX(pid));
 #else
 	inferior->pid = pid;
+#ifndef MDB_SERVER
 	if (do_wait && !_linux_wait_for_new_thread (handle))
 		return COMMAND_ERROR_INTERNAL_ERROR;
+#endif
 #endif
 
 	return _server_ptrace_setup_inferior (handle);
@@ -515,7 +520,7 @@ mdb_server_attach (ServerHandle *handle, guint32 pid)
 	inferior->pid = pid;
 	inferior->is_thread = TRUE;
 
-#ifndef __MACH__
+#if !defined(__MACH__) && !defined(MDB_SERVER)
 	if (!_linux_wait_for_new_thread (handle))
 		return COMMAND_ERROR_INTERNAL_ERROR;
 #endif
@@ -536,6 +541,8 @@ process_output (int fd, gboolean is_stderr, ChildOutputFunc func)
 	buffer [count] = 0;
 	func (is_stderr, buffer);
 }
+
+#ifndef MDB_SERVER
 
 static void
 _server_ptrace_io_thread_main (IOThreadData *io_data, ChildOutputFunc func)
@@ -570,6 +577,8 @@ _server_ptrace_io_thread_main (IOThreadData *io_data, ChildOutputFunc func)
 	close (io_data->error_fd);
 	g_free (io_data);
 }
+
+#endif
 
 static ServerCommandError
 mdb_server_set_signal (ServerHandle *handle, guint32 sig, guint32 send_it)
@@ -641,15 +650,26 @@ InferiorVTable i386_ptrace_inferior = {
 	mdb_server_initialize_process,
 	mdb_server_initialize_thread,
 	mdb_server_set_runtime_info,
+#ifdef MDB_SERVER
+	NULL, // io_thread_main
+#else
 	_server_ptrace_io_thread_main,
+#endif
 	mdb_server_spawn,
 	mdb_server_attach,
 	mdb_server_detach,
 	mdb_server_finalize,
+#ifdef MDB_SERVER
+	NULL, // global_wait
+	NULL, // stop_and_wait
+	NULL, // dispatch_event
+	NULL, // dispatch_simple
+#else
 	mdb_server_global_wait,
 	mdb_server_stop_and_wait,
 	mdb_server_dispatch_event,
 	mdb_server_dispatch_simple,
+#endif
 	mdb_server_get_target_info,
 	mdb_server_continue,
 	mdb_server_step,
@@ -676,14 +696,22 @@ InferiorVTable i386_ptrace_inferior = {
 	mdb_server_count_registers,
 	mdb_server_get_registers,
 	mdb_server_set_registers,
+#ifdef MDB_SERVER
+	NULL, // stop
+#else
 	mdb_server_stop,
+#endif
 	mdb_server_set_signal,
 	mdb_server_get_pending_signal,
 	mdb_server_kill,
 	mdb_server_get_signal_info,
 	mdb_server_get_threads,
 	mdb_server_get_application,
+#ifdef MDB_SERVER
+	NULL, // detach_after_fork
+#else
 	mdb_server_detach_after_fork,
+#endif
 	mdb_server_push_registers,
 	mdb_server_pop_registers,
 	mdb_server_get_callback_frame,

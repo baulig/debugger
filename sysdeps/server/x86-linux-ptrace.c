@@ -317,7 +317,9 @@ mdb_server_get_signal_info (ServerHandle *handle, SignalInfo **sinfo_out)
 static void
 mdb_server_global_init (void)
 {
+#ifndef MDB_SERVER
 	_linux_wait_global_init ();
+#endif
 }
 
 ServerCommandError
@@ -440,4 +442,6 @@ mdb_server_get_application (ServerHandle *handle, gchar **exe_file, gchar **cwd,
 	return COMMAND_ERROR_NONE;
 }
 
+#if !defined(MDB_SERVER)
 #include "linux-wait.c"
+#endif
