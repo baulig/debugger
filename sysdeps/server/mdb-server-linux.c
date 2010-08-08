@@ -1,27 +1,36 @@
 #include <mdb-server.h>
 #include <errno.h>
 #include <unistd.h>
+#include <signal.h>
 #include <string.h>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/wait.h>
+#include <pthread.h>
 #include <bfd.h>
 
-static volatile sig_atomic_t got_SIGCHLD = 0;
+#include "linux-ptrace.h"
 
-static sigset_t sigmask, empty_mask;
+static sigset_t sigmask;
+static pthread_t wait_thread;
+static int self_pipe[2];
 
 static void
-child_sig_handler (int sig)
+wait_thread_main (void)
 {
-	got_SIGCHLD = 1;
+	while (TRUE) {
+		int sig;
+
+		sigwait (&sigmask, &sig);
+		write (self_pipe[1], &sig, 1);
+	}
 }
 
 int
 mdb_server_init_os (void)
 {
-	struct sigaction sa;
 	int res;
 
 	sigemptyset (&sigmask);
@@ -29,21 +38,15 @@ mdb_server_init_os (void)
 
 	res = sigprocmask (SIG_BLOCK, &sigmask, NULL);
 	if (res < 0) {
-		g_error (G_STRLOC ": sigprocmask() failed!");
+		g_error (G_STRLOC ": sigprocmask() failed: %d - %s", res, g_strerror (errno));
 		return -1;
 	}
 
-	sa.sa_flags = 0;
-	sa.sa_handler = child_sig_handler;
-	sigemptyset (&sa.sa_mask);
+	pipe (self_pipe);
+	fcntl (self_pipe [0], F_SETFL, O_NONBLOCK);
+	fcntl (self_pipe [1], F_SETFL, O_NONBLOCK);
 
-	res = sigaction (SIGCHLD, &sa, NULL);
-	if (res < 0) {
-		g_error (G_STRLOC ": sigaction() failed!");
-		return -1;
-	}
-
-	sigemptyset (&empty_mask);
+	pthread_create (&wait_thread, NULL, (void * (*) (void *)) wait_thread_main, NULL);
 
 	bfd_init ();
 
@@ -58,26 +61,25 @@ handle_wait_event (void)
 	guint64 arg, data1, data2;
 	guint32 opt_data_size;
 	gpointer opt_data;
-	int ret, status;
+	int pid, status;
 
-	ret = waitpid (-1, &status, WUNTRACED | __WALL | __WCLONE | WNOHANG);
-	if (ret < 0) {
+	pid = waitpid (-1, &status, WUNTRACED | __WALL | __WCLONE | WNOHANG);
+	if (pid < 0) {
 		g_warning (G_STRLOC ": waitpid() failed: %s", g_strerror (errno));
 		return;
-	} else if (ret == 0)
+	} else if (pid == 0)
 		return;
 
-	g_message (G_STRLOC ": waitpid(): %d - %x", ret, status);
+	g_message (G_STRLOC ": waitpid(): %d - %x", pid, status);
 
-#ifdef PTRACE_EVENT_CLONE
 	if (status >> 16) {
 		switch (status >> 16) {
 		case PTRACE_EVENT_CLONE: {
 			int new_pid;
 
-			if (ptrace (PTRACE_GETEVENTMSG, ret, 0, &new_pid)) {
-				g_warning (G_STRLOC ": %d - %s", ret, g_strerror (errno));
-				return FALSE;
+			if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &new_pid)) {
+				g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
+				return;
 			}
 
 			// *arg = new_pid;
@@ -88,9 +90,9 @@ handle_wait_event (void)
 		case PTRACE_EVENT_FORK: {
 			int new_pid;
 
-			if (ptrace (PTRACE_GETEVENTMSG, ret, 0, &new_pid)) {
-				g_warning (G_STRLOC ": %d - %s", ret, g_strerror (errno));
-				return FALSE;
+			if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &new_pid)) {
+				g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
+				return;
 			}
 
 			// *arg = new_pid;
@@ -115,19 +117,18 @@ handle_wait_event (void)
 			*arg = 0;
 			return MESSAGE_CHILD_CALLED_EXIT;
 		}
+#endif
 
 		default:
 			g_warning (G_STRLOC ": Received unknown wait result %x on child %d",
-				   status, handle->inferior->pid);
-			return MESSAGE_UNKNOWN_ERROR;
+				   status, pid);
+			return;
 		}
-#endif
 	}
-#endif
 
-	server = mdb_server_get_inferior_by_pid (ret);
+	server = mdb_server_get_inferior_by_pid (pid);
 	if (!server) {
-		g_warning (G_STRLOC ": Got wait event for unknown pid: %d", ret);
+		g_warning (G_STRLOC ": Got wait event for unknown pid: %d", pid);
 		return;
 	}
 
@@ -135,7 +136,7 @@ handle_wait_event (void)
 		server, status, &arg, &data1, &data2, &opt_data_size, &opt_data);
 
 	mdb_server_process_child_event (
-		message, ret, arg, data1, data2, opt_data_size, opt_data);
+		message, pid, arg, data1, data2, opt_data_size, opt_data);
 }
 
 void
@@ -147,14 +148,22 @@ mdb_server_main_loop (int conn_fd)
 
 		FD_ZERO (&readfds);
 		FD_SET (conn_fd, &readfds);
-		nfds = conn_fd + 1;
+		FD_SET (self_pipe[0], &readfds);
+		nfds = MAX (conn_fd, self_pipe[0]) + 1;
 
-		g_message (G_STRLOC ": pselect()");
-		ret = pselect (nfds, &readfds, NULL, NULL, NULL, &empty_mask);
-		g_message (G_STRLOC ": pselect() returned: %d - %d", ret, got_SIGCHLD);
+#ifdef TRANSPORT_DEBUG
+		g_message (G_STRLOC ": select()");
+#endif
 
-		if (got_SIGCHLD) {
-			got_SIGCHLD = 0;
+		ret = select (nfds, &readfds, NULL, NULL, NULL);
+
+#ifdef TRANSPORT_DEBUG
+		g_message (G_STRLOC ": select() returned: %d - %d/%d", ret,
+			   FD_ISSET (self_pipe[0], &readfds), FD_ISSET (conn_fd, &readfds));
+#endif
+
+		if (FD_ISSET (self_pipe[0], &readfds)) {
+			read (self_pipe[0], &ret, 1);
 			handle_wait_event ();
 		}
 

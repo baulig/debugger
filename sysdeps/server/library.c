@@ -16,6 +16,9 @@ InferiorVTable *global_vtable = &powerpc_darwin_inferior;
 #elif defined(WIN32)
 extern InferiorVTable i386_windows_inferior;
 static InferiorVTable *global_vtable = &i386_windows_inferior;
+#elif defined(__arm__)
+extern InferiorVTable arm_ptrace_inferior;
+static InferiorVTable *global_vtable = &arm_ptrace_inferior;
 #else
 extern InferiorVTable i386_ptrace_inferior;
 static InferiorVTable *global_vtable = &i386_ptrace_inferior;

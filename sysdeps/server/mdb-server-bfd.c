@@ -1,7 +1,7 @@
 #include <mdb-server.h>
 #include <string.h>
 #include <bfd.h>
-#if defined(__linux__) || defined(__FreeBSD__)
+#if (defined(__linux__) || defined(__FreeBSD__)) && (defined(__i386__) || defined(__x86_64__))
 #include <link.h>
 #include <elf.h>
 #endif
@@ -191,7 +191,7 @@ mdb_exe_reader_get_section_contents (MdbExeReader *reader, const char *name, gui
 	return contents;
 }
 
-#if defined(__linux__) || defined(__FreeBSD__)
+#if (defined(__linux__) || defined(__FreeBSD__)) && (defined(__i386__) || defined(__x86_64__))
 
 static guint64
 bfd_glue_elfi386_locate_base (bfd *abfd, const guint8 *data, int size)

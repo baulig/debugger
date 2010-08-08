@@ -6,6 +6,9 @@ endif
 if BFD_TARGET_I386_LINUX
 opcode_sources = i386-dis.c
 endif
+if BFD_TARGET_ARM_LINUX
+opcode_sources = arm-dis.c
+endif
 if BFD_TARGET_POWERPC_DARWIN
 opcode_sources = i386-dis.c ppc-dis.c ppc-opc.c
 endif

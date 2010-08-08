@@ -29,6 +29,13 @@ namespace Mono.Debugger
 			this.valid = valid;
 			this.value = value;
 			this.addr_on_stack = TargetAddress.Null;
+			check_value ();
+		}
+
+		void check_value ()
+		{
+			if (Size == 4)
+				this.value &= 0x00000000ffffffffL;
 		}
 
 		public long Value {
@@ -50,6 +57,7 @@ namespace Mono.Debugger
 			this.valid = true;
 			this.addr_on_stack = address;
 			this.value = value;
+			check_value ();
 		}
 
 		public void SetValue (TargetAddress address, TargetAddress value)
@@ -57,6 +65,7 @@ namespace Mono.Debugger
 			this.valid = true;
 			this.addr_on_stack = address;
 			this.value = value.Address;
+			check_value ();
 		}
 
 		public void SetValue (long value)
@@ -64,6 +73,7 @@ namespace Mono.Debugger
 			this.valid = true;
 			this.addr_on_stack = TargetAddress.Null;
 			this.value = value;
+			check_value ();
 		}
 
 		public void SetValue (TargetAddress value)
@@ -71,6 +81,7 @@ namespace Mono.Debugger
 			this.valid = true;
 			this.addr_on_stack = TargetAddress.Null;
 			this.value = value.Address;
+			check_value ();
 		}
 
 		internal void WriteRegister (TargetMemoryAccess target, long value)

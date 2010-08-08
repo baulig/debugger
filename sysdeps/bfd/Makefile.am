@@ -20,6 +20,9 @@ endif
 if BFD_TARGET_I386_LINUX
 bfd_backend = $(elf32_backend) i386linux.c aout32.c peigen.c cofflink.c cpu-i386.c pe-i386.c pei-i386.c trad-core.c verilog.c
 endif
+if BFD_TARGET_ARM_LINUX
+bfd_backend = elf32-arm.c elf32.c elf-vxworks.c elf.c elflink.c elf-attrs.c elf-strtab.c elf-eh-frame.c dwarf1.c elf32-gen.c cpu-arm.c verilog.c
+endif
 if BFD_TARGET_POWERPC_DARWIN
 bfd_backend = mach-o.c pef.c rs6000-core.c xsym.c cpu-rs6000.c cpu-powerpc.c
 endif

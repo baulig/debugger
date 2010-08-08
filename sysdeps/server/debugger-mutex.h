@@ -10,6 +10,9 @@ typedef struct _DebuggerMutex DebuggerMutex;
 DebuggerMutex *
 debugger_mutex_new (void);
 
+gboolean
+debugger_mutex_trylock (DebuggerMutex *mutex);
+
 void
 debugger_mutex_lock (DebuggerMutex *mutex);
 

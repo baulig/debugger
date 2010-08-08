@@ -10,7 +10,7 @@ all_sources = \
 	xexit.c xmalloc.c xstrerror.c fnmatch.c basename.c \
 	xstrdup.c lbasename.c lrealpath.c asprintf.c vasprintf.c \
 	vsprintf.c vsnprintf.c _doprnt.c unlink-if-ordinary.c \
-	cplus-dem.c cp-demint.c cp-demangle.c stpcpy.c
+	cplus-dem.c cp-demint.c cp-demangle.c stpcpy.c floatformat.c
 
 libiberty_la_SOURCES = $(all_sources)
 libiberty_la_LDFLAGS = -export-dynamic

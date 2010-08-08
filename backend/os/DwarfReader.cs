@@ -198,7 +198,8 @@ namespace Mono.Debugger.Backend
 
 		public static bool IsSupported (ExecutableReader bfd)
 		{
-			if ((bfd.TargetName == "elf32-i386") || (bfd.TargetName == "elf64-x86-64"))
+			if ((bfd.TargetName == "elf32-i386") || (bfd.TargetName == "elf64-x86-64") ||
+			    (bfd.TargetName == "elf32-littlearm"))
 				return bfd.HasSection (".debug_info");
 			else
 				return false;

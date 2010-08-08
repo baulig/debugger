@@ -153,7 +153,15 @@ i386-pc-mingw32*)
 	bfd_cflags='-DWINDOWS -DUNICODE -DARCH_i386'
 	bfd_target=i386_windows
 	;;
+arm-*-linux*)
+	default_vec=bfd_elf32_littlearm_vec
+	select_vecs='&bfd_elf32_littlearm_vec,&bfd_elf32_bigarm_vec,&bfd_elf32_little_generic_vec,&bfd_elf32_big_generic_vec'
+	select_archs='&bfd_arm_arch'
+	vec_defines='-DHAVE_bfd_elf32_littlearm_vec -DHAVE_bfd_elf32_bigarm_vec -DHAVE_bfd_elf32_little_generic_vec -DHAVE_bfd_elf32_big_generic_vec'
+	bfd_target=arm_linux
+	;;
 *)
+	echo "BFD-FUCK: |$host|"
 	AC_MSG_ERROR([*** This platform is not yet supported.])
 	;;
 esac
@@ -167,6 +175,7 @@ AC_SUBST(bfd_cflags)
 
 AM_CONDITIONAL(BFD_TARGET_X64_LINUX, test x$bfd_target = xx64_linux)
 AM_CONDITIONAL(BFD_TARGET_I386_LINUX, test x$bfd_target = xi386_linux)
+AM_CONDITIONAL(BFD_TARGET_ARM_LINUX, test x$bfd_target = xarm_linux)
 AM_CONDITIONAL(BFD_TARGET_POWERPC_DARWIN, test x$bfd_target = xpowerpc_darwin)
 AM_CONDITIONAL(BFD_TARGET_I386_DARWIN, test x$bfd_target = xi386_darwin)
 AM_CONDITIONAL(BFD_TARGET_I386_WINDOWS, test x$bfd_target = xi386_windows)

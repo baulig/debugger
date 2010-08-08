@@ -462,7 +462,7 @@ mdb_server_spawn (ServerHandle *handle, const gchar *working_directory,
 	inferior->pid = *child_pid;
 
 #ifndef __MACH__
-	if (!_server_ptrace_wait_for_new_thread (handle))
+	if (!_linux_wait_for_new_thread (handle))
 		return COMMAND_ERROR_INTERNAL_ERROR;
 #endif
 
@@ -494,7 +494,7 @@ mdb_server_initialize_thread (ServerHandle *handle, guint32 pid, gboolean do_wai
 	inferior->os.thread = get_thread_from_index(GET_THREAD_INDEX(pid));
 #else
 	inferior->pid = pid;
-	if (do_wait && !_server_ptrace_wait_for_new_thread (handle))
+	if (do_wait && !_linux_wait_for_new_thread (handle))
 		return COMMAND_ERROR_INTERNAL_ERROR;
 #endif
 
@@ -516,7 +516,7 @@ mdb_server_attach (ServerHandle *handle, guint32 pid)
 	inferior->is_thread = TRUE;
 
 #ifndef __MACH__
-	if (!_server_ptrace_wait_for_new_thread (handle))
+	if (!_linux_wait_for_new_thread (handle))
 		return COMMAND_ERROR_INTERNAL_ERROR;
 #endif
 

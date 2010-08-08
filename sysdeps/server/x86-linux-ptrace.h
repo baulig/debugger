@@ -9,5 +9,6 @@ struct OSData
 };
 
 #include "x86-ptrace.h"
+#include "linux-wait.h"
 
 #endif

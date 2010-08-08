@@ -587,6 +587,27 @@ namespace Mono.Debugger.Backend
 			return BitConverter.ToInt64 (buffer, 0);
 		}
 
+		static TargetAddress create_address (TargetMemoryInfo info, long address)
+		{
+			switch (info.TargetAddressSize) {
+			case 4:
+				address &= 0x00000000ffffffffL;
+				return new TargetAddress (info.AddressDomain, address);
+
+			case 8:
+				return new TargetAddress (info.AddressDomain, address);
+
+			default:
+				throw new TargetMemoryException (
+					"Unknown target address size " + info.TargetAddressSize);
+			}
+		}
+
+		TargetAddress create_address (long address)
+		{
+			return create_address (target_info, address);
+		}
+
 		public override TargetAddress ReadAddress (TargetAddress address)
 		{
 			check_disposed ();
@@ -843,7 +864,7 @@ namespace Mono.Debugger.Backend
 		public TargetAddress CurrentFrame {
 			get {
 				DebuggerServer.ServerStackFrame frame = get_current_frame ();
-				return new TargetAddress (AddressDomain, frame.Address);
+				return create_address (frame.Address);
 			}
 		}
 
@@ -915,7 +936,7 @@ namespace Mono.Debugger.Backend
 			long new_rsp;
 			check_error (server.PushRegisters (inferior, out new_rsp));
 			pushed_regs = true;
-			return new TargetAddress (AddressDomain, new_rsp);
+			return create_address (new_rsp);
 		}
 
 		public void PopRegisters ()
@@ -949,8 +970,8 @@ namespace Mono.Debugger.Backend
 			public CallbackFrame (Inferior inferior, DebuggerServer.CallbackFrame cframe)
 			{
 				ID = cframe.ID;
-				CallAddress = new TargetAddress (inferior.AddressDomain, cframe.CallAddress);
-				StackPointer = new TargetAddress (inferior.AddressDomain, cframe.StackPointer);
+				CallAddress = inferior.create_address (cframe.CallAddress);
+				StackPointer = inferior.create_address (cframe.StackPointer);
 
 				IsRuntimeInvokeFrame = cframe.IsRuntimeInvokeFrame;
 				IsExactMatch = cframe.IsExactMatch;
@@ -976,9 +997,9 @@ namespace Mono.Debugger.Backend
 
 			internal StackFrame (TargetMemoryInfo info, DebuggerServer.ServerStackFrame frame)
 			{
-				this.address = new TargetAddress (info.AddressDomain, frame.Address);
-				this.stack = new TargetAddress (info.AddressDomain, frame.StackPointer);
-				this.frame = new TargetAddress (info.AddressDomain, frame.FrameAddress);
+				this.address = Inferior.create_address (info, frame.Address);
+				this.stack = Inferior.create_address (info, frame.StackPointer);
+				this.frame = Inferior.create_address (info, frame.FrameAddress);
 			}
 
 			internal StackFrame (TargetAddress address, TargetAddress stack,
@@ -1085,8 +1106,8 @@ namespace Mono.Debugger.Backend
 						flags |= TargetMemoryFlags.ReadOnly;
 
 					TargetMemoryArea area = new TargetMemoryArea (
-						new TargetAddress (AddressDomain, start),
-						new TargetAddress (AddressDomain, end),
+						create_address (start),
+						create_address (end),
 						flags, name);
 					list.Add (area);
 				} while (true);

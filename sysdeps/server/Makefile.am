@@ -3,7 +3,7 @@ bin_PROGRAMS = mdb-server
 if USING_EGLIB
 eglib_cflags = -I$(top_srcdir)/sysdeps/eglib/src -I../eglib/src
 eglib_static_libs = ../eglib/src/libeglib-static.la
-eglib_libs = ../eglib/src/static.la
+eglib_libs = ../eglib/src/libeglib.la
 else
 eglib_cflags =
 eglib_libs =
@@ -66,6 +66,14 @@ platform_libs = \
 	-lpthread \
 	-lthread_db
 endif
+if PLATFORM_ARM_LINUX
+platform_sources = \
+	arm-arch.c \
+	arm-ptrace.c
+platform_server = \
+	mdb-server-bfd.c \
+	mdb-server-linux.c
+endif
 
 server_sources = \
 	server.h		\
@@ -86,7 +94,7 @@ server_cppflags = \
 	-I$(top_srcdir)/sysdeps/bfd/include \
 	-I$(top_srcdir)/sysdeps/bfd/opcodes \
 	@SERVER_DEPENDENCIES_CFLAGS@ @server_cflags@ \
-	$(eglib_cflags)
+	$(eglib_cflags) -DTRANSPORT_DEBUG
 
 EXTRA_libmonodebuggerserver_la_SOURCES = $(extra_sources)
 libmonodebuggerserver_la_CPPFLAGS = $(server_cppflags)
@@ -96,7 +104,7 @@ libmonodebuggerserver_la_LIBADD = \
 	@SERVER_DEPENDENCIES_LIBS@ $(eglib_libs) $(platform_libs) \
 	../../sysdeps/bfd/libbfd.la
 
-mdb_server_CPPFLAGS = $(server_cppflags)
+mdb_server_CPPFLAGS = $(server_cppflags) -DMDB_SERVER
 EXTRA_mdb_server_SOURCES = $(extra_sources)
 
 mdb_server_SOURCES = \
@@ -106,7 +114,8 @@ mdb_server_SOURCES = \
 	$(platform_server)
 
 mdb_server_LDFLAGS = \
-	-export-dynamic -static -no-undefined
+	-export-dynamic -static -no-undefined \
+	-entry=main
 
 mdb_server_LDADD = \
 	@SERVER_DEPENDENCIES_LIBS@ $(eglib_static_libs) $(platform_libs) \

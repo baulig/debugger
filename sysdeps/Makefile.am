@@ -1,4 +1,4 @@
-if SERVER_ONLY
+if USING_EGLIB
 eglib=eglib
 else
 eglib=

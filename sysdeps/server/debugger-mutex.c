@@ -29,6 +29,16 @@ debugger_mutex_new (void)
 	return mutex;
 }
 
+gboolean
+debugger_mutex_trylock (DebuggerMutex *mutex)
+{
+#if WINDOWS
+	return TryEnterCriticalSection (&mutex->section);
+#else
+	return pthread_mutex_trylock (&mutex->mutex);
+#endif
+}
+
 void
 debugger_mutex_lock (DebuggerMutex *mutex)
 {
@@ -38,6 +48,7 @@ debugger_mutex_lock (DebuggerMutex *mutex)
 	pthread_mutex_lock (&mutex->mutex);
 #endif
 }
+
 
 void
 debugger_mutex_unlock (DebuggerMutex *mutex)

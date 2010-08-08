@@ -2963,6 +2963,9 @@ namespace Mono.Debugger.Backend
 				      "{0} test execute start: {1} {2} {3}", sse, sse.Process.IsAttached,
 				      inferior.CurrentFrame, inferior.EntryPoint);
 
+			sse.ProcessEvent (new DebuggerServer.ChildEvent (DebuggerServer.ChildEventType.CHILD_STOPPED, 0, 0, 0));
+			return;
+
 			if (!sse.Process.IsAttached && sse.manager.HasThreadEvents)
 				sse.do_continue (inferior.EntryPoint);
 			else
@@ -2978,6 +2981,7 @@ namespace Mono.Debugger.Backend
 				      inferior.CurrentFrame, inferior.EntryPoint);
 
 			args = null;
+			return EventResult.Completed;
 			if ((cevent.Type != DebuggerServer.ChildEventType.CHILD_STOPPED) &&
 			    (cevent.Type != DebuggerServer.ChildEventType.CHILD_CALLBACK))
 				return EventResult.Completed;

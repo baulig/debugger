@@ -73,6 +73,11 @@ if test x$remote_only != xyes; then
 		platform=x86_linux
 		using_eglib=no
 		;;
+	arm-*-linux*)
+		server_cflags=
+		platform=arm_linux
+		using_eglib=yes
+		;;
 	powerpc-apple-darwin*)
 		server_cflags=
 		platform=powerpc_darwin
@@ -92,6 +97,7 @@ if test x$remote_only != xyes; then
 		using_eglib=yes
 		;;
 	*)
+		echo "FUCK: |$host|"
 		AC_MSG_ERROR([*** This platform is not yet supported.])
 		;;
 	esac
@@ -106,7 +112,10 @@ fi
 AM_CONDITIONAL(PLATFORM_X86_DARWIN, test x$platform = xx86_darwin)
 AM_CONDITIONAL(PLATFORM_POWERPC_DARWIN, test x$platform = xpowerpc_darwin)
 AM_CONDITIONAL(PLATFORM_X86_LINUX, test x$platform = xx86_linux)
+AM_CONDITIONAL(PLATFORM_ARM_LINUX, test x$platform = xarm_linux)
 AM_CONDITIONAL(PLATFORM_X86_WINDOWS, test x$platform = xx86_windows)
+
+AC_ARG_WITH(eglib, [  --with-eglib            Build with eglib], using_eglib=yes)
 
 if test x$using_eglib = xyes; then
 	ac_configure_args="$ac_configure_args \"CPPFLAGS_FOR_EGLIB=$EGLIB_CPPFLAGS\" \"CFLAGS_FOR_EGLIB=$CFLAGS_FOR_EGLIB\""

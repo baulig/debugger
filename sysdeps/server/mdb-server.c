@@ -1,7 +1,9 @@
+#define TRANSPORT_DEBUG 1
 #include <config.h>
 #include <mdb-server.h>
 #include <debugger-mutex.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #ifdef HAVE_SYS_TYPES_H
@@ -323,7 +325,7 @@ send_reply_packet (int id, int error, Buffer *data)
 	int len;
 	gboolean res;
 
-#if TRANSPORT_DEBUG
+#ifdef TRANSPORT_DEBUG
 	g_message (G_STRLOC);
 #endif
 	
@@ -394,7 +396,7 @@ main (int argc, char *argv[])
 	}
 
 	fd = socket (AF_INET, SOCK_STREAM, 0);
-#if TRANSPORT_DEBUG
+#ifdef TRANSPORT_DEBUG
 	g_message (G_STRLOC ": %d", fd);
 #endif
 
@@ -420,7 +422,7 @@ main (int argc, char *argv[])
 		return -1;
 	}
 
-#if TRANSPORT_DEBUG
+#ifdef TRANSPORT_DEBUG
 	g_message (G_STRLOC ": accepted!");
 #endif
 
@@ -434,7 +436,7 @@ main (int argc, char *argv[])
 		return -1;
 	}
 
-#if TRANSPORT_DEBUG
+#ifdef TRANSPORT_DEBUG
 	g_message (G_STRLOC ": sent handshake");
 #endif
 
@@ -445,7 +447,7 @@ main (int argc, char *argv[])
 		return -1;
 	}
 
-#if TRANSPORT_DEBUG
+#ifdef TRANSPORT_DEBUG
 	g_message (G_STRLOC ": handshake ok");
 #else
 	g_message (G_STRLOC ": waiting for incoming connections");
@@ -471,7 +473,7 @@ main (int argc, char *argv[])
 	close (conn_fd);
 	close (fd);
 
-	return 0;
+	exit (0);
 }
 
 static ErrorCode
@@ -591,7 +593,8 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 
 		g_message (G_STRLOC);
 
-		argv [0] = g_strdup_printf ("X:\\Work\\Martin\\mdb\\testnativetypes.exe");
+		// argv [0] = g_strdup_printf ("X:\\Work\\Martin\\mdb\\testnativetypes.exe");
+		argv [0] = g_strdup_printf ("/data/martin/testnativetypes");
 		cwd = g_get_current_dir (); // FIXME
 
 		result = mono_debugger_server_spawn (inferior, cwd, (const gchar **) argv, NULL, FALSE, &child_pid, NULL, &error);
@@ -802,7 +805,7 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 	}
 
 	case CMD_INFERIOR_GET_DYNAMIC_INFO: {
-#if defined(__linux__) || defined(__FreeBSD__)
+#if (defined(__linux__) || defined(__FreeBSD__)) && (defined(__i386__) || defined(__x86_64__))
 		MdbExeReader *reader;
 		guint32 reader_iid;
 		guint64 dynamic_info;
@@ -824,7 +827,7 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 	}
 
 	case CMD_INFERIOR_DISASSEMBLE_INSN: {
-#if WINDOWS
+#if defined(__arm__) || WINDOWS
 		guint64 address;
 		guint32 insn_size;
 		gchar *insn;
@@ -1025,7 +1028,7 @@ mdb_server_main_loop_iteration (void)
 
 	g_assert (flags == 0);
 
-#if TRANSPORT_DEBUG
+#ifdef TRANSPORT_DEBUG
 	g_message (G_STRLOC ": Received command %d/%d, id=%d.", command_set, command, id);
 #endif
 
@@ -1128,7 +1131,7 @@ mdb_server_main_loop_iteration (void)
 		err = ERR_NOT_IMPLEMENTED;
 	}
 
-#if TRANSPORT_DEBUG
+#ifdef TRANSPORT_DEBUG
 	g_message (G_STRLOC ": Command done: %d/%d, id=%d - err=%d, no-reply=%d.",
 		   command_set, command, id, err, no_reply);
 #endif
