@@ -694,6 +694,7 @@ InferiorVTable i386_ptrace_inferior = {
 	mdb_server_global_init,
 	mdb_server_get_server_type,
 	mdb_server_get_capabilities,
+	mdb_server_get_arch_type,
 	mdb_server_create_inferior,
 	mdb_server_initialize_process,
 	mdb_server_initialize_thread,

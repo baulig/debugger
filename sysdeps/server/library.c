@@ -54,6 +54,12 @@ mono_debugger_server_get_server_type (void)
 	return global_vtable->get_server_type ();
 }
 
+ArchType
+mono_debugger_server_get_arch_type (void)
+{
+	return global_vtable->get_arch_type ();
+}
+
 void
 mono_debugger_server_io_thread_main (IOThreadData *io_data, ChildOutputFunc func)
 {

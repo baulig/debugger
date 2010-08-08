@@ -191,14 +191,20 @@ namespace Mono.Debugger
 			thread_hash = Hashtable.Synchronized (new Hashtable ());
 
 			target_info = manager.GetTargetInfo ();
-#if FIXME
-			if (target_info.TargetAddressSize == 8)
-				architecture = new Architecture_X86_64 (this, target_info);
-			else
+
+			switch (manager.DebuggerServer.ArchType) {
+			case DebuggerServer.ArchTypeEnum.I386:
 				architecture = new Architecture_I386 (this, target_info);
-#else
-			architecture = new Architecture_Arm (this, target_info);
-#endif
+				break;
+			case DebuggerServer.ArchTypeEnum.X86_64:
+				architecture = new Architecture_X86_64 (this, target_info);
+				break;
+			case DebuggerServer.ArchTypeEnum.ARM:
+				architecture = new Architecture_Arm (this, target_info);
+				break;
+			default:
+				throw new InternalError ();
+			}
 		}
 
 		internal Process (ThreadManager manager, ProcessStart start)

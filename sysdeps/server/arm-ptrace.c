@@ -47,6 +47,12 @@ struct IOThreadData
 	int output_fd, error_fd;
 };
 
+ArchType
+mdb_server_get_arch_type (void)
+{
+	return ARCH_TYPE_I386;
+}
+
 static void
 mdb_server_global_init (void)
 {
@@ -851,6 +857,7 @@ InferiorVTable arm_ptrace_inferior = {
 	mdb_server_global_init,
 	mdb_server_get_server_type,
 	mdb_server_get_capabilities,
+	mdb_server_get_arch_type,
 	mdb_server_create_inferior,
 	mdb_server_initialize_process,
 	mdb_server_initialize_thread,

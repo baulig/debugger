@@ -28,6 +28,10 @@ namespace Mono.Debugger.Server
 			get;
 		}
 
+		public abstract ArchTypeEnum ArchType {
+			get;
+		}
+
 		public abstract BreakpointManager CreateBreakpointManager ();
 
 		public abstract InferiorHandle CreateInferior (SingleSteppingEngine sse, Inferior inferior,
@@ -118,6 +122,14 @@ namespace Mono.Debugger.Server
 			LINUX_PTRACE = 1,
 			DARWIN = 2,
 			WINDOWS = 3
+		}
+
+		internal enum ArchTypeEnum
+		{
+			UNKNOWN = 0,
+			I386 = 1,
+			X86_64 = 2,
+			ARM = 3
 		}
 
 		internal enum ServerCapabilities

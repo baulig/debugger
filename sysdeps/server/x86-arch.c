@@ -153,7 +153,6 @@ mdb_arch_check_breakpoint (ServerHandle *server, guint64 address, guint64 *retva
 
 	mono_debugger_breakpoint_manager_lock ();
 	info = (BreakpointInfo *) mono_debugger_breakpoint_manager_lookup (server->bpm, address);
-	g_message (G_STRLOC ": CHECK BPT: %ld - %p", (long) address, info);
 	if (!info || !info->enabled) {
 		mono_debugger_breakpoint_manager_unlock ();
 		return FALSE;

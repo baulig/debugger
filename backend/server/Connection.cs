@@ -52,10 +52,11 @@ namespace Mono.Debugger.Server
 		enum CmdServer {
 			GET_TARGET_INFO = 1,
 			GET_SERVER_TYPE = 2,
-			GET_CAPABILITIES = 3,
-			CREATE_INFERIOR = 4,
-			CREATE_BPM = 5,
-			CREATE_EXE_READER = 6
+			GET_ARCH_TYPE = 3,
+			GET_CAPABILITIES = 4,
+			CREATE_INFERIOR = 5,
+			CREATE_BPM = 6,
+			CREATE_EXE_READER = 7
 		}
 
 		enum CmdInferior {
@@ -603,6 +604,11 @@ namespace Mono.Debugger.Server
 		public DebuggerServer.ServerType GetServerType ()
 		{
 			return (DebuggerServer.ServerType) SendReceive (CommandSet.SERVER, (int)CmdServer.GET_SERVER_TYPE, null).ReadInt ();
+		}
+
+		public DebuggerServer.ArchTypeEnum GetArchType ()
+		{
+			return (DebuggerServer.ArchTypeEnum) SendReceive (CommandSet.SERVER, (int)CmdServer.GET_ARCH_TYPE, null).ReadInt ();
 		}
 
 		public DebuggerServer.ServerCapabilities GetCapabilities ()

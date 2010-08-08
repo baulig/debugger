@@ -33,11 +33,14 @@ struct _ServerHandle {
  * Public Methods
  */
 
-ServerType
+extern ServerType
 mdb_server_get_server_type (void);
 
-ServerCapabilities
+extern ServerCapabilities
 mdb_server_get_capabilities (void);
+
+extern ArchType
+mdb_server_get_arch_type (void);
 
 extern void
 mdb_server_remove_hardware_breakpoints (ServerHandle *server);

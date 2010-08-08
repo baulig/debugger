@@ -34,6 +34,12 @@ typedef struct
 	gboolean is_rti;
 } CallbackData;
 
+ArchType
+mdb_server_get_arch_type (void)
+{
+	return ARCH_TYPE_I386;
+}
+
 ArchInfo *
 mdb_arch_initialize (void)
 {

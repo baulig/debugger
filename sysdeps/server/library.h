@@ -118,6 +118,13 @@ typedef enum {
 	SERVER_TYPE_WIN32			= 3
 } ServerType;
 
+typedef enum {
+	ARCH_TYPE_UNKNOWN			= 0,
+	ARCH_TYPE_I386				= 1,
+	ARCH_TYPE_X86_64			= 2,
+	ARCH_TYPE_ARM				= 3
+} ArchType;
+
 /* This is an opaque data structure which the backend may use to store stuff. */
 typedef struct InferiorVTable InferiorVTable;
 typedef struct InferiorHandle InferiorHandle;
@@ -162,6 +169,8 @@ struct InferiorVTable {
 	ServerType            (* get_server_type)     (void);
 
 	ServerCapabilities    (* get_capabilities)    (void);
+
+	ArchType              (* get_arch_type)       (void);
 
 	ServerHandle *        (* create_inferior)     (BreakpointManager  *bpm);
 
@@ -463,6 +472,9 @@ mono_debugger_server_get_capabilities     (void);
 
 ServerType
 mono_debugger_server_get_server_type      (void);
+
+ArchType
+mono_debugger_server_get_arch_type        (void);
 
 ServerHandle *
 mono_debugger_server_create_inferior      (BreakpointManager  *bpm);

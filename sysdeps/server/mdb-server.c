@@ -58,10 +58,11 @@ typedef enum {
 typedef enum {
 	CMD_SERVER_GET_TARGET_INFO = 1,
 	CMD_SERVER_GET_SERVER_TYPE = 2,
-	CMD_SERVER_GET_CAPABILITIES = 3,
-	CMD_SERVER_CREATE_INFERIOR = 4,
-	CMD_SERVER_CREATE_BPM = 5,
-	CMD_SERVER_CREATE_EXE_READER = 6
+	CMD_SERVER_GET_ARCH_TYPE = 3,
+	CMD_SERVER_GET_CAPABILITIES = 4,
+	CMD_SERVER_CREATE_INFERIOR = 5,
+	CMD_SERVER_CREATE_BPM = 6,
+	CMD_SERVER_CREATE_EXE_READER = 7
 } CmdServer;
 
 typedef enum {
@@ -499,6 +500,11 @@ server_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 
 	case CMD_SERVER_GET_SERVER_TYPE: {
 		buffer_add_int (buf, mono_debugger_server_get_server_type ());
+		break;
+	}
+
+	case CMD_SERVER_GET_ARCH_TYPE: {
+		buffer_add_int (buf, mono_debugger_server_get_arch_type ());
 		break;
 	}
 

@@ -161,6 +161,9 @@ namespace Mono.Debugger.Server
 		static extern ServerCapabilities mono_debugger_server_get_capabilities ();
 
 		[DllImport("monodebuggerserver")]
+		static extern ArchTypeEnum mono_debugger_server_get_arch_type ();
+
+		[DllImport("monodebuggerserver")]
 		static extern IntPtr mono_debugger_server_initialize_mono_runtime (
 			int address_size, long notification_address,
 			long executable_code_buffer, int executable_code_buffer_size,
@@ -193,12 +196,14 @@ namespace Mono.Debugger.Server
 		NativeThreadManager manager;
 		ServerCapabilities capabilities;
 		ServerType server_type;
+		ArchTypeEnum arch_type;
 
 		public NativeDebuggerServer (Debugger debugger)
 		{
 			manager = new NativeThreadManager (debugger, this);
 			server_type = mono_debugger_server_get_server_type ();
 			capabilities = mono_debugger_server_get_capabilities ();
+			arch_type = mono_debugger_server_get_arch_type ();
 		}
 
 		public override ThreadManager ThreadManager {
@@ -216,6 +221,10 @@ namespace Mono.Debugger.Server
 		public override BreakpointManager CreateBreakpointManager ()
 		{
 			return new NativeBreakpointManager ();
+		}
+
+		public override ArchTypeEnum ArchType {
+			get { return arch_type; }
 		}
 
 		public override InferiorHandle CreateInferior (SingleSteppingEngine sse, Inferior inferior, BreakpointManager bpm)

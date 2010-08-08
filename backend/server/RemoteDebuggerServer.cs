@@ -18,6 +18,7 @@ namespace Mono.Debugger.Server
 		RemoteThreadManager manager;
 		ServerCapabilities capabilities;
 		ServerType server_type;
+		ArchTypeEnum arch_type;
 
 		Dictionary<int,SingleSteppingEngine> sse_hash = new Dictionary<int,SingleSteppingEngine> ();
 
@@ -30,6 +31,7 @@ namespace Mono.Debugger.Server
 
 			server_type = connection.GetServerType ();
 			capabilities = connection.GetCapabilities ();
+			arch_type = connection.GetArchType ();
 		}
 
 		public override ServerType Type {
@@ -38,6 +40,10 @@ namespace Mono.Debugger.Server
 
 		public override ServerCapabilities Capabilities {
 			get { return capabilities; }
+		}
+
+		public override ArchTypeEnum ArchType {
+			get { return arch_type; }
 		}
 
 		void handle_event (Connection.EventInfo e)

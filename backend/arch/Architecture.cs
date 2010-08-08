@@ -1,4 +1,5 @@
 using System;
+using Mono.Debugger.Server;
 using Mono.Debugger.Backend;
 using Mono.Debugger.Server;
 using Mono.Debugger.Architectures;
@@ -26,10 +27,20 @@ namespace Mono.Debugger.Backend
 				disassembler = server.GetDisassembler ();
 			else if (!Inferior.IsRunningOnWindows)
 				disassembler = new BfdDisassembler (process, info.TargetAddressSize == 8);
-			if (info.TargetAddressSize == 8)
+
+			switch (process.ThreadManager.DebuggerServer.ArchType) {
+			case DebuggerServer.ArchTypeEnum.I386:
 				opcodes = new Opcodes_X86_64 (process);
-			else
+				break;
+			case DebuggerServer.ArchTypeEnum.X86_64:
 				opcodes = new Opcodes_I386 (process);
+				break;
+			case DebuggerServer.ArchTypeEnum.ARM:
+				// opcodes = new Opcodes_ARM (process);
+				break;
+			default:
+				throw new InternalError ();
+			}
 		}
 
 		internal Disassembler Disassembler {
