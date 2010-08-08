@@ -511,8 +511,8 @@ mdb_server_spawn (ServerHandle *handle, const gchar *working_directory,
 
 	g_message (G_STRLOC ": spawn %p - %d", pthread_self (), *child_pid);
 
-#if !defined(__MACH__) && !defined(MDB_SERVER)
-	if (!_linux_wait_for_new_thread (handle))
+#if !defined(__MACH__)
+	if (!_server_ptrace_wait_for_new_thread (handle))
 		return COMMAND_ERROR_INTERNAL_ERROR;
 #endif
 
@@ -545,10 +545,8 @@ mdb_server_initialize_thread (ServerHandle *handle, guint32 pid, gboolean do_wai
 	inferior->os.thread = get_thread_from_index(GET_THREAD_INDEX(pid));
 #else
 	inferior->pid = pid;
-#ifndef MDB_SERVER
-	if (do_wait && !_linux_wait_for_new_thread (handle))
+	if (do_wait && !_server_ptrace_wait_for_new_thread (handle))
 		return COMMAND_ERROR_INTERNAL_ERROR;
-#endif
 #endif
 
 	return _server_ptrace_setup_inferior (handle);
@@ -568,8 +566,8 @@ mdb_server_attach (ServerHandle *handle, guint32 pid)
 	inferior->pid = pid;
 	inferior->is_thread = TRUE;
 
-#if !defined(__MACH__) && !defined(MDB_SERVER)
-	if (!_linux_wait_for_new_thread (handle))
+#if !defined(__MACH__)
+	if (!_server_ptrace_wait_for_new_thread (handle))
 		return COMMAND_ERROR_INTERNAL_ERROR;
 #endif
 
@@ -722,7 +720,7 @@ init_disassembler (ServerHandle *server)
 
 	info = g_new0 (struct disassemble_info, 1);
 	INIT_DISASSEMBLE_INFO (*info, stderr, fprintf);
-	info->flavour = bfd_target_coff_flavour;
+	info->flavour = bfd_target_elf_flavour;
 	info->arch = bfd_arch_i386;
 	info->mach = bfd_mach_i386_i386;
 	info->octets_per_byte = 1;

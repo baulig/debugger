@@ -38,7 +38,7 @@ typedef struct
 ArchType
 mdb_server_get_arch_type (void)
 {
-	return ARCH_TYPE_I386;
+	return ARCH_TYPE_X86_64;
 }
 
 ArchInfo *

@@ -84,7 +84,7 @@ mdb_server_global_wait (guint32 *status_ret)
 }
 
 gboolean
-_linux_wait_for_new_thread (ServerHandle *handle)
+_server_ptrace_wait_for_new_thread (ServerHandle *handle)
 {
 	guint32 ret = 0;
 	int status;
