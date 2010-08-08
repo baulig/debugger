@@ -293,147 +293,32 @@ handle_inferior_event (ServerHandle *server, int status)
 	return e;
 }
 
-#ifndef MDB_SERVER
-
 static ServerEventType
-mdb_server_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg,
+mdb_server_dispatch_event (ServerHandle *server, guint32 status, guint64 *arg,
 			   guint64 *data1, guint64 *data2, guint32 *opt_data_size,
 			   gpointer *opt_data)
 {
-	#ifdef PTRACE_EVENT_CLONE
-	if (status >> 16) {
-		switch (status >> 16) {
-		case PTRACE_EVENT_CLONE: {
-			int new_pid;
+	ServerEvent *e;
+	ServerEventType type;
 
-			if (ptrace (PTRACE_GETEVENTMSG, handle->inferior->pid, 0, &new_pid)) {
-				g_warning (G_STRLOC ": %d - %s", handle->inferior->pid,
-					   g_strerror (errno));
-				return FALSE;
-			}
+	e = handle_extended_event (server->inferior->pid, status);
+	if (!e)
+		e = handle_inferior_event (server, status);
 
-			*arg = new_pid;
-			return SERVER_EVENT_CHILD_CREATED_THREAD;
-		}
-
-		case PTRACE_EVENT_FORK: {
-			int new_pid;
-
-			if (ptrace (PTRACE_GETEVENTMSG, handle->inferior->pid, 0, &new_pid)) {
-				g_warning (G_STRLOC ": %d - %s", handle->inferior->pid,
-					   g_strerror (errno));
-				return FALSE;
-			}
-
-			*arg = new_pid;
-			return SERVER_EVENT_CHILD_FORKED;
-		}
-
-		case PTRACE_EVENT_EXEC:
-			return SERVER_EVENT_CHILD_EXECD;
-
-		case PTRACE_EVENT_EXIT: {
-			int exitcode;
-
-			if (ptrace (PTRACE_GETEVENTMSG, handle->inferior->pid, 0, &exitcode)) {
-				g_warning (G_STRLOC ": %d - %s", handle->inferior->pid,
-					   g_strerror (errno));
-				return FALSE;
-			}
-
-			*arg = 0;
-			return SERVER_EVENT_CHILD_CALLED_EXIT;
-		}
-
-		default:
-			g_warning (G_STRLOC ": Received unknown wait result %x on child %d",
-				   status, handle->inferior->pid);
-			return SERVER_EVENT_UNKNOWN_ERROR;
-		}
-	}
-	#endif
-
-	if (WIFSTOPPED (status)) {
-#if __MACH__
-		handle->inferior->os.wants_to_run = FALSE;
-#endif
-		guint64 callback_arg, retval, retval2;
-		ChildStoppedAction action;
-		int stopsig;
-
-		stopsig = WSTOPSIG (status);
-		if (stopsig == SIGCONT)
-			stopsig = 0;
-
-		action = mdb_arch_child_stopped (
-			handle, stopsig, &callback_arg, &retval, &retval2, opt_data_size, opt_data);
-
-		if (action != STOP_ACTION_STOPPED)
-			handle->inferior->last_signal = 0;
-
-		switch (action) {
-		case STOP_ACTION_STOPPED:
-			if (stopsig == SIGTRAP) {
-				handle->inferior->last_signal = 0;
-				*arg = 0;
-			} else {
-				handle->inferior->last_signal = stopsig;
-				*arg = stopsig;
-			}
-			return SERVER_EVENT_CHILD_STOPPED;
-
-		case STOP_ACTION_INTERRUPTED:
-			*arg = 0;
-			return SERVER_EVENT_CHILD_INTERRUPTED;
-
-		case STOP_ACTION_BREAKPOINT_HIT:
-			*arg = (int) retval;
-			return SERVER_EVENT_CHILD_HIT_BREAKPOINT;
-
-		case STOP_ACTION_CALLBACK:
-			*arg = callback_arg;
-			*data1 = retval;
-			*data2 = retval2;
-			return SERVER_EVENT_CHILD_CALLBACK;
-
-		case STOP_ACTION_CALLBACK_COMPLETED:
-			*arg = callback_arg;
-			*data1 = retval;
-			*data2 = retval2;
-			return SERVER_EVENT_CHILD_CALLBACK_COMPLETED;
-
-		case STOP_ACTION_NOTIFICATION:
-			*arg = callback_arg;
-			*data1 = retval;
-			*data2 = retval2;
-			return SERVER_EVENT_CHILD_NOTIFICATION;
-
-		case STOP_ACTION_RTI_DONE:
-			*arg = callback_arg;
-			*data1 = retval;
-			*data2 = retval2;
-			return SERVER_EVENT_RUNTIME_INVOKE_DONE;
-
-		case STOP_ACTION_INTERNAL_ERROR:
-			return SERVER_EVENT_INTERNAL_ERROR;
-		}
-
-		g_assert_not_reached ();
-	} else if (WIFEXITED (status)) {
-		*arg = WEXITSTATUS (status);
-		return SERVER_EVENT_CHILD_EXITED;
-	} else if (WIFSIGNALED (status)) {
-		if ((WTERMSIG (status) == SIGTRAP) || (WTERMSIG (status) == SIGKILL)) {
-			*arg = 0;
-			return SERVER_EVENT_CHILD_EXITED;
-		} else {
-			*arg = WTERMSIG (status);
-			return SERVER_EVENT_CHILD_SIGNALED;
-		}
+	if (!e) {
+		g_warning (G_STRLOC ": Got unknown waitpid() result: %x", status);
+		return SERVER_EVENT_UNKNOWN_ERROR;
 	}
 
-	g_warning (G_STRLOC ": Got unknown waitpid() result: %x", status);
-	return SERVER_EVENT_UNKNOWN_ERROR;
+	*arg = e->arg;
+	*data1 = e->data1;
+	*data2 = e->data2;
+	*opt_data_size = e->opt_data_size;
+	*opt_data = e->opt_data;
+
+	type = e->type;
+	g_free (e);
+	return type;
 }
 
 static ServerEventType
@@ -466,8 +351,6 @@ mdb_server_dispatch_simple (guint32 status, guint32 *arg)
 	return SERVER_EVENT_UNKNOWN_ERROR;
 }
 
-#else
-
 ServerEvent *
 mdb_server_handle_wait_event (void)
 {
@@ -496,8 +379,6 @@ mdb_server_handle_wait_event (void)
 
 	return handle_inferior_event (server, status);
 }
-
-#endif
 
 static ServerHandle *
 mdb_server_create_inferior (BreakpointManager *bpm)
