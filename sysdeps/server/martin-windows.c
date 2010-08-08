@@ -30,7 +30,6 @@ struct InferiorHandle
 	ProcessHandle *process;
 	HANDLE thread_handle;
 	DWORD thread_id;
-	INFERIOR_REGS_TYPE current_regs;
 };
 
 static GHashTable *server_hash; // thread id -> ServerHandle *
@@ -277,23 +276,19 @@ handle_debug_event (DEBUG_EVENT *de)
 		g_message (G_STRLOC ": EXCEPTION (%d/%d): %x - %p - %d", de->dwProcessId, de->dwThreadId,
 			   exception_code, exception_addr, de->u.Exception.dwFirstChance);
 
-		if (exception_code == EXCEPTION_BREAKPOINT) {
-			guint64 arg = 0;
+		if ((exception_code == EXCEPTION_BREAKPOINT) || (exception_code == EXCEPTION_SINGLE_STEP)) {
+			guint64 callback_arg, retval, retval2;
+			ChildStoppedAction action;
 
-			mdb_arch_get_registers (server);
+			action = mdb_arch_child_stopped (server, 0, &callback_arg, &retval, &retval2, NULL, NULL);
 
-			if (mdb_arch_check_breakpoint (server, INFERIOR_REG_RIP (inferior->current_regs) - 1, &arg)) {
-				INFERIOR_REG_RIP (inferior->current_regs)--;
-				mdb_inferior_set_registers (inferior, &inferior->current_regs);
-				mdb_server_process_child_event (MESSAGE_CHILD_HIT_BREAKPOINT, de->dwProcessId, arg, 0, 0, 0, NULL);
-			} else {
+			if (action == STOP_ACTION_STOPPED)
 				mdb_server_process_child_event (MESSAGE_CHILD_STOPPED, de->dwProcessId, 0, 0, 0, 0, NULL);
-			}
+			else if (action == STOP_ACTION_BREAKPOINT_HIT)
+				mdb_server_process_child_event (MESSAGE_CHILD_HIT_BREAKPOINT, de->dwProcessId, retval, 0, 0, 0, NULL);
+			else
+				g_warning (G_STRLOC ": unknown action %d", action);
 
-			ResetEvent (wait_event);
-			return;
-		} else if (exception_code == EXCEPTION_SINGLE_STEP) {
-			mdb_server_process_child_event (MESSAGE_CHILD_STOPPED, de->dwProcessId, 0, 0, 0, 0, NULL);
 			ResetEvent (wait_event);
 			return;
 		}
@@ -589,8 +584,12 @@ mdb_inferior_get_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
 	regs->context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS |
 		CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS | CONTEXT_DEBUG_REGISTERS;
 
-	if (!GetThreadContext (inferior->thread_handle, &regs->context))
+	if (!GetThreadContext (inferior->thread_handle, &regs->context)) {
+		g_warning (G_STRLOC ": get_registers: %s", get_last_error ());
 		return COMMAND_ERROR_MEMORY_ACCESS;
+	}
+
+	g_message (G_STRLOC ": GOT REGISTERS: %lx", regs->context.Eip);
 
 	regs->dr_status = regs->context.Dr6;
 	regs->dr_control = regs->context.Dr7;
