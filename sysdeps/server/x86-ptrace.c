@@ -25,6 +25,10 @@
 #include <fcntl.h>
 #include <errno.h>
 
+#ifdef MDB_SERVER
+#include "mdb-server.h"
+#endif
+
 /*
  * NOTE:  The manpage is wrong about the POKE_* commands - the last argument
  *        is the data (a word) to be written, not a pointer to it.
@@ -169,10 +173,12 @@ mdb_server_write_memory (ServerHandle *handle, guint64 start, guint32 size, gcon
 	return mdb_inferior_write_memory (handle->inferior, start, size, buffer);
 }
 
+#ifndef MDB_SERVER
+
 static ServerEventType
 mdb_server_dispatch_event (ServerHandle *handle, guint32 status, guint64 *arg,
-			      guint64 *data1, guint64 *data2, guint32 *opt_data_size,
-			      gpointer *opt_data)
+			   guint64 *data1, guint64 *data2, guint32 *opt_data_size,
+			   gpointer *opt_data)
 {
 	#ifdef PTRACE_EVENT_CLONE
 	if (status >> 16) {
@@ -340,6 +346,180 @@ mdb_server_dispatch_simple (guint32 status, guint32 *arg)
 	return SERVER_EVENT_UNKNOWN_ERROR;
 }
 
+#else
+
+ServerEvent *
+mdb_server_handle_wait_event (void)
+{
+	ServerEvent *e;
+	ServerHandle *server;
+	int pid, status;
+
+	pid = waitpid (-1, &status, WUNTRACED | __WALL | __WCLONE | WNOHANG);
+	if (pid < 0) {
+		g_warning (G_STRLOC ": waitpid() failed: %s", g_strerror (errno));
+		return NULL;
+	} else if (pid == 0)
+		return NULL;
+
+	g_message (G_STRLOC ": waitpid(): %d - %x", pid, status);
+
+	if (status >> 16) {
+		switch (status >> 16) {
+		case PTRACE_EVENT_CLONE: {
+			int new_pid;
+
+			e = g_new0 (ServerEvent, 1);
+
+			if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &new_pid)) {
+				g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
+				e->type = SERVER_EVENT_UNKNOWN_ERROR;
+				return e;
+			}
+
+			e->type = SERVER_EVENT_CHILD_CREATED_THREAD;
+			e->arg = new_pid;
+			return e;
+		}
+
+		case PTRACE_EVENT_FORK: {
+			int new_pid;
+
+			e = g_new0 (ServerEvent, 1);
+
+			if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &new_pid)) {
+				g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
+				e->type = SERVER_EVENT_UNKNOWN_ERROR;
+				return e;
+			}
+
+			e->type = SERVER_EVENT_CHILD_FORKED;
+			e->arg = new_pid;
+			return e;
+		}
+
+		case PTRACE_EVENT_EXEC: {
+			e = g_new0 (ServerEvent, 1);
+			e->type = SERVER_EVENT_CHILD_EXECD;
+			return e;
+		}
+
+		case PTRACE_EVENT_EXIT: {
+			int exitcode;
+
+			e = g_new0 (ServerEvent, 1);
+
+			if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &exitcode)) {
+				g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
+				e->type = SERVER_EVENT_UNKNOWN_ERROR;
+				return e;
+			}
+
+			e->type = SERVER_EVENT_CHILD_CALLED_EXIT;
+			e->arg = exitcode;
+			return e;
+		}
+
+		default:
+			g_warning (G_STRLOC ": Received unknown wait result %x on child %d",
+				   status, pid);
+			return NULL;
+		}
+	}
+
+	server = mdb_server_get_inferior_by_pid (pid);
+	if (!server) {
+		g_warning (G_STRLOC ": Got wait event for unknown pid: %d", pid);
+		return NULL;
+	}
+
+	e = g_new0 (ServerEvent, 1);
+	e->sender_iid = server->iid;
+
+	if (WIFSTOPPED (status)) {
+#if __MACH__
+		server->inferior->os.wants_to_run = FALSE;
+#endif
+		ChildStoppedAction action;
+		int stopsig;
+
+		stopsig = WSTOPSIG (status);
+		if (stopsig == SIGCONT)
+			stopsig = 0;
+
+		action = mdb_arch_child_stopped (
+			server, stopsig, &e->arg, &e->data1, &e->data2, &e->opt_data_size, &e->opt_data);
+
+		if (action != STOP_ACTION_STOPPED)
+			server->inferior->last_signal = 0;
+
+		switch (action) {
+		case STOP_ACTION_STOPPED:
+			if (stopsig == SIGTRAP) {
+				server->inferior->last_signal = 0;
+				e->arg = 0;
+			} else {
+				server->inferior->last_signal = stopsig;
+				e->arg = stopsig;
+			}
+			e->type = SERVER_EVENT_CHILD_STOPPED;
+			return e;
+
+		case STOP_ACTION_INTERRUPTED:
+			e->arg = 0;
+			e->type = SERVER_EVENT_CHILD_INTERRUPTED;
+			return e;
+
+		case STOP_ACTION_BREAKPOINT_HIT:
+			e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
+			return e;
+
+		case STOP_ACTION_CALLBACK:
+			e->type = SERVER_EVENT_CHILD_CALLBACK;
+			return e;
+
+		case STOP_ACTION_CALLBACK_COMPLETED:
+			e->type = SERVER_EVENT_CHILD_CALLBACK_COMPLETED;
+			return e;
+
+		case STOP_ACTION_NOTIFICATION:
+			e->type = SERVER_EVENT_CHILD_NOTIFICATION;
+			return e;
+
+		case STOP_ACTION_RTI_DONE:
+			e->type = SERVER_EVENT_RUNTIME_INVOKE_DONE;
+			return e;
+
+		case STOP_ACTION_INTERNAL_ERROR:
+			e->type = SERVER_EVENT_INTERNAL_ERROR;
+			return e;
+		}
+
+		g_assert_not_reached ();
+	} else if (WIFEXITED (status)) {
+		e->type = SERVER_EVENT_CHILD_EXITED;
+		e->arg = WEXITSTATUS (status);
+		return e;
+	} else if (WIFSIGNALED (status)) {
+		if ((WTERMSIG (status) == SIGTRAP) || (WTERMSIG (status) == SIGKILL)) {
+			e->type = SERVER_EVENT_CHILD_EXITED;
+			e->arg = 0;
+			return e;
+		} else {
+			e->type = SERVER_EVENT_CHILD_SIGNALED;
+			e->arg = WTERMSIG (status);
+			return e;
+		}
+	}
+
+	g_warning (G_STRLOC ": Got unknown waitpid() result: %x", status);
+
+	e->type = SERVER_EVENT_UNKNOWN_ERROR;
+	e->arg = status;
+	return e;
+}
+
+#endif
 
 static ServerHandle *
 mdb_server_create_inferior (BreakpointManager *bpm)

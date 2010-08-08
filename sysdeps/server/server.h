@@ -22,6 +22,7 @@ typedef struct _ArchInfo ArchInfo;
 typedef struct _InferiorRegsType INFERIOR_REGS_TYPE;
 
 struct _ServerHandle {
+	guint32 iid;
 	ArchInfo *arch;
 	InferiorHandle *inferior;
 	MonoRuntimeInfo *mono_runtime;

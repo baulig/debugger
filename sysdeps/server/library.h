@@ -60,8 +60,14 @@ typedef enum {
 
 typedef struct {
 	ServerEventType type;
-	guint32 arg;
-} ServerStatusMessage;
+	guint32 sender_iid;
+	guint32 opt_arg_iid;
+	guint64 arg;
+	guint64 data1;
+	guint64 data2;
+	guint32 opt_data_size;
+	gpointer opt_data;
+} ServerEvent;
 
 typedef struct {
 	guint64 address;

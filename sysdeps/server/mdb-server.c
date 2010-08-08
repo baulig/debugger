@@ -525,6 +525,8 @@ server_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 
 		iid = ++next_unique_id;
 		inferior = mono_debugger_server_create_inferior (bpm);
+		inferior->iid = iid;
+
 		g_hash_table_insert (inferior_hash, GUINT_TO_POINTER (iid), inferior);
 
 		buffer_add_int (buf, iid);

@@ -34,7 +34,7 @@ mdb_server_init_os (void);
 extern ServerHandle *
 mdb_server_get_inferior_by_pid (int pid);
 
-extern void
+extern ServerEvent *
 mdb_server_handle_wait_event (void);
 
 extern void
