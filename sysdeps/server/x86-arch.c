@@ -140,9 +140,9 @@ mdb_server_get_frame (ServerHandle *server, StackFrame *frame)
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
-	frame->address = (guint32) INFERIOR_REG_RIP (server->arch->current_regs);
-	frame->stack_pointer = (guint32) INFERIOR_REG_RSP (server->arch->current_regs);
-	frame->frame_address = (guint32) INFERIOR_REG_RBP (server->arch->current_regs);
+	frame->address = (gsize) INFERIOR_REG_RIP (server->arch->current_regs);
+	frame->stack_pointer = (gsize) INFERIOR_REG_RSP (server->arch->current_regs);
+	frame->frame_address = (gsize) INFERIOR_REG_RBP (server->arch->current_regs);
 	return COMMAND_ERROR_NONE;
 }
 
@@ -345,12 +345,12 @@ mdb_arch_enable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
 	ArchInfo *arch = server->arch;
 	InferiorHandle *inferior = server->inferior;
 	char bopcode = 0xcc;
-	guint32 address;
+	gsize address;
 
 	if (breakpoint->enabled)
 		return COMMAND_ERROR_NONE;
 
-	address = (guint32) breakpoint->address;
+	address = (gsize) breakpoint->address;
 
 	if (breakpoint->dr_index >= 0) {
 #if defined(__x86_64__)
@@ -401,12 +401,12 @@ mdb_arch_disable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
 	ServerCommandError result;
 	ArchInfo *arch = server->arch;
 	InferiorHandle *inferior = server->inferior;
-	guint32 address;
+	gsize address;
 
 	if (!breakpoint->enabled)
 		return COMMAND_ERROR_NONE;
 
-	address = (guint32) breakpoint->address;
+	address = (gsize) breakpoint->address;
 
 	if (breakpoint->dr_index >= 0) {
 		X86_DR_DISABLE (arch->current_regs, breakpoint->dr_index);
@@ -663,7 +663,7 @@ mdb_server_execute_instruction (ServerHandle *server, const guint8 *instruction,
 	MonoRuntimeInfo *runtime;
 	ServerCommandError result;
 	CodeBufferData *data;
-	guint32 code_address;
+	gsize code_address;
 	int slot;
 
 	runtime = server->mono_runtime;
