@@ -240,6 +240,58 @@ handle_extended_event (int pid, int status)
 	}
 }
 
+static ServerEvent *
+handle_inferior_event (ServerHandle *server, int status)
+{
+	ServerEvent *e;
+
+	if (WIFSTOPPED (status)) {
+#if __MACH__
+		server->inferior->os.wants_to_run = FALSE;
+#endif
+		int stopsig;
+
+		stopsig = WSTOPSIG (status);
+		if (stopsig == SIGCONT)
+			stopsig = 0;
+
+		if (stopsig == SIGSTOP) {
+			e->type = SERVER_EVENT_CHILD_INTERRUPTED;
+			return e;
+		}
+
+		return mdb_arch_child_stopped_2 (server, stopsig);
+	} else if (WIFEXITED (status)) {
+		e = g_new0 (ServerEvent, 1);
+		e->sender_iid = server->iid;
+
+		e->type = SERVER_EVENT_CHILD_EXITED;
+		e->arg = WEXITSTATUS (status);
+		return e;
+	} else if (WIFSIGNALED (status)) {
+		e = g_new0 (ServerEvent, 1);
+		e->sender_iid = server->iid;
+
+		if ((WTERMSIG (status) == SIGTRAP) || (WTERMSIG (status) == SIGKILL)) {
+			e->type = SERVER_EVENT_CHILD_EXITED;
+			e->arg = 0;
+			return e;
+		} else {
+			e->type = SERVER_EVENT_CHILD_SIGNALED;
+			e->arg = WTERMSIG (status);
+			return e;
+		}
+	}
+
+	g_warning (G_STRLOC ": Got unknown waitpid() result: %x", status);
+
+	e = g_new0 (ServerEvent, 1);
+	e->sender_iid = server->iid;
+
+	e->type = SERVER_EVENT_UNKNOWN_ERROR;
+	e->arg = status;
+	return e;
+}
 
 #ifndef MDB_SERVER
 
@@ -432,68 +484,9 @@ mdb_server_handle_wait_event (void)
 
 	g_message (G_STRLOC ": waitpid(): %d - %x", pid, status);
 
-	if (status >> 16) {
-		switch (status >> 16) {
-		case PTRACE_EVENT_CLONE: {
-			int new_pid;
-
-			e = g_new0 (ServerEvent, 1);
-
-			if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &new_pid)) {
-				g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
-				e->type = SERVER_EVENT_UNKNOWN_ERROR;
-				return e;
-			}
-
-			e->type = SERVER_EVENT_CHILD_CREATED_THREAD;
-			e->arg = new_pid;
-			return e;
-		}
-
-		case PTRACE_EVENT_FORK: {
-			int new_pid;
-
-			e = g_new0 (ServerEvent, 1);
-
-			if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &new_pid)) {
-				g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
-				e->type = SERVER_EVENT_UNKNOWN_ERROR;
-				return e;
-			}
-
-			e->type = SERVER_EVENT_CHILD_FORKED;
-			e->arg = new_pid;
-			return e;
-		}
-
-		case PTRACE_EVENT_EXEC: {
-			e = g_new0 (ServerEvent, 1);
-			e->type = SERVER_EVENT_CHILD_EXECD;
-			return e;
-		}
-
-		case PTRACE_EVENT_EXIT: {
-			int exitcode;
-
-			e = g_new0 (ServerEvent, 1);
-
-			if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &exitcode)) {
-				g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
-				e->type = SERVER_EVENT_UNKNOWN_ERROR;
-				return e;
-			}
-
-			e->type = SERVER_EVENT_CHILD_CALLED_EXIT;
-			e->arg = exitcode;
-			return e;
-		}
-
-		default:
-			g_warning (G_STRLOC ": Received unknown wait result %x on child %d",
-				   status, pid);
-			return NULL;
-		}
-	}
+	e = handle_extended_event (pid, status);
+	if (e)
+		return e;
 
 	server = mdb_server_get_inferior_by_pid (pid);
 	if (!server) {
@@ -501,52 +494,7 @@ mdb_server_handle_wait_event (void)
 		return NULL;
 	}
 
-	if (WIFSTOPPED (status)) {
-#if __MACH__
-		server->inferior->os.wants_to_run = FALSE;
-#endif
-		int stopsig;
-
-		stopsig = WSTOPSIG (status);
-		if (stopsig == SIGCONT)
-			stopsig = 0;
-
-		if (stopsig == SIGSTOP) {
-			e->type = SERVER_EVENT_CHILD_INTERRUPTED;
-			return e;
-		}
-
-		return mdb_arch_child_stopped_2 (server, stopsig);
-	} else if (WIFEXITED (status)) {
-		e = g_new0 (ServerEvent, 1);
-		e->sender_iid = server->iid;
-
-		e->type = SERVER_EVENT_CHILD_EXITED;
-		e->arg = WEXITSTATUS (status);
-		return e;
-	} else if (WIFSIGNALED (status)) {
-		e = g_new0 (ServerEvent, 1);
-		e->sender_iid = server->iid;
-
-		if ((WTERMSIG (status) == SIGTRAP) || (WTERMSIG (status) == SIGKILL)) {
-			e->type = SERVER_EVENT_CHILD_EXITED;
-			e->arg = 0;
-			return e;
-		} else {
-			e->type = SERVER_EVENT_CHILD_SIGNALED;
-			e->arg = WTERMSIG (status);
-			return e;
-		}
-	}
-
-	g_warning (G_STRLOC ": Got unknown waitpid() result: %x", status);
-
-	e = g_new0 (ServerEvent, 1);
-	e->sender_iid = server->iid;
-
-	e->type = SERVER_EVENT_UNKNOWN_ERROR;
-	e->arg = status;
-	return e;
+	return handle_inferior_event (server, status);
 }
 
 #endif
