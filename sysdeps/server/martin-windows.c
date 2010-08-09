@@ -75,7 +75,7 @@ get_last_error (void)
 
 	error_code = GetLastError ();
 
-	dw_rval = FormatMessage (FORMAT_SERVER_EVENT_FROM_SYSTEM, NULL,
+	dw_rval = FormatMessage (FORMAT_MESSAGE_FROM_SYSTEM, NULL,
 				 error_code, 0, message, 2048, NULL);
 
 	if (dw_rval == 0)
@@ -277,17 +277,13 @@ handle_debug_event (DEBUG_EVENT *de)
 			   exception_code, exception_addr, de->u.Exception.dwFirstChance);
 
 		if ((exception_code == EXCEPTION_BREAKPOINT) || (exception_code == EXCEPTION_SINGLE_STEP)) {
-			guint64 callback_arg, retval, retval2;
-			ChildStoppedAction action;
+			ServerEvent *e;
 
-			action = mdb_arch_child_stopped (server, 0, &callback_arg, &retval, &retval2, NULL, NULL);
-
-			if (action == STOP_ACTION_STOPPED)
-				mdb_server_process_child_event (SERVER_EVENT_CHILD_STOPPED, de->dwProcessId, 0, 0, 0, 0, NULL);
-			else if (action == STOP_ACTION_BREAKPOINT_HIT)
-				mdb_server_process_child_event (SERVER_EVENT_CHILD_HIT_BREAKPOINT, de->dwProcessId, retval, 0, 0, 0, NULL);
+			e = mdb_arch_child_stopped (server, 0);
+			if (e)
+				mdb_server_process_child_event (e);
 			else
-				g_warning (G_STRLOC ": unknown action %d", action);
+				g_warning (G_STRLOC ": mdb_arch_child_stopped() returned NULL.");
 
 			ResetEvent (wait_event);
 			return;
@@ -886,6 +882,7 @@ InferiorVTable i386_windows_inferior = {
 	mdb_server_global_init,
 	mdb_server_get_server_type,
 	mdb_server_get_capabilities,
+	mdb_server_get_arch_type,
 	mdb_server_create_inferior,
 	mdb_server_initialize_process,
 	NULL,					/* initialize_thread */

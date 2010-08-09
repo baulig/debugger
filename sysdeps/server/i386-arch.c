@@ -431,62 +431,65 @@ get_callback_data (ArchInfo *arch)
 	return g_ptr_array_index (arch->callback_stack, arch->callback_stack->len - 1);
 }
 
-ChildStoppedAction
-mdb_arch_child_stopped (ServerHandle *handle, int stopsig,
-			guint64 *callback_arg, guint64 *retval, guint64 *retval2,
-			guint32 *opt_data_size, gpointer *opt_data)
+ServerEvent *
+mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 {
-	ArchInfo *arch = handle->arch;
-	InferiorHandle *inferior = handle->inferior;
+	ArchInfo *arch = server->arch;
+	InferiorHandle *inferior = server->inferior;
 	CodeBufferData *cbuffer = NULL;
 	CallbackData *cdata;
+	ServerEvent *e;
 	guint64 code;
 	int i;
 
-	mdb_arch_get_registers (handle);
+	mdb_arch_get_registers (server);
+
+	e = g_new0 (ServerEvent, 1);
+	e->sender_iid = server->iid;
+	e->type = SERVER_EVENT_CHILD_STOPPED;
 
 #if defined(__linux__) || defined(__FreeBSD__)
-	if (stopsig == SIGSTOP)
-		return STOP_ACTION_INTERRUPTED;
+	if (stopsig == SIGSTOP) {
+		e->type = SERVER_EVENT_CHILD_INTERRUPTED;
+		return e;
+	}
 
-	if (stopsig != SIGTRAP)
-		return STOP_ACTION_STOPPED;
+	if (stopsig != SIGTRAP) {
+		e->arg = stopsig;
+		return e;
+	}
 #endif
 
-	if (handle->mono_runtime &&
-	    ((guint32) INFERIOR_REG_RIP (arch->current_regs) - 1 == handle->mono_runtime->notification_address)) {
+	if (server->mono_runtime &&
+	    ((guint32) INFERIOR_REG_RIP (arch->current_regs) - 1 == server->mono_runtime->notification_address)) {
 		guint32 addr = (guint32) INFERIOR_REG_RSP (arch->current_regs) + 4;
 		guint64 data [3];
 
-#if defined(__linux__) || defined(__FreeBSD__)
-		if (stopsig != SIGTRAP)
-			return STOP_ACTION_STOPPED;
-#endif
-
 		if (mdb_inferior_read_memory (inferior, addr, 24, &data))
-			return STOP_ACTION_STOPPED;
+			return e;
 
-		*callback_arg = data [0];
-		*retval = data [1];
-		*retval2 = data [2];
-
-		return STOP_ACTION_NOTIFICATION;
+		e->arg = data [0];
+		e->data1 = data [1];
+		e->data2 = data [2];
+		e->type = SERVER_EVENT_CHILD_NOTIFICATION;
+		return e;
 	}
 
 	for (i = 0; i < DR_NADDR; i++) {
 		if (X86_DR_WATCH_HIT (arch->current_regs, i)) {
 			INFERIOR_REG_DR_STATUS (arch->current_regs) = 0;
-			*retval = arch->dr_index [i];
 			mdb_inferior_set_registers (inferior, &arch->current_regs);
-			*retval = arch->dr_index [i];
-			return STOP_ACTION_BREAKPOINT_HIT;
+			e->arg = arch->dr_index [i];
+			e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
+			return e;
 		}
 	}
 
-	if (mdb_arch_check_breakpoint (handle, (guint32) INFERIOR_REG_RIP (arch->current_regs) - 1, retval)) {
+	if (mdb_arch_check_breakpoint (server, (guint32) INFERIOR_REG_RIP (arch->current_regs) - 1, &e->arg)) {
 		INFERIOR_REG_RIP (arch->current_regs)--;
 		mdb_inferior_set_registers (inferior, &arch->current_regs);
-		return STOP_ACTION_BREAKPOINT_HIT;
+		e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
+		return e;
 	}
 
 	cdata = get_callback_data (arch);
@@ -496,8 +499,12 @@ mdb_arch_child_stopped (ServerHandle *handle, int stopsig,
 		if (cdata->pushed_registers) {
 			guint32 pushed_regs [9];
 
-			if (mdb_inferior_read_memory (inferior, cdata->pushed_registers, 36, &pushed_regs))
-				g_error (G_STRLOC ": Can't restore registers after returning from a call");
+			if (mdb_inferior_read_memory (inferior, cdata->pushed_registers, 36, &pushed_regs)) {
+				g_warning (G_STRLOC ": Can't restore registers after returning from a call");
+
+				e->type = SERVER_EVENT_INTERNAL_ERROR;
+				return e;
+			}
 
 			INFERIOR_REG_RAX (cdata->saved_regs) = pushed_regs [0];
 			INFERIOR_REG_RBX (cdata->saved_regs) = pushed_regs [1];
@@ -510,30 +517,34 @@ mdb_arch_child_stopped (ServerHandle *handle, int stopsig,
 			INFERIOR_REG_RIP (cdata->saved_regs) = pushed_regs [8];
 		}
 
-		if (mdb_inferior_set_registers (inferior, &cdata->saved_regs) != COMMAND_ERROR_NONE)
-			g_error (G_STRLOC ": Can't restore registers after returning from a call");
+		if (mdb_inferior_set_registers (inferior, &cdata->saved_regs) != COMMAND_ERROR_NONE) {
+			g_warning (G_STRLOC ": Can't restore registers after returning from a call");
+			e->type = SERVER_EVENT_INTERNAL_ERROR;
+			return e;
+		}
 
-		*callback_arg = cdata->callback_argument;
-		*retval = (guint32) INFERIOR_REG_RAX (arch->current_regs);
+		e->arg = cdata->callback_argument;
+		e->data1 = (guint32) INFERIOR_REG_RAX (arch->current_regs);
 
 		if (cdata->data_pointer) {
-			*opt_data_size = cdata->data_size;
-			*opt_data = g_malloc0 (cdata->data_size);
+			e->opt_data_size = cdata->data_size;
+			e->opt_data = g_malloc0 (cdata->data_size);
 
-			if (mdb_inferior_read_memory (
-				    handle->inferior, cdata->data_pointer, cdata->data_size, *opt_data))
-				g_error (G_STRLOC ": Can't read data buffer after returning from a call");
-		} else {
-			*opt_data_size = 0;
-			*opt_data = NULL;
+			if (mdb_inferior_read_memory (server->inferior, cdata->data_pointer, cdata->data_size, e->opt_data)) {
+				e->type = SERVER_EVENT_INTERNAL_ERROR;
+				return e;
+			}
 		}
 
 
 		if (cdata->exc_address &&
-		    (mdb_inferior_peek_word (handle->inferior, cdata->exc_address, &exc_object) != COMMAND_ERROR_NONE))
-			g_error (G_STRLOC ": Can't get exc object");
+		    (mdb_inferior_peek_word (server->inferior, cdata->exc_address, &exc_object) != COMMAND_ERROR_NONE)) {
+			g_warning (G_STRLOC ": Can't get exc object");
+			e->type = SERVER_EVENT_INTERNAL_ERROR;
+			return e;
+		}
 
-		*retval2 = (guint32) exc_object;
+		e->data2 = (guint32) exc_object;
 
 #if defined(__linux__) || defined(__FreeBSD__)
 		_mdb_inferior_set_last_signal (inferior, cdata->saved_signal);
@@ -541,33 +552,35 @@ mdb_arch_child_stopped (ServerHandle *handle, int stopsig,
 
 		g_ptr_array_remove (arch->callback_stack, cdata);
 
-		mdb_arch_get_registers (handle);
+		mdb_arch_get_registers (server);
 
 		if (cdata->is_rti) {
 			g_free (cdata);
-			return STOP_ACTION_RTI_DONE;
+			e->type = SERVER_EVENT_RUNTIME_INVOKE_DONE;
 		}
 
 		if (cdata->debug) {
-			*retval = 0;
+			e->data1 = 0;
 			g_free (cdata);
-			return STOP_ACTION_CALLBACK_COMPLETED;
+			e->type = SERVER_EVENT_CHILD_CALLBACK_COMPLETED;
+			return e;
 		}
 
 		g_free (cdata);
-		return STOP_ACTION_CALLBACK;
+		e->type = SERVER_EVENT_CHILD_CALLBACK;
+		return e;
 	}
 
 	cbuffer = arch->code_buffer;
 	if (cbuffer) {
-		handle->mono_runtime->executable_code_bitfield [cbuffer->slot] = 0;
+		server->mono_runtime->executable_code_bitfield [cbuffer->slot] = 0;
 
 		if (cbuffer->code_address + cbuffer->insn_size != INFERIOR_REG_RIP (arch->current_regs)) {
 			g_warning (G_STRLOC ": %x - %x,%d - %x - %x", cbuffer->original_rip,
 				   cbuffer->code_address, cbuffer->insn_size,
 				   cbuffer->code_address + cbuffer->insn_size,
 				   INFERIOR_REG_RIP (arch->current_regs));
-			return STOP_ACTION_STOPPED;
+			return e;
 		}
 
 		INFERIOR_REG_RIP (arch->current_regs) = cbuffer->original_rip;
@@ -579,18 +592,19 @@ mdb_arch_child_stopped (ServerHandle *handle, int stopsig,
 
 		g_free (cbuffer);
 		arch->code_buffer = NULL;
-		return STOP_ACTION_STOPPED;
+		return e;
 	}
 
-	if (mdb_inferior_peek_word (handle->inferior, GPOINTER_TO_INT (INFERIOR_REG_RIP (arch->current_regs) - 1), &code) != COMMAND_ERROR_NONE)
-		return STOP_ACTION_STOPPED;
+	if (mdb_inferior_peek_word (server->inferior, GPOINTER_TO_INT (INFERIOR_REG_RIP (arch->current_regs) - 1), &code) != COMMAND_ERROR_NONE)
+		return e;
 
 	if ((code & 0xff) == 0xcc) {
-		*retval = 0;
-		return STOP_ACTION_BREAKPOINT_HIT;
+		e->arg = 0;
+		e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
+		return e;
 	}
 
-	return STOP_ACTION_STOPPED;
+	return e;
 }
 
 ServerCommandError

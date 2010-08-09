@@ -73,6 +73,9 @@ platform_sources = \
 platform_server = \
 	mdb-server-bfd.c \
 	mdb-server-linux.c
+mdb_server_ldflags = -entry=main
+else
+mdb_server_ldflags =
 endif
 
 server_sources = \
@@ -114,8 +117,7 @@ mdb_server_SOURCES = \
 	$(platform_server)
 
 mdb_server_LDFLAGS = \
-	-export-dynamic -static -no-undefined \
-	-entry=main
+	-export-dynamic -static -no-undefined $(mdb_server_ldflags)
 
 mdb_server_LDADD = \
 	@SERVER_DEPENDENCIES_LIBS@ $(eglib_static_libs) $(platform_libs) \

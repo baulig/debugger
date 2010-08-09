@@ -188,7 +188,6 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 	if (mdb_arch_check_breakpoint (server, INFERIOR_REG_RIP (arch->current_regs) - 1, &e->arg)) {
 		INFERIOR_REG_RIP (arch->current_regs)--;
 		mdb_inferior_set_registers (inferior, &arch->current_regs);
-		e->arg = 0;
 		e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
 		return e;
 	}
