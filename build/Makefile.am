@@ -47,7 +47,7 @@ noinst_SCRIPTS = \
 	debugger-test-server.exe
 
 LANGUAGE_SPECIFIC_FILES = \
-	$(top_builddir)/frontend/CSharpExpressionParser.cs	\
+	$(top_srcdir)/frontend/CSharpExpressionParser.cs	\
 	$(top_srcdir)/frontend/CSharpTokenizer.cs
 
 MDB_SRCLIST = \

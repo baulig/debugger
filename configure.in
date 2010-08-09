@@ -49,7 +49,7 @@ AC_ARG_WITH(backend,
    check_mono=no
    ;;
  remote-only)
-   csharp_library=no
+   csharp_library=yes
    library_backend=no
    build_sysdeps=no
    remote_backend=yes
