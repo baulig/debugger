@@ -585,8 +585,6 @@ mdb_inferior_get_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
 		return COMMAND_ERROR_MEMORY_ACCESS;
 	}
 
-	g_message (G_STRLOC ": GOT REGISTERS: %lx", regs->context.Eip);
-
 	regs->dr_status = regs->context.Dr6;
 	regs->dr_control = regs->context.Dr7;
 	regs->dr_regs[0] = regs->context.Dr0;
@@ -621,7 +619,7 @@ mdb_process_read_memory (ProcessHandle *process, guint64 start, guint32 size, gp
 {
 	SetLastError (0);
 	if (!ReadProcessMemory (process->process_handle, GINT_TO_POINTER ((guint) start), buffer, size, NULL)) {
-		g_warning (G_STRLOC ": %p/%d - %s", start, size, get_last_error ());
+		g_warning (G_STRLOC ": %lx/%d - %s", (gsize) start, size, get_last_error ());
 		return COMMAND_ERROR_MEMORY_ACCESS;
 	}
 
