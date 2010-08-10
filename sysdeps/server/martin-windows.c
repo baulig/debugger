@@ -92,6 +92,8 @@ get_last_error (void)
 static void
 mdb_server_global_init (void)
 {
+	g_assert (!server_hash);
+
 	server_hash = g_hash_table_new (NULL, NULL);
 	bfd_hash = g_hash_table_new (NULL, NULL);
 
@@ -289,8 +291,10 @@ handle_debug_event (DEBUG_EVENT *de)
 			return;
 		}
 
+		g_message (G_STRLOC ": resuming from exception (%x/%x)", de->dwProcessId, de->dwThreadId);
+
 		if (!ContinueDebugEvent (de->dwProcessId, de->dwThreadId, DBG_EXCEPTION_NOT_HANDLED)) {
-			g_warning (G_STRLOC ": %s", get_last_error ());
+			g_warning (G_STRLOC ": resuming from exception (%x/%x): %s", de->dwProcessId, de->dwThreadId, get_last_error ());
 		}
 
 		return;
@@ -379,6 +383,7 @@ handle_debug_event (DEBUG_EVENT *de)
 		break;
 	}
 
+	g_message (G_STRLOC ": resuming from debug event (%x/%x)", de->dwProcessId, de->dwThreadId);
 	if (!ContinueDebugEvent (de->dwProcessId, de->dwThreadId, DBG_CONTINUE)) {
 		g_warning (G_STRLOC ": %s", get_last_error ());
 	}
@@ -711,8 +716,10 @@ mdb_server_step (ServerHandle *server)
 
 	set_step_flag (inferior, TRUE);
 
+	g_warning (G_STRLOC ": step (%d/%d)", inferior->process->process_id, inferior->thread_id);
+
 	if (!ContinueDebugEvent (inferior->process->process_id, inferior->thread_id, DBG_CONTINUE)) {
-		g_warning (G_STRLOC ": continue (%d/%d): %s", inferior->process->process_id, inferior->thread_id, get_last_error ());
+		g_warning (G_STRLOC ": step (%d/%d): %s", inferior->process->process_id, inferior->thread_id, get_last_error ());
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 	}
 
@@ -728,8 +735,10 @@ mdb_server_continue (ServerHandle *server)
 
 	set_step_flag (inferior, FALSE);
 
+	g_warning (G_STRLOC ": continue (%d/%d)", inferior->process->process_id, inferior->thread_id);
+
 	if (!ContinueDebugEvent (inferior->process->process_id, inferior->thread_id, DBG_CONTINUE)) {
-		g_warning (G_STRLOC ": %s", get_last_error ());
+		g_warning (G_STRLOC ": continue (%d/%d): %s", inferior->process->process_id, inferior->thread_id, get_last_error ());
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 	}
 
