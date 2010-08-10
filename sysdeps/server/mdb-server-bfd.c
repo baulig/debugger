@@ -58,6 +58,7 @@ mdb_exe_reader_lookup_symbol (MdbExeReader *reader, const char *name)
 
 	for (i = 0; i < reader->num_symbols; i++) {
 		asymbol *symbol = reader->symtab [i];
+		const char *symname = symbol->name;
 		gboolean is_function;
 		guint64 address;
 		int flags;
@@ -88,7 +89,12 @@ mdb_exe_reader_lookup_symbol (MdbExeReader *reader, const char *name)
 			address = symbol->section->vma + symbol->value;
 		}
 
-		if (!strcmp (symbol->name, name))
+#if WINDOWS
+		if (*symname == '_')
+			++symname;
+#endif
+
+		if (!strcmp (symname, name))
 			return address;
 	}
 

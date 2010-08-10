@@ -2972,11 +2972,11 @@ namespace Mono.Debugger.Backend
 		protected override void DoExecute ()
 		{
 			Report.Debug (DebugFlags.SSE,
-				      "{0} test execute start: {1} {2} {3}", sse, sse.Process.IsAttached,
+				      "{0} start execute: {1} {2} {3}", sse, sse.Process.IsAttached,
 				      inferior.CurrentFrame, inferior.EntryPoint);
 
 			if (!sse.Process.IsAttached && sse.manager.HasThreadEvents)
-				sse.do_continue (inferior.EntryPoint);
+				sse.do_continue ();
 			else
 				sse.ProcessEvent (new DebuggerServer.ChildEvent (DebuggerServer.ChildEventType.CHILD_STOPPED, 0, 0, 0));
 		}
@@ -3008,10 +3008,8 @@ namespace Mono.Debugger.Backend
 			if (sse.Process.IsAttached)
 				return EventResult.Completed;
 
-			if (!sse.Process.IsManaged) {
-				if (sse.InitializeBreakpoints ())
-					return EventResult.Running;
-			}
+			if (sse.InitializeBreakpoints ())
+				return EventResult.Running;
 
 			Report.Debug (DebugFlags.SSE, "{0} start #1: {1} {2}", sse, cevent, Result);
 			sse.PushOperation (new OperationStep (sse, StepMode.Run, Result));
