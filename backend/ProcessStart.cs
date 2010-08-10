@@ -14,7 +14,6 @@ namespace Mono.Debugger.Backend
 		public readonly bool LoadNativeSymbolTable = true;
 
 		string cwd;
-		string base_dir;
 		bool stop_in_main = true;
 		bool redirect_output = false;
 		string[] argv;
@@ -106,8 +105,28 @@ namespace Mono.Debugger.Backend
 				start_argv.CopyTo (this.argv, 0);
 				if (options.InferiorArgs.Length > 0)
 					options.InferiorArgs.CopyTo (this.argv, start_argv.Count);
-			} else 
+
+				SetupEnvironment ();
+				return;
+			}
 #endif
+
+			if (options.RemoteServer != null) {
+				IsNative = true;
+
+				this.argv = new string [options.InferiorArgs.Length + 1];
+				argv [0] = options.File;
+				options.InferiorArgs.CopyTo (this.argv, 1);
+
+				SetupEnvironment ();
+				return;
+			}
+
+			if (!File.Exists (options.File))
+				throw new TargetException (TargetError.CannotStartTarget,
+							   "No such file or directory: `{0}'",
+							   options.File);
+
 			if (IsMonoAssembly (options.File)) {
 				IsNative = false;
 
@@ -129,18 +148,6 @@ namespace Mono.Debugger.Backend
 				this.argv = new string [options.InferiorArgs.Length + 1];
 				argv [0] = options.File;
 				options.InferiorArgs.CopyTo (this.argv, 1);
-			}
-
-			if (!File.Exists (options.File))
-				throw new TargetException (TargetError.CannotStartTarget,
-							   "No such file or directory: `{0}'",
-							   options.File);
-
-			try {
-				base_dir = GetFullPath (Path.GetDirectoryName (options.File));
-			} catch {
-				throw new TargetException (TargetError.CannotStartTarget,
-							   "Invalid directory: `{0}'", options.File);
 			}
 
 			SetupEnvironment ();
@@ -171,7 +178,6 @@ namespace Mono.Debugger.Backend
 			this.options = parent.options;
 			this.cwd = parent.cwd;
 			this.argv = parent.argv;
-			this.base_dir = parent.base_dir;
 
 			SetupEnvironment ();
 		}
@@ -182,8 +188,6 @@ namespace Mono.Debugger.Backend
 
 			cmdline_args [0] = exe_file;
 			this.argv = cmdline_args;
-
-			base_dir = GetFullPath (Path.GetDirectoryName (argv [0]));
 
 			options = options.Clone ();
 			options.File = exe_file;
@@ -211,10 +215,6 @@ namespace Mono.Debugger.Backend
 
 		public string TargetApplication {
 			get { return argv [0]; }
-		}
-
-		public string BaseDirectory {
-			get { return base_dir; }
 		}
 
 		public string WorkingDirectory {
