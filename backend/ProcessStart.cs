@@ -82,8 +82,6 @@ namespace Mono.Debugger.Backend
 			redirect_output = session.Config.RedirectOutput;
 
 			cwd = options.WorkingDirectory;
-			if (cwd == null)
-				cwd = options.WorkingDirectory = System.Environment.CurrentDirectory;
 			string mono_path = options.MonoPath ?? MonoPath;
 
 #if HAVE_XSP

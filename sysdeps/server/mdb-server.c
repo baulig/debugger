@@ -599,9 +599,13 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 			argv [i] = decode_string (p, &p, end);
 		argv [argc] = NULL;
 
-		// argv [0] = g_strdup_printf ("X:\\Work\\Martin\\mdb\\testnativetypes.exe");
+		if (!*cwd) {
+			g_free (cwd);
+			cwd = g_get_current_dir ();
+		}
+
+		argv [0] = g_strdup_printf ("X:\\Work\\Martin\\mdb\\testnativetypes.exe");
 		// argv [0] = g_strdup_printf ("/data/martin/testnativetypes");
-		// cwd = g_get_current_dir (); // FIXME
 
 		result = mono_debugger_server_spawn (inferior, cwd, (const gchar **) argv, NULL, FALSE, &child_pid, NULL, &error);
 
@@ -611,6 +615,11 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		g_hash_table_insert (inferior_by_pid, GUINT_TO_POINTER (child_pid), inferior);
 
 		buffer_add_int (buf, child_pid);
+
+		g_free (cwd);
+		for (i = 0; i < argc; i++)
+			g_free (argv [i]);
+		g_free (argv);
 		break;
 	}
 

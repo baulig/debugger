@@ -122,7 +122,7 @@ namespace Mono.Debugger.Server
 		public override int Spawn (InferiorHandle inferior, string working_dir, string[] argv, string[] envp,
 					   bool redirect_fds, ChildOutputHandler output_handler)
 		{
-			return connection.Spawn (((RemoteInferior) inferior).IID, working_dir ?? Environment.CurrentDirectory, argv);
+			return connection.Spawn (((RemoteInferior) inferior).IID, working_dir, argv);
 		}
 
 		public override TargetError Attach (InferiorHandle inferior, int child_pid)

@@ -633,7 +633,7 @@ namespace Mono.Debugger.Server
 		{
 			var writer = new PacketWriter ();
 			writer.WriteInt (iid);
-			writer.WriteString (cwd);
+			writer.WriteString (cwd ?? "");
 
 			int argc = argv.Length;
 			if (argv [argc-1] == null)
