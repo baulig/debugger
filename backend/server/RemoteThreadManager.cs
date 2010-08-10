@@ -20,16 +20,12 @@ namespace Mono.Debugger.Server
 {
 	internal class RemoteThreadManager : ThreadManager
 	{
-		new RemoteDebuggerServer server;
-
 		internal RemoteThreadManager (Debugger debugger, RemoteDebuggerServer server)
 			: base (debugger, server)
-		{
-			this.server = server;
-		}
+		{ }
 
 		public override bool HasTarget {
-			get { return server != null; }
+			get { return debugger_server != null; }
 		}
 
 		internal override bool GetPendingSigstopForNewThread (int pid)

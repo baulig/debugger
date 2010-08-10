@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Net;
 using System.Text;
 using ST = System.Threading;
 using System.Configuration;
@@ -22,12 +23,12 @@ namespace Mono.Debugger.Server
 
 		Dictionary<int,SingleSteppingEngine> sse_hash = new Dictionary<int,SingleSteppingEngine> ();
 
-		public RemoteDebuggerServer (Debugger debugger)
+		public RemoteDebuggerServer (Debugger debugger, IPEndPoint endpoint)
 		{
 			manager = new RemoteThreadManager (debugger, this);
 
 			connection = new Connection (handle_event);
-			connection.Connect ();
+			connection.Connect (endpoint);
 
 			server_type = connection.GetServerType ();
 			capabilities = connection.GetCapabilities ();

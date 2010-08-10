@@ -20,6 +20,8 @@ namespace Mono.Debugger.Frontend
 	public class Interpreter : DebuggerMarshalByRefObject, IInterruptionHandler, IDisposable
 	{
 		DebuggerConfiguration config;
+		DebuggerOptions options;
+
 		DebuggerSession session;
 		DebuggerEngine engine;
 
@@ -54,6 +56,7 @@ namespace Mono.Debugger.Frontend
 				    DebuggerOptions options)
 		{
 			this.config = config;
+			this.options = options;
 			this.is_interactive = is_interactive;
 			this.is_script = options.IsScript;
 			this.parser = new ExpressionParser (this);
@@ -275,7 +278,7 @@ namespace Mono.Debugger.Frontend
 				       String.Join (" ", Options.InferiorArgs));
 
 			try {
-				debugger = new Debugger (config);
+				debugger = new Debugger (config, options);
 
 				new InterpreterEventSink (this, debugger);
 
@@ -302,7 +305,7 @@ namespace Mono.Debugger.Frontend
 				Print ("Attaching to {0}", pid);
 
 			try {
-				debugger = new Debugger (config);
+				debugger = new Debugger (config, options);
 
 				new InterpreterEventSink (this, debugger);
 
@@ -359,7 +362,7 @@ namespace Mono.Debugger.Frontend
 				throw new TargetException (TargetError.AlreadyHaveTarget);
 
 			try {
-				debugger = new Debugger (config);
+				debugger = new Debugger (config, options);
 				parser = new ExpressionParser (this);
 				session = new DebuggerSession (config, stream, parser);
 				parser.Session = session;

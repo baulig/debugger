@@ -418,11 +418,10 @@ namespace Mono.Debugger.Server
 			socket.Send (packet);
 		}
 
-		public void Connect ()
+		public void Connect (IPEndPoint endpoint)
 		{
 			socket = new Socket (AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-			//socket.Connect (IPAddress.Parse ("192.168.8.1"), 8888);
-			socket.Connect (IPAddress.Parse ("127.0.0.1"), 8888);
+			socket.Connect (endpoint);
 
 			byte[] buf = new byte [HANDSHAKE_STRING.Length];
 			char[] cbuf = new char [buf.Length];

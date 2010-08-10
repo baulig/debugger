@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Net;
 using System.Text;
 using System.Threading;
 using System.Configuration;
@@ -25,6 +26,7 @@ namespace Mono.Debugger
 	{
 		ManualResetEvent kill_event;
 		DebuggerConfiguration config;
+		DebuggerOptions options;
 		DebuggerServer server;
 		ThreadManager thread_manager;
 		Hashtable process_hash;
@@ -32,20 +34,20 @@ namespace Mono.Debugger
 		MyOperationHost operation_host;
 		bool alive;
 
-		public Debugger (DebuggerConfiguration config)
+		public Debugger (DebuggerConfiguration config, DebuggerOptions options)
 		{
 			this.config = config;
+			this.options = options;
 			this.alive = true;
 
 			ObjectCache.Initialize ();
 
 			kill_event = new ManualResetEvent (false);
 
-#if REMOTE_BACKEND
-			server = new RemoteDebuggerServer (this);
-#else
-			server = new NativeDebuggerServer (this);
-#endif
+			if (options.RemoteServer != null)
+				server = new RemoteDebuggerServer (this, options.RemoteServer);
+			else
+				server = new NativeDebuggerServer (this);
 
 			thread_manager = server.ThreadManager;
 			process_hash = Hashtable.Synchronized (new Hashtable ());

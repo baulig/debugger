@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Net;
 using System.Reflection;
 using System.Configuration;
 using System.Collections;
@@ -105,6 +106,10 @@ namespace Mono.Debugger
 		}
 #endif
 
+		public IPEndPoint RemoteServer {
+			get; set;
+		}
+
 		Hashtable user_environment;
 
 		string[] clone (string[] array)
@@ -140,6 +145,7 @@ namespace Mono.Debugger
 			options.DebugOutput = DebugOutput;
 			options.MonoPrefix = MonoPrefix;
 			options.MonoPath = MonoPath;
+			options.RemoteServer = RemoteServer;
 			options.user_environment = clone (user_environment);
 			return options;
 		}
@@ -532,6 +538,28 @@ namespace Mono.Debugger
 				parsing_options = false;
 				return true;
 #endif
+
+			case "-remote":
+				value = GetValue (ref args, ref i, ms_value);
+				if (value == null) {
+					Usage ();
+					Environment.Exit (1);
+				}
+
+				var pos = value.IndexOf (':');
+
+				int port;
+				IPAddress ip;
+				if (pos < 0) {
+					ip = IPAddress.Parse (value);
+					port = 8888;
+				} else {
+					port = Int32.Parse (value.Substring (pos + 1));
+					ip = IPAddress.Parse (value.Substring (0, pos));
+				}
+
+				debug_options.RemoteServer = new IPEndPoint (ip, port);
+				return true;
 			}
 
 			return false;
