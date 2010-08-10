@@ -162,7 +162,9 @@ namespace Mono.Debugger.Server
 
 		public override TargetError Finalize (InferiorHandle inferior)
 		{
-			throw new NotImplementedException ();
+			connection.Close ();
+			connection = null;
+			return TargetError.None;
 		}
 
 		public override byte[] ReadMemory (InferiorHandle inferior, long address, int size)

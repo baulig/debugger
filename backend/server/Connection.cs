@@ -447,15 +447,23 @@ namespace Mono.Debugger.Server
 			receiver_thread.Start ();
 		}
 
+		public void Close ()
+		{
+			disconnected = true;
+			socket.Close ();
+			receiver_thread.Join ();
+		}
+
 		void receiver_thread_main ()
 		{
-			while (true) {
+			while (!disconnected) {
 				try {
 					bool res = ReceivePacket ();
 					if (!res)
 						break;
 				} catch (Exception ex) {
-					Console.WriteLine (ex);
+					if (!disconnected)
+						Console.WriteLine (ex);
 					break;
 				}
 			}

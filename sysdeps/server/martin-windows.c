@@ -303,8 +303,6 @@ handle_debug_event (DEBUG_EVENT *de)
 	case LOAD_DLL_DEBUG_EVENT: {
 		TCHAR path [MAX_PATH];
 
-		g_message (G_STRLOC ": load dll: %p - %p - %d", de->u.LoadDll.lpImageName, de->u.LoadDll.hFile, de->u.LoadDll.fUnicode);
-
 		if (!process->exe_path) {
 			/*
 			 * This fails until kernel32.dll is loaded.
@@ -314,40 +312,6 @@ handle_debug_event (DEBUG_EVENT *de)
 				process->main_bfd = load_dll (process->exe_path);
 			}
 		}
-
-#if 0
-		if (de->u.LoadDll.hFile) {
-
-			if (GetModuleFileNameEx (process->process_handle, de->u.LoadDll.hFile, path, sizeof (path) / sizeof (TCHAR))) {
-				_tprintf (TEXT ("MODULE: %s\n"), path);
-			} else {
-				g_warning (G_STRLOC ": %s", get_last_error ());
-			}
-
-			if (GetModuleFileNameEx (process->process_handle, NULL, path, sizeof (path) / sizeof (TCHAR))) {
-				_tprintf (TEXT ("PROCESS MODULE: %s\n"), path);
-			} else {
-				g_warning (G_STRLOC ": %s", get_last_error ());
-			}
-
-			{
-				HMODULE hMods [1024];
-				DWORD cbNeeded;
-				int ret, i;
-
-				if (EnumProcessModules (process->process_handle, hMods, sizeof (hMods), &cbNeeded)) {
-					g_message (G_STRLOC ": ENUM MODULES !");
-
-					for (i = 0; i < (cbNeeded / sizeof(HMODULE)); i++) {
-						// Get the full path to the module's file.
-						if (GetModuleFileNameEx (process->process_handle, hMods[i], path, sizeof (path) / sizeof (TCHAR))) {
-							_tprintf (TEXT ("MODULE: |%s|\n"), path);
-						}
-					}
-				}
-			}
-		}
-#endif
 
 		if (de->u.LoadDll.lpImageName) {
 			char buf [1024];
@@ -372,10 +336,20 @@ handle_debug_event (DEBUG_EVENT *de)
 					break;
 			}
 
-			g_message (G_STRLOC ": DLL LOADED: %s", buf);
 			load_dll (buf);
 			break;
 		}
+		break;
+	}
+
+	case EXIT_PROCESS_DEBUG_EVENT: {
+		ServerEvent *e = g_new0 (ServerEvent, 1);
+
+		e->sender_iid = server->iid;
+		e->arg = de->u.ExitProcess.dwExitCode;
+		e->type = SERVER_EVENT_CHILD_EXITED;
+		mdb_server_process_child_event (e);
+		g_free (e);
 		break;
 	}
 
