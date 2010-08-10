@@ -263,7 +263,7 @@ handle_debug_event (DEBUG_EVENT *de)
 
 	g_message (G_STRLOC ": Got debug event: %d - %d/%d - %p", de->dwDebugEventCode, de->dwProcessId, de->dwThreadId, server);
 
-	// show_debug_event (de);
+	show_debug_event (de);
 
 	switch (de->dwDebugEventCode) {
 	case EXCEPTION_DEBUG_EVENT: {
@@ -404,8 +404,6 @@ debugging_thread_main (LPVOID dummy_arg)
 			SetEvent (ready_event);
 		} else if (ret == 1) { /* wait_event */
 			DEBUG_EVENT de;
-
-			g_message (G_STRLOC ": waiting for debug event");
 
 			if (WaitForDebugEvent (&de, DEBUG_EVENT_WAIT_TIMEOUT)) {
 				handle_debug_event (&de);
@@ -789,9 +787,9 @@ mdb_inferior_make_memory_executable (InferiorHandle *inferior, guint64 start, gu
 static int
 disasm_read_memory_func (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length, struct disassemble_info *info)
 {
-	ProcessHandle *process = info->application_data;
+	ServerHandle *server = info->application_data;
 
-	return mdb_process_read_memory (process, memaddr, length, myaddr);
+	return mdb_server_read_memory (server, memaddr, length, myaddr);
 }
 
 static int
@@ -816,7 +814,8 @@ disasm_fprintf_func (gpointer stream, const char *message, ...)
 static void
 disasm_print_address_func (bfd_vma addr, struct disassemble_info *info)
 {
-	ProcessHandle *process = info->application_data;
+	ServerHandle *server = info->application_data;
+	ProcessHandle *process = server->inferior->process;
 	const gchar *sym;
 	char buf[30];
 
@@ -834,8 +833,9 @@ disasm_print_address_func (bfd_vma addr, struct disassemble_info *info)
 }
 
 static void
-init_disassembler (ProcessHandle *process)
+init_disassembler (ServerHandle *server)
 {
+	ProcessHandle *process = server->inferior->process;
 	struct disassemble_info *info;
 
 	if (process->disassembler)
@@ -849,10 +849,10 @@ init_disassembler (ProcessHandle *process)
 	info->octets_per_byte = 1;
 	info->display_endian = info->endian = BFD_ENDIAN_LITTLE;
 
-	info->application_data = process;
 	info->read_memory_func = disasm_read_memory_func;
 	info->print_address_func = disasm_print_address_func;
 	info->fprintf_func = disasm_fprintf_func;
+	info->application_data = server;
 	info->stream = process;
 
 	process->disassembler = info;
@@ -864,7 +864,7 @@ mdb_server_disassemble_insn (ServerHandle *server, guint64 address, guint32 *out
 	ProcessHandle *process = server->inferior->process;
 	int ret;
 
-	init_disassembler (process);
+	init_disassembler (server);
 
 	memset (process->disasm_buffer, 0, 1024);
 
