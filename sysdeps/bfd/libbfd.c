@@ -908,6 +908,7 @@ _bfd_generic_get_section_contents_in_window
   return TRUE;
 #else
   abort ();
+  return FALSE;
 #endif
 }
 

@@ -22,6 +22,10 @@ Boston, MA 02110-1301, USA.  */
 
 #include "ansidecl.h"
 
+#ifdef HAVE_STDDEF_H
+#include <stddef.h>
+#endif
+
 /* These routines allocate space for an object.  The assumption is
    that the object will want to allocate space as it goes along, but
    will never want to free any particular block.  There is a function

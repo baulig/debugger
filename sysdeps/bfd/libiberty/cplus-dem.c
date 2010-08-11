@@ -580,6 +580,7 @@ code_for_qualifier (int c)
 
   /* C was an invalid qualifier.  */
   abort ();
+  return -1;
 }
 
 /* Return the string corresponding to the qualifiers given by
@@ -620,6 +621,7 @@ qualifier_string (int type_quals)
 
   /* TYPE_QUALS was an invalid qualifier set.  */
   abort ();
+  return NULL;
 }
 
 /* C is the code for a type-qualifier.  Return the string

@@ -37,6 +37,10 @@
 #include "elf-bfd.h"
 #include "dwarf2.h"
 
+#ifndef DEBUGDIR
+#define DEBUGDIR "debug"
+#endif
+
 /* The data in the .debug_line statement prologue looks like this.  */
 
 struct line_head
@@ -584,7 +588,7 @@ read_address (struct comp_unit *unit, bfd_byte *buf)
 	case 2:
 	  return bfd_get_signed_16 (unit->abfd, buf);
 	default:
-	  abort ();
+	  abort (); return 0;
 	}
     }
   else
@@ -598,7 +602,7 @@ read_address (struct comp_unit *unit, bfd_byte *buf)
 	case 2:
 	  return bfd_get_16 (unit->abfd, buf);
 	default:
-	  abort ();
+	  abort (); return 0;
 	}
     }
 }

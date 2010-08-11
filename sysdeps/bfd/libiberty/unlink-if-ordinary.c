@@ -58,6 +58,9 @@ was made to unlink the file because it is special.
 #define lstat stat
 #endif
 #endif
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
+#endif
 
 int
 unlink_if_ordinary (const char *name)

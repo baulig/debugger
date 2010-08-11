@@ -259,7 +259,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
 	  match_count = ar_match_index - _bfd_target_vector_entries;
 
 	  if (matching_vector && match_count > 1)
-	    memcpy (matching_vector,
+	    memcpy ((bfd_target **) matching_vector,
 		    matching_vector + _bfd_target_vector_entries,
 		    sizeof (*matching_vector) * match_count);
 	}
@@ -299,7 +299,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
 	abfd->output_has_begun = TRUE;
 
       if (matching_vector)
-	free (matching_vector);
+	free ((bfd_target **) matching_vector);
       return TRUE;			/* File position has moved, BTW.  */
     }
 
@@ -311,7 +311,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
       abfd->xvec = save_targ;
       abfd->format = bfd_unknown;
       if (matching_vector)
-	free (matching_vector);
+	free ((bfd_target **) matching_vector);
       return FALSE;
     }
 

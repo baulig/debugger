@@ -443,7 +443,7 @@ bfd_get_reloc_size (reloc_howto_type *howto)
     case 4: return 8;
     case 8: return 16;
     case -2: return 4;
-    default: abort ();
+    default: abort (); return -1;
     }
 }
 
