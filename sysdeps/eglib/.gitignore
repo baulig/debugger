@@ -1,4 +1,4 @@
-/
+/Win32_Debug
 /depcomp
 /config.guess
 /config.sub
@@ -19,3 +19,5 @@
 /config.h
 /config.status
 /INSTALL
+/eglib.vcxproj.user
+/eglib.vcxproj.filters

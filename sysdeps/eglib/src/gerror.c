@@ -30,6 +30,8 @@
 #include <string.h>
 #include <glib.h>
 
+extern int monoeg_vasprintf(char **ret, const char *fmt, va_list ap);
+
 GError *
 g_error_new (gpointer domain, gint code, const char *format, ...)
 {

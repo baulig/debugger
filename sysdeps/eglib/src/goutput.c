@@ -28,6 +28,8 @@
 #include <stdlib.h>
 #include <glib.h>
 
+extern int monoeg_vasprintf(char **ret, const char *fmt, va_list ap);
+
 /* The current fatal levels, error is always fatal */
 static GLogLevelFlags fatal = G_LOG_LEVEL_ERROR;
 

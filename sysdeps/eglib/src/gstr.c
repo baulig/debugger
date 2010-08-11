@@ -32,6 +32,8 @@
 #include <ctype.h>
 #include <glib.h>
 
+extern int monoeg_vasprintf(char **ret, const char *fmt, va_list ap);
+
 /* This is not a macro, because I dont want to put _GNU_SOURCE in the glib.h header */
 gchar *
 g_strndup (const gchar *str, gsize n)

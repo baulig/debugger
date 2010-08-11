@@ -11,7 +11,9 @@
 
 #ifdef _MSC_VER
 #pragma include_alias(<eglib-config.h>, <eglib-config.hw>)
+#include <eglib-config.hw>
 #else
+#include <eglib-config.h>
 #include <stdint.h>
 /* For pid_t */
 #ifndef WIN32
@@ -19,7 +21,6 @@
 #endif
 #endif
 
-#include <eglib-config.h>
 #ifndef EGLIB_NO_REMAP
 #include <eglib-remap.h>
 #endif
