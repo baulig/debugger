@@ -11,13 +11,15 @@
 #include <bfd.h>
 #include <dis-asm.h>
 
+extern int snwprintf( wchar_t *s, size_t count, const wchar_t *format, ...);
+
 #include "i386-arch.h"
 
 typedef struct
 {
 	HANDLE process_handle;
 	DWORD process_id;
-	gint argc;
+	guint32 argc;
 	gchar **argv;
 	gchar *exe_path;
 	struct disassemble_info *disassembler;
@@ -726,7 +728,7 @@ mdb_server_get_application (ServerHandle *server, gchar **exe_file, gchar **cwd,
 			    guint32 *nargs, gchar ***cmdline_args)
 {
 	ProcessHandle *process = server->inferior->process;
-	gint index = 0;
+	guint32 index = 0;
 	GPtrArray *array;
 	gchar **ptr;
 
@@ -851,7 +853,7 @@ mdb_server_disassemble_insn (ServerHandle *server, guint64 address, guint32 *out
 
 	memset (process->disasm_buffer, 0, 1024);
 
-	ret = print_insn_i386 (address, process->disassembler);
+	ret = print_insn_i386 ((gsize) address, process->disassembler);
 
 	if (out_insn_size)
 		*out_insn_size = ret;

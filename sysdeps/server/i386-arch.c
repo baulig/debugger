@@ -82,7 +82,7 @@ mdb_server_call_method (ServerHandle *handle, guint64 method_address,
 
 	cdata = g_new0 (CallbackData, 1);
 
-	new_esp = (guint32) INFERIOR_REG_RSP (arch->current_regs) - size;
+	new_esp = (gsize) INFERIOR_REG_RSP (arch->current_regs) - size;
 
 	memcpy (&cdata->saved_regs, &arch->current_regs, sizeof (arch->current_regs));
 	cdata->call_address = new_esp + 26;
@@ -102,11 +102,11 @@ mdb_server_call_method (ServerHandle *handle, guint64 method_address,
 	*((guint32 *) (code+16)) = method_argument1 & 0xffffffff;
 	*((guint32 *) (code+21)) = call_disp - 25;
 
-	result = mdb_inferior_write_memory (handle->inferior, (guint32) new_esp, size, code);
+	result = mdb_inferior_write_memory (handle->inferior, (gsize) new_esp, size, code);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
-	result = mdb_inferior_make_memory_executable (handle->inferior, (guint32) new_esp, size);
+	result = mdb_inferior_make_memory_executable (handle->inferior, (gsize) new_esp, size);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -154,7 +154,7 @@ mdb_server_call_method_1 (ServerHandle *handle, guint64 method_address,
 
 	cdata = g_new0 (CallbackData, 1);
 
-	new_esp = (guint32) INFERIOR_REG_RSP (arch->current_regs) - size;
+	new_esp = (gsize) INFERIOR_REG_RSP (arch->current_regs) - size;
 
 	memcpy (&cdata->saved_regs, &arch->current_regs, sizeof (arch->current_regs));
 	cdata->call_address = new_esp + static_size;
@@ -177,11 +177,11 @@ mdb_server_call_method_1 (ServerHandle *handle, guint64 method_address,
 	*((guint32 *) (code+31)) = method_argument & 0xffffffff;
 	*((guint32 *) (code+36)) = call_disp - 40;
 
-	result = mdb_inferior_write_memory (handle->inferior, (guint32) new_esp, size, code);
+	result = mdb_inferior_write_memory (handle->inferior, (gsize) new_esp, size, code);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
-	result = mdb_inferior_make_memory_executable (handle->inferior, (guint32) new_esp, size);
+	result = mdb_inferior_make_memory_executable (handle->inferior, (gsize) new_esp, size);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -247,19 +247,19 @@ mdb_server_call_method_2 (ServerHandle *handle, guint64 method_address,
 		cdata->data_size = data_size;
 	}
 
-	result = mdb_inferior_write_memory (handle->inferior, (guint32) new_esp, size, code);
+	result = mdb_inferior_write_memory (handle->inferior, (gsize) new_esp, size, code);
 	g_free (code);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
-	result = mdb_inferior_make_memory_executable (handle->inferior, (guint32) new_esp, size);
+	result = mdb_inferior_make_memory_executable (handle->inferior, (gsize) new_esp, size);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
 #if defined(__linux__)
 	INFERIOR_REG_ORIG_RAX (arch->current_regs) = -1;
 #endif
-	INFERIOR_REG_RIP (arch->current_regs) = method_address;
+	INFERIOR_REG_RIP (arch->current_regs) = (gsize) method_address;
 	INFERIOR_REG_RSP (arch->current_regs) = new_esp;
 
 	g_ptr_array_add (arch->callback_stack, cdata);
@@ -297,10 +297,10 @@ mdb_server_call_method_3 (ServerHandle *handle, guint64 method_address,
 	new_esp = INFERIOR_REG_RSP (arch->current_regs) - size;
 
 	blob_start = new_esp + static_size;
-	effective_address = address_argument ? address_argument : blob_start;
+	effective_address = (gsize) (address_argument ? address_argument : blob_start);
 
 	*((guint32 *) code) = new_esp + static_size - 1;
-	*((guint32 *) (code+4)) = method_argument;
+	*((guint32 *) (code+4)) = (gsize) method_argument;
 	*((guint32 *) (code+12)) = effective_address;
 	*((guint32 *) (code+20)) = new_esp;
 
@@ -320,14 +320,14 @@ mdb_server_call_method_3 (ServerHandle *handle, guint64 method_address,
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
-	result = mdb_inferior_make_memory_executable (handle->inferior, (guint32) new_esp, size);
+	result = mdb_inferior_make_memory_executable (handle->inferior, (gsize) new_esp, size);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
 #if defined(__linux__)
 	INFERIOR_REG_ORIG_RAX (arch->current_regs) = -1;
 #endif
-	INFERIOR_REG_RIP (arch->current_regs) = method_address;
+	INFERIOR_REG_RIP (arch->current_regs) = (gsize) method_address;
 	INFERIOR_REG_RSP (arch->current_regs) = new_esp;
 	INFERIOR_REG_RBP (arch->current_regs) = 0;
 
@@ -352,7 +352,7 @@ mdb_server_call_method_invoke (ServerHandle *handle, guint64 invoke_method,
 	ArchInfo *arch = handle->arch;
 	CallbackData *cdata;
 	guint32 new_esp;
-	int i;
+	guint32 i;
 
 	static guint8 static_code[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 					0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -367,18 +367,18 @@ mdb_server_call_method_invoke (ServerHandle *handle, guint64 invoke_method,
 	memcpy (code, static_code, static_size);
 	memcpy (code + static_size, blob_data, blob_size);
 
-	new_esp = (guint32) INFERIOR_REG_RSP (arch->current_regs) - size;
+	new_esp = (gsize) INFERIOR_REG_RSP (arch->current_regs) - size;
 	blob_start = new_esp + static_size;
 
 	for (i = 0; i < num_params; i++) {
 		if (offset_data [i] >= 0)
-			ptr [i] = blob_start + offset_data [i];
+			ptr [i] = (gsize) blob_start + offset_data [i];
 		else
-			ptr [i] = param_data [i];
+			ptr [i] = (gsize) param_data [i];
 	}
 
 	*((guint32 *) code) = new_esp + static_size - 1;
-	*((guint32 *) (code+4)) = method_argument;
+	*((guint32 *) (code+4)) = (gsize) method_argument;
 	*((guint32 *) (code+8)) = ptr [0];
 	*((guint32 *) (code+12)) = new_esp + static_size + blob_size + 4;
 	*((guint32 *) (code+16)) = new_esp + 20;
@@ -397,19 +397,19 @@ mdb_server_call_method_invoke (ServerHandle *handle, guint64 invoke_method,
 	_mdb_inferior_set_last_signal (handle->inferior, 0);
 #endif
 
-	result = mdb_inferior_write_memory (handle->inferior, (guint32) new_esp, size, code);
+	result = mdb_inferior_write_memory (handle->inferior, (gsize) new_esp, size, code);
 	g_free (code);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
-	result = mdb_inferior_make_memory_executable (handle->inferior, (guint32) new_esp, size);
+	result = mdb_inferior_make_memory_executable (handle->inferior, (gsize) new_esp, size);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
 #if defined(__linux__)
 	INFERIOR_REG_ORIG_RAX (arch->current_regs) = -1;
 #endif
-	INFERIOR_REG_RIP (arch->current_regs) = invoke_method;
+	INFERIOR_REG_RIP (arch->current_regs) = (gsize) invoke_method;
 	INFERIOR_REG_RSP (arch->current_regs) = new_esp;
 	INFERIOR_REG_RBP (arch->current_regs) = 0;
 
@@ -461,8 +461,8 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 #endif
 
 	if (server->mono_runtime &&
-	    ((guint32) INFERIOR_REG_RIP (arch->current_regs) - 1 == server->mono_runtime->notification_address)) {
-		guint32 addr = (guint32) INFERIOR_REG_RSP (arch->current_regs) + 4;
+	    ((gsize) INFERIOR_REG_RIP (arch->current_regs) - 1 == server->mono_runtime->notification_address)) {
+		guint32 addr = (gsize) INFERIOR_REG_RSP (arch->current_regs) + 4;
 		guint64 data [3];
 
 		if (mdb_inferior_read_memory (inferior, addr, 24, &data))
@@ -485,7 +485,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 		}
 	}
 
-	if (mdb_arch_check_breakpoint (server, (guint32) INFERIOR_REG_RIP (arch->current_regs) - 1, &e->arg)) {
+	if (mdb_arch_check_breakpoint (server, (gsize) INFERIOR_REG_RIP (arch->current_regs) - 1, &e->arg)) {
 		INFERIOR_REG_RIP (arch->current_regs)--;
 		mdb_inferior_set_registers (inferior, &arch->current_regs);
 		e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
@@ -524,7 +524,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 		}
 
 		e->arg = cdata->callback_argument;
-		e->data1 = (guint32) INFERIOR_REG_RAX (arch->current_regs);
+		e->data1 = (gsize) INFERIOR_REG_RAX (arch->current_regs);
 
 		if (cdata->data_pointer) {
 			e->opt_data_size = cdata->data_size;
@@ -544,7 +544,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 			return e;
 		}
 
-		e->data2 = (guint32) exc_object;
+		e->data2 = (gsize) exc_object;
 
 #if defined(__linux__) || defined(__FreeBSD__)
 		_mdb_inferior_set_last_signal (inferior, cdata->saved_signal);
@@ -612,22 +612,22 @@ mdb_server_get_registers (ServerHandle *handle, guint64 *values)
 {
 	ArchInfo *arch = handle->arch;
 
-	values [DEBUGGER_REG_RBX] = (guint32) INFERIOR_REG_RBX (arch->current_regs);
-	values [DEBUGGER_REG_RCX] = (guint32) INFERIOR_REG_RCX (arch->current_regs);
-	values [DEBUGGER_REG_RDX] = (guint32) INFERIOR_REG_RDX (arch->current_regs);
-	values [DEBUGGER_REG_RSI] = (guint32) INFERIOR_REG_RSI (arch->current_regs);
-	values [DEBUGGER_REG_RDI] = (guint32) INFERIOR_REG_RDI (arch->current_regs);
-	values [DEBUGGER_REG_RBP] = (guint32) INFERIOR_REG_RBP (arch->current_regs);
-	values [DEBUGGER_REG_RAX] = (guint32) INFERIOR_REG_RAX (arch->current_regs);
-	values [DEBUGGER_REG_DS] = (guint32) INFERIOR_REG_DS (arch->current_regs);
-	values [DEBUGGER_REG_ES] = (guint32) INFERIOR_REG_ES (arch->current_regs);
-	values [DEBUGGER_REG_FS] = (guint32) INFERIOR_REG_FS (arch->current_regs);
-	values [DEBUGGER_REG_GS] = (guint32) INFERIOR_REG_GS (arch->current_regs);
-	values [DEBUGGER_REG_RIP] = (guint32) INFERIOR_REG_RIP (arch->current_regs);
-	values [DEBUGGER_REG_CS] = (guint32) INFERIOR_REG_CS (arch->current_regs);
-	values [DEBUGGER_REG_EFLAGS] = (guint32) INFERIOR_REG_EFLAGS (arch->current_regs);
-	values [DEBUGGER_REG_RSP] = (guint32) INFERIOR_REG_RSP (arch->current_regs);
-	values [DEBUGGER_REG_SS] = (guint32) INFERIOR_REG_SS (arch->current_regs);
+	values [DEBUGGER_REG_RBX] = (gsize) INFERIOR_REG_RBX (arch->current_regs);
+	values [DEBUGGER_REG_RCX] = (gsize) INFERIOR_REG_RCX (arch->current_regs);
+	values [DEBUGGER_REG_RDX] = (gsize) INFERIOR_REG_RDX (arch->current_regs);
+	values [DEBUGGER_REG_RSI] = (gsize) INFERIOR_REG_RSI (arch->current_regs);
+	values [DEBUGGER_REG_RDI] = (gsize) INFERIOR_REG_RDI (arch->current_regs);
+	values [DEBUGGER_REG_RBP] = (gsize) INFERIOR_REG_RBP (arch->current_regs);
+	values [DEBUGGER_REG_RAX] = (gsize) INFERIOR_REG_RAX (arch->current_regs);
+	values [DEBUGGER_REG_DS] = (gsize) INFERIOR_REG_DS (arch->current_regs);
+	values [DEBUGGER_REG_ES] = (gsize) INFERIOR_REG_ES (arch->current_regs);
+	values [DEBUGGER_REG_FS] = (gsize) INFERIOR_REG_FS (arch->current_regs);
+	values [DEBUGGER_REG_GS] = (gsize) INFERIOR_REG_GS (arch->current_regs);
+	values [DEBUGGER_REG_RIP] = (gsize) INFERIOR_REG_RIP (arch->current_regs);
+	values [DEBUGGER_REG_CS] = (gsize) INFERIOR_REG_CS (arch->current_regs);
+	values [DEBUGGER_REG_EFLAGS] = (gsize) INFERIOR_REG_EFLAGS (arch->current_regs);
+	values [DEBUGGER_REG_RSP] = (gsize) INFERIOR_REG_RSP (arch->current_regs);
+	values [DEBUGGER_REG_SS] = (gsize) INFERIOR_REG_SS (arch->current_regs);
 
 	return COMMAND_ERROR_NONE;
 }
@@ -637,22 +637,22 @@ mdb_server_set_registers (ServerHandle *handle, guint64 *values)
 {
 	ArchInfo *arch = handle->arch;
 
-	INFERIOR_REG_RBX (arch->current_regs) = values [DEBUGGER_REG_RBX];
-	INFERIOR_REG_RCX (arch->current_regs) = values [DEBUGGER_REG_RCX];
-	INFERIOR_REG_RDX (arch->current_regs) = values [DEBUGGER_REG_RDX];
-	INFERIOR_REG_RSI (arch->current_regs) = values [DEBUGGER_REG_RSI];
-	INFERIOR_REG_RDI (arch->current_regs) = values [DEBUGGER_REG_RDI];
-	INFERIOR_REG_RBP (arch->current_regs) = values [DEBUGGER_REG_RBP];
-	INFERIOR_REG_RAX (arch->current_regs) = values [DEBUGGER_REG_RAX];
-	INFERIOR_REG_DS (arch->current_regs) = values [DEBUGGER_REG_DS];
-	INFERIOR_REG_ES (arch->current_regs) = values [DEBUGGER_REG_ES];
-	INFERIOR_REG_FS (arch->current_regs) = values [DEBUGGER_REG_FS];
-	INFERIOR_REG_GS (arch->current_regs) = values [DEBUGGER_REG_GS];
-	INFERIOR_REG_RIP (arch->current_regs) = values [DEBUGGER_REG_RIP];
-	INFERIOR_REG_CS (arch->current_regs) = values [DEBUGGER_REG_CS];
-	INFERIOR_REG_EFLAGS (arch->current_regs) = values [DEBUGGER_REG_EFLAGS];
-	INFERIOR_REG_RSP (arch->current_regs) = values [DEBUGGER_REG_RSP];
-	INFERIOR_REG_SS (arch->current_regs) = values [DEBUGGER_REG_SS];
+	INFERIOR_REG_RBX (arch->current_regs) = (gsize) values [DEBUGGER_REG_RBX];
+	INFERIOR_REG_RCX (arch->current_regs) = (gsize) values [DEBUGGER_REG_RCX];
+	INFERIOR_REG_RDX (arch->current_regs) = (gsize) values [DEBUGGER_REG_RDX];
+	INFERIOR_REG_RSI (arch->current_regs) = (gsize) values [DEBUGGER_REG_RSI];
+	INFERIOR_REG_RDI (arch->current_regs) = (gsize) values [DEBUGGER_REG_RDI];
+	INFERIOR_REG_RBP (arch->current_regs) = (gsize) values [DEBUGGER_REG_RBP];
+	INFERIOR_REG_RAX (arch->current_regs) = (gsize) values [DEBUGGER_REG_RAX];
+	INFERIOR_REG_DS (arch->current_regs) = (gsize) values [DEBUGGER_REG_DS];
+	INFERIOR_REG_ES (arch->current_regs) = (gsize) values [DEBUGGER_REG_ES];
+	INFERIOR_REG_FS (arch->current_regs) = (gsize) values [DEBUGGER_REG_FS];
+	INFERIOR_REG_GS (arch->current_regs) = (gsize) values [DEBUGGER_REG_GS];
+	INFERIOR_REG_RIP (arch->current_regs) = (gsize) values [DEBUGGER_REG_RIP];
+	INFERIOR_REG_CS (arch->current_regs) = (gsize) values [DEBUGGER_REG_CS];
+	INFERIOR_REG_EFLAGS (arch->current_regs) = (gsize) values [DEBUGGER_REG_EFLAGS];
+	INFERIOR_REG_RSP (arch->current_regs) = (gsize) values [DEBUGGER_REG_RSP];
+	INFERIOR_REG_SS (arch->current_regs) = (gsize) values [DEBUGGER_REG_SS];
 
 	return mdb_inferior_set_registers (handle->inferior, &arch->current_regs);
 }
@@ -662,22 +662,22 @@ mdb_server_get_registers_from_core_file (guint64 *values, const guint8 *buffer)
 {
 	INFERIOR_REGS_TYPE regs = * (INFERIOR_REGS_TYPE *) buffer;
 
-	values [DEBUGGER_REG_RBX] = (guint32) INFERIOR_REG_RBX (regs);
-	values [DEBUGGER_REG_RCX] = (guint32) INFERIOR_REG_RCX (regs);
-	values [DEBUGGER_REG_RDX] = (guint32) INFERIOR_REG_RDX (regs);
-	values [DEBUGGER_REG_RSI] = (guint32) INFERIOR_REG_RSI (regs);
-	values [DEBUGGER_REG_RDI] = (guint32) INFERIOR_REG_RDI (regs);
-	values [DEBUGGER_REG_RBP] = (guint32) INFERIOR_REG_RBP (regs);
-	values [DEBUGGER_REG_RAX] = (guint32) INFERIOR_REG_RAX (regs);
-	values [DEBUGGER_REG_DS] = (guint32) INFERIOR_REG_DS (regs);
-	values [DEBUGGER_REG_ES] = (guint32) INFERIOR_REG_ES (regs);
-	values [DEBUGGER_REG_FS] = (guint32) INFERIOR_REG_FS (regs);
-	values [DEBUGGER_REG_GS] = (guint32) INFERIOR_REG_GS (regs);
-	values [DEBUGGER_REG_RIP] = (guint32) INFERIOR_REG_RIP (regs);
-	values [DEBUGGER_REG_CS] = (guint32) INFERIOR_REG_CS (regs);
-	values [DEBUGGER_REG_EFLAGS] = (guint32) INFERIOR_REG_EFLAGS (regs);
-	values [DEBUGGER_REG_RSP] = (guint32) INFERIOR_REG_RSP (regs);
-	values [DEBUGGER_REG_SS] = (guint32) INFERIOR_REG_SS (regs);
+	values [DEBUGGER_REG_RBX] = (gsize) INFERIOR_REG_RBX (regs);
+	values [DEBUGGER_REG_RCX] = (gsize) INFERIOR_REG_RCX (regs);
+	values [DEBUGGER_REG_RDX] = (gsize) INFERIOR_REG_RDX (regs);
+	values [DEBUGGER_REG_RSI] = (gsize) INFERIOR_REG_RSI (regs);
+	values [DEBUGGER_REG_RDI] = (gsize) INFERIOR_REG_RDI (regs);
+	values [DEBUGGER_REG_RBP] = (gsize) INFERIOR_REG_RBP (regs);
+	values [DEBUGGER_REG_RAX] = (gsize) INFERIOR_REG_RAX (regs);
+	values [DEBUGGER_REG_DS] = (gsize) INFERIOR_REG_DS (regs);
+	values [DEBUGGER_REG_ES] = (gsize) INFERIOR_REG_ES (regs);
+	values [DEBUGGER_REG_FS] = (gsize) INFERIOR_REG_FS (regs);
+	values [DEBUGGER_REG_GS] = (gsize) INFERIOR_REG_GS (regs);
+	values [DEBUGGER_REG_RIP] = (gsize) INFERIOR_REG_RIP (regs);
+	values [DEBUGGER_REG_CS] = (gsize) INFERIOR_REG_CS (regs);
+	values [DEBUGGER_REG_EFLAGS] = (gsize) INFERIOR_REG_EFLAGS (regs);
+	values [DEBUGGER_REG_RSP] = (gsize) INFERIOR_REG_RSP (regs);
+	values [DEBUGGER_REG_SS] = (gsize) INFERIOR_REG_SS (regs);
 }
 
 ServerCommandError
@@ -721,7 +721,7 @@ ServerCommandError
 mdb_server_get_callback_frame (ServerHandle *handle, guint64 stack_pointer,
 			       gboolean exact_match, CallbackInfo *info)
 {
-	int i;
+	guint32 i;
 
 	for (i = 0; i < handle->arch->callback_stack->len; i++) {
 		CallbackData *cdata = g_ptr_array_index (handle->arch->callback_stack, i);
@@ -753,22 +753,22 @@ mdb_server_get_callback_frame (ServerHandle *handle, guint64 stack_pointer,
 		info->callback_argument = cdata->callback_argument;
 		info->call_address = cdata->call_address;
 
-		info->saved_registers [DEBUGGER_REG_RBX] = (guint32) INFERIOR_REG_RBX (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_RCX] = (guint32) INFERIOR_REG_RCX (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_RDX] = (guint32) INFERIOR_REG_RDX (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_RSI] = (guint32) INFERIOR_REG_RSI (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_RDI] = (guint32) INFERIOR_REG_RDI (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_RBP] = (guint32) INFERIOR_REG_RBP (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_RAX] = (guint32) INFERIOR_REG_RAX (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_DS] = (guint32) INFERIOR_REG_DS (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_ES] = (guint32) INFERIOR_REG_ES (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_FS] = (guint32) INFERIOR_REG_FS (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_GS] = (guint32) INFERIOR_REG_GS (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_RIP] = (guint32) INFERIOR_REG_RIP (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_CS] = (guint32) INFERIOR_REG_CS (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_EFLAGS] = (guint32) INFERIOR_REG_EFLAGS (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_RSP] = (guint32) INFERIOR_REG_RSP (cdata->saved_regs);
-		info->saved_registers [DEBUGGER_REG_SS] = (guint32) INFERIOR_REG_SS (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_RBX] = (gsize) INFERIOR_REG_RBX (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_RCX] = (gsize) INFERIOR_REG_RCX (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_RDX] = (gsize) INFERIOR_REG_RDX (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_RSI] = (gsize) INFERIOR_REG_RSI (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_RDI] = (gsize) INFERIOR_REG_RDI (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_RBP] = (gsize) INFERIOR_REG_RBP (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_RAX] = (gsize) INFERIOR_REG_RAX (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_DS] = (gsize) INFERIOR_REG_DS (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_ES] = (gsize) INFERIOR_REG_ES (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_FS] = (gsize) INFERIOR_REG_FS (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_GS] = (gsize) INFERIOR_REG_GS (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_RIP] = (gsize) INFERIOR_REG_RIP (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_CS] = (gsize) INFERIOR_REG_CS (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_EFLAGS] = (gsize) INFERIOR_REG_EFLAGS (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_RSP] = (gsize) INFERIOR_REG_RSP (cdata->saved_regs);
+		info->saved_registers [DEBUGGER_REG_SS] = (gsize) INFERIOR_REG_SS (cdata->saved_regs);
 
 		return COMMAND_ERROR_NONE;
 	}

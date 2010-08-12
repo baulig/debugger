@@ -1,7 +1,9 @@
 #define X86_ARCH_C 1
 #include <server.h>
 #include <breakpoints.h>
+#if HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -110,7 +112,7 @@ mdb_server_remove_breakpoints_from_target_memory (ServerHandle *server, guint64 
 {
 	GPtrArray *breakpoints;
 	guint8 *ptr = buffer;
-	int i;
+	guint32 i;
 
 	mono_debugger_breakpoint_manager_lock ();
 
@@ -124,7 +126,7 @@ mdb_server_remove_breakpoints_from_target_memory (ServerHandle *server, guint64 
 		if ((info->address < start) || (info->address >= start+size))
 			continue;
 
-		offset = (guint32) info->address - start;
+		offset = (gsize) (info->address - start);
 		ptr [offset] = info->saved_insn;
 	}
 
@@ -267,7 +269,7 @@ mdb_server_pop_registers (ServerHandle *server)
 static int
 find_breakpoint_table_slot (MonoRuntimeInfo *runtime)
 {
-	int i;
+	guint32 i;
 
 	for (i = 1; i < runtime->breakpoint_table_size; i++) {
 		if (runtime->breakpoint_table_bitfield [i])
@@ -300,7 +302,7 @@ runtime_info_enable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint
 	table_address = runtime->breakpoint_info_area + 8 * slot;
 	index_address = runtime->breakpoint_table + 4 * slot;
 
-	result = mdb_inferior_poke_word (server->inferior, table_address, breakpoint->address);
+	result = mdb_inferior_poke_word (server->inferior, table_address, (gsize) breakpoint->address);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -611,7 +613,7 @@ mdb_server_disable_breakpoint (ServerHandle *server, guint32 idx)
 ServerCommandError
 mdb_server_get_breakpoints (ServerHandle *server, guint32 *count, guint32 **retval)
 {
-	int i;
+	guint32 i;
 	GPtrArray *breakpoints;
 
 	mono_debugger_breakpoint_manager_lock ();
@@ -632,7 +634,7 @@ mdb_server_get_breakpoints (ServerHandle *server, guint32 *count, guint32 **retv
 static int
 find_code_buffer_slot (MonoRuntimeInfo *runtime)
 {
-	int i;
+	guint32 i;
 
 	for (i = runtime->executable_code_last_slot + 1; i < runtime->executable_code_total_chunks; i++) {
 		if (runtime->executable_code_bitfield [i])
@@ -681,7 +683,7 @@ mdb_server_execute_instruction (ServerHandle *server, const guint8 *instruction,
 	if (server->arch->code_buffer)
 		return COMMAND_ERROR_INTERNAL_ERROR;
 
-	code_address = runtime->executable_code_buffer + slot * runtime->executable_code_chunk_size;
+	code_address = (gsize) runtime->executable_code_buffer + slot * runtime->executable_code_chunk_size;
 
 	data = g_new0 (CodeBufferData, 1);
 	data->slot = slot;

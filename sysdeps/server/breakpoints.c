@@ -43,7 +43,7 @@ BreakpointManager *
 mono_debugger_breakpoint_manager_clone (BreakpointManager *old)
 {
 	BreakpointManager *bpm = mono_debugger_breakpoint_manager_new ();
-	int i;
+	guint32 i;
 
 	for (i = 0; i < old->breakpoints->len; i++) {
 		BreakpointInfo *old_info = g_ptr_array_index (old->breakpoints, i);

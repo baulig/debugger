@@ -79,8 +79,8 @@ typedef struct {
 	guint64 callback_argument;
 	guint64 call_address;
 	guint64 stack_pointer;
-	guint64 is_rti_frame   : 1;
-	guint64 is_exact_match : 1;
+	int is_rti_frame   : 1;
+	int is_exact_match : 1;
 	guint64 saved_registers [MONO_ZERO_LEN_ARRAY];
 } CallbackInfo;
 
