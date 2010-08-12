@@ -19,7 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{158073ED-99AE-4196-9EDC-DDB2344F8466}</ProjectGuid>
+    <ProjectGuid>{7F78B47D-D5F3-4C51-A4D3-609137745A74}</ProjectGuid>
     <RootNamespace>bfd</RootNamespace>
     <Keyword>Win32Proj</Keyword>
   </PropertyGroup>
@@ -88,7 +88,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>include;.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_DEBUG;__i386__;TARGET_X86;i386;WIN32;_WIN32;__WIN32__;_WINDOWS;WINDOWS;HOST_WIN32;TARGET_WIN32;_CRT_SECURE_NO_DEPRECATE;_LIB;_CRT_NONSTDC_NO_DEPRECATE;HAVE_CONFIG_H;ALMOST_STDC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;__i386__;TARGET_X86;i386;WIN32;_WIN32;__WIN32__;_WINDOWS;WINDOWS;HOST_WIN32;TARGET_WIN32;_CRT_SECURE_NO_DEPRECATE;_LIB;_CRT_NONSTDC_NO_DEPRECATE;HAVE_CONFIG_H;ALMOST_STDC;HAVE_i386pe_vec;HAVE_i386pei_vec;HAVE_bfd_elf32_i386_vec;HAVE_bfd_elf32_little_generic_vec;HAVE_bfd_elf32_bin_generic_vec;ARCH_i386;SELECT_VECS=&amp;i386pe_vec,&amp;i386pei_vec,&amp;bfd_elf32_i386_vec,&amp;bfd_elf32_little_generic_vec,&amp;bfd_elf32_big_generic_vec;SELECT_ARCHS="&amp;bfd_i386_arch";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -157,13 +157,26 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="archive.c" />
+    <ClCompile Include="archive64.c" />
     <ClCompile Include="archures.c" />
+    <ClCompile Include="bfd.c" />
     <ClCompile Include="bfdio.c" />
     <ClCompile Include="binary.c" />
     <ClCompile Include="cache.c" />
     <ClCompile Include="coffgen.c" />
+    <ClCompile Include="cofflink.c" />
     <ClCompile Include="corefile.c" />
+    <ClCompile Include="dwarf1.c" />
     <ClCompile Include="dwarf2.c" />
+    <ClCompile Include="elf-attrs.c" />
+    <ClCompile Include="elf-eh-frame.c" />
+    <ClCompile Include="elf-ifunc.c" />
+    <ClCompile Include="elf-strtab.c" />
+    <ClCompile Include="elf-vxworks.c" />
+    <ClCompile Include="elf.c" />
+    <ClCompile Include="elf32-gen.c" />
+    <ClCompile Include="elf32-i386.c" />
+    <ClCompile Include="elf32.c" />
     <ClCompile Include="format.c" />
     <ClCompile Include="hash.c" />
     <ClCompile Include="ihex.c" />
@@ -195,7 +208,14 @@
     <ClCompile Include="libiberty\_doprnt.c" />
     <ClCompile Include="linker.c" />
     <ClCompile Include="merge.c" />
+    <ClCompile Include="opcodes\dis-buf.c" />
+    <ClCompile Include="opcodes\dis-init.c" />
+    <ClCompile Include="opcodes\disassemble.c" />
+    <ClCompile Include="opcodes\i386-dis.c" />
     <ClCompile Include="opncls.c" />
+    <ClCompile Include="pe-i386.c" />
+    <ClCompile Include="pei-i386.c" />
+    <ClCompile Include="peigen.c" />
     <ClCompile Include="reloc.c" />
     <ClCompile Include="section.c" />
     <ClCompile Include="simple.c" />
@@ -205,6 +225,8 @@
     <ClCompile Include="syms.c" />
     <ClCompile Include="targets.c" />
     <ClCompile Include="tekhex.c" />
+    <ClCompile Include="verilog.c" />
+    <ClCompile Include="xsym.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="libiberty\cp-demangle.h" />

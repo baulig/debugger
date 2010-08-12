@@ -416,6 +416,7 @@ _bfd_elf_obj_attrs_arg_type (bfd *abfd, int vendor, int tag)
       break;
     default:
       abort ();
+      return -1;
     }
 }
 

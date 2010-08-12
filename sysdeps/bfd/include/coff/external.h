@@ -97,6 +97,7 @@ struct external_scnhdr
 #define _DATA	 ".data"
 #define _BSS	 ".bss"
 #define _COMMENT ".comment"
+#undef _LIB
 #define _LIB     ".lib"
 #endif /* not DO_NOT_DEFINE_SCNHDR */
 

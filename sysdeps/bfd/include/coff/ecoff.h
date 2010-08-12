@@ -58,6 +58,7 @@
 #define _LITA	".lita"
 #define _LIT4	".lit4"
 #define _LIT8	".lit8"
+#undef _LIB
 #define _LIB	".lib"
 #define _INIT	".init"
 #define _FINI	".fini"
