@@ -13,3 +13,6 @@
 /Debugger.h
 /remote-server
 /mdb-server
+/config.h
+/Win32_Debug/
+/*.vcxproj.user

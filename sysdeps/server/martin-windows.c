@@ -11,8 +11,6 @@
 #include <bfd.h>
 #include <dis-asm.h>
 
-extern int snwprintf( wchar_t *s, size_t count, const wchar_t *format, ...);
-
 #include "i386-arch.h"
 
 typedef struct
@@ -58,7 +56,7 @@ tstring_to_string (const TCHAR *string)
 	gchar *ret;
 
 	len = _tcslen (string);
-	ret = g_malloc0 (len + 1);
+	ret = (gchar *) g_malloc0 (len + 1);
 
 	if (sizeof (TCHAR) == sizeof (wchar_t))
 		wcstombs (ret, string, len);
@@ -83,7 +81,7 @@ get_last_error (void)
 	if (dw_rval == 0)
 		return g_strdup_printf ("Could not get error message (0x%x) from windows", error_code);
 
-	tmp_buf = g_malloc0 (dw_rval + 1);
+	tmp_buf = (gchar *) g_malloc0 (dw_rval + 1);
 	wcstombs (tmp_buf, message, 2048);
 
 	retval = g_strdup_printf ("WINDOWS ERROR (code=%x): %s", error_code, tmp_buf);
@@ -433,9 +431,9 @@ mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
 		  const gchar **argv, const gchar **envp, gboolean redirect_fds,
 		  gint *child_pid, IOThreadData **io_data, gchar **error)
 {
-	gunichar2* utf16_argv = NULL;
-	gunichar2* utf16_envp = NULL;
-	gunichar2* utf16_working_directory = NULL;
+	wchar_t* utf16_argv = NULL;
+	wchar_t* utf16_envp = NULL;
+	wchar_t* utf16_working_directory = NULL;
 	InferiorHandle *inferior = server->inferior;
 	STARTUPINFO si = {0};
 	PROCESS_INFORMATION pi = {0};
@@ -450,31 +448,41 @@ mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
 	if (error)
 		*error = NULL;
 
-	if (working_directory)
-		utf16_working_directory = g_utf8_to_utf16 (working_directory, -1, NULL, NULL, NULL);
+	if (working_directory) {
+		gunichar2* utf16_dir_tmp;
+		guint len;
+
+		len = strlen (working_directory) + 1;
+
+		utf16_dir_tmp = g_utf8_to_utf16 (working_directory, -1, NULL, NULL, NULL);
+
+		utf16_working_directory = (wchar_t *) g_malloc (len*sizeof (wchar_t));
+		_snwprintf (utf16_working_directory, len, L"%s ", utf16_dir_tmp);
+		g_free (utf16_dir_tmp);
+	}
 
 	if (envp) {
 		guint len = 0;
 		const gchar** envp_temp = envp;
-		gunichar2* envp_concat;
+		wchar_t* envp_concat;
 
 		while (*envp_temp) {
 			len += strlen (*envp_temp) + 1;
 			envp_temp++;
 		}
 		len++; /* add one for double NULL at end */
-		envp_concat = utf16_envp = g_malloc (len*sizeof (gunichar2));
+		envp_concat = utf16_envp = (wchar_t *) g_malloc (len*sizeof (wchar_t));
 
 		envp_temp = envp;
 		while (*envp_temp) {
 			gunichar2* utf16_envp_temp = g_utf8_to_utf16 (*envp_temp, -1, NULL, NULL, NULL);
-			int written = snwprintf (envp_concat, len, L"%s%s", utf16_envp_temp, L"\0");
+			int written = _snwprintf (envp_concat, len, L"%s%s", utf16_envp_temp, L"\0");
 			g_free (utf16_envp_temp);
 			envp_concat += written + 1;
 			len -= written;
 			envp_temp++;
 		}
-		snwprintf (envp_concat, len, L"%s", L"\0"); /* double NULL at end */
+		_snwprintf (envp_concat, len, L"%s", L"\0"); /* double NULL at end */
 	}
 
 	if (argv) {
@@ -482,7 +490,7 @@ mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
 		guint len = 0;
 		gint index = 0;
 		const gchar** argv_temp = argv;
-		gunichar2* argv_concat;
+		wchar_t* argv_concat;
 
 		while (*argv_temp) {
 			len += strlen (*argv_temp) + 1;
@@ -490,13 +498,13 @@ mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
 			argc++;
 		}
 		inferior->process->argc = argc;
-		inferior->process->argv = g_malloc0 ( (argc+1) * sizeof (gpointer));
-		argv_concat = utf16_argv = g_malloc (len*sizeof (gunichar2));
+		inferior->process->argv = (gchar **) g_malloc0 ( (argc+1) * sizeof (gpointer));
+		argv_concat = utf16_argv = (wchar_t *) g_malloc (len*sizeof (wchar_t));
 
 		argv_temp = argv;
 		while (*argv_temp) {
 			gunichar2* utf16_argv_temp = g_utf8_to_utf16 (*argv_temp, -1, NULL, NULL, NULL);
-			int written = snwprintf (argv_concat, len, L"%s ", utf16_argv_temp);
+			int written = _snwprintf (argv_concat, len, L"%s ", utf16_argv_temp);
 			inferior->process->argv [index++] = g_strdup (*argv_temp);
 			g_free (utf16_argv_temp);
 			argv_concat += written;
