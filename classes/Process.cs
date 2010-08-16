@@ -168,7 +168,9 @@ namespace Mono.Debugger
 
 		Process parent;
 
+#if !WINDOWS
 		ThreadDB thread_db;
+#endif
 
 		bool is_attached;
 		bool is_execed;
@@ -543,6 +545,7 @@ namespace Mono.Debugger
 
 		internal void InitializeThreads (Inferior inferior, bool resume_threads)
 		{
+#if !WINDOWS
 			if (thread_db != null)
 				return;
 
@@ -571,20 +574,26 @@ namespace Mono.Debugger
 				}
 				engine.SetTID (tid);
 			});
+#endif
 		}
 
 		internal bool CheckForThreads (ArrayList check_threads)
 		{
+#if !WINDOWS
 			if(thread_db == null)
 				return false;
 			thread_db.GetThreadInfo (null, delegate (int lwp, long tid) {
 				check_threads.Add(lwp);
 			} );
 			return true;
+#else
+			return false;
+#endif
 		}
 
 		void get_thread_info (Inferior inferior, SingleSteppingEngine engine)
 		{
+#if FIMXE
 			if (thread_db == null) {
 				if (mono_manager == null)
 					return;
@@ -605,6 +614,7 @@ namespace Mono.Debugger
 			if (!found)
 				Report.Error ("Cannot find thread {0:x} in {1}",
 					      engine.PID, start.CommandLine);
+#endif
 		}
 
 		internal SingleSteppingEngine GetEngineByTID (Inferior inferior, long tid)
@@ -614,6 +624,7 @@ namespace Mono.Debugger
 					return engine;
 			}
 
+#if !WINDOWS
 			if (thread_db == null) {
 				Report.Error ("Failed to initialize thread_db on {0}: {1}",
 					      start.CommandLine, start);
@@ -633,6 +644,11 @@ namespace Mono.Debugger
 					      tid, start.CommandLine);
 
 			return result;
+#else
+			Report.Error ("Cannot find thread {0:x} in {1}",
+				      tid, start.CommandLine);
+			return null;
+#endif
 		}
 
 		public void Kill ()
@@ -1105,10 +1121,12 @@ namespace Mono.Debugger
 				breakpoint_manager = null;
 			}
 
+#if !WINDOWS
 			if (thread_db != null) {
 				thread_db.Dispose ();
 				thread_db = null;
 			}
+#endif
 
 			if (thread_lock_mutex != null) {
 				thread_lock_mutex.Dispose ();

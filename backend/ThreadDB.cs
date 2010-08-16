@@ -1,3 +1,4 @@
+#if !WINDOWS
 using System;
 using System.Runtime.InteropServices;
 
@@ -208,3 +209,4 @@ namespace Mono.Debugger.Backend
 
 	}
 }
+#endif
