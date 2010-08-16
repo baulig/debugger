@@ -251,7 +251,7 @@ handle_debug_event (DEBUG_EVENT *de)
 	InferiorHandle *inferior;
 	ProcessHandle *process;
 
-	server = g_hash_table_lookup (server_hash, GINT_TO_POINTER (de->dwThreadId));
+	server = (ServerHandle *) g_hash_table_lookup (server_hash, GINT_TO_POINTER (de->dwThreadId));
 	if (!server) {
 		g_warning (G_STRLOC ": Got debug event for unknown thread: %d/%d", de->dwProcessId, de->dwThreadId);
 		if (!ContinueDebugEvent (de->dwProcessId, de->dwThreadId, DBG_CONTINUE)) {
@@ -452,11 +452,12 @@ mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
 		gunichar2* utf16_dir_tmp;
 		guint len;
 
-		len = strlen (working_directory) + 1;
+		len = strlen (working_directory);
 
 		utf16_dir_tmp = g_utf8_to_utf16 (working_directory, -1, NULL, NULL, NULL);
 
-		utf16_working_directory = (wchar_t *) g_malloc (len*sizeof (wchar_t));
+
+		utf16_working_directory = (wchar_t *) g_malloc0 ((len+2)*sizeof (wchar_t));
 		_snwprintf (utf16_working_directory, len, L"%s ", utf16_dir_tmp);
 		g_free (utf16_dir_tmp);
 	}
@@ -471,7 +472,7 @@ mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
 			envp_temp++;
 		}
 		len++; /* add one for double NULL at end */
-		envp_concat = utf16_envp = (wchar_t *) g_malloc (len*sizeof (wchar_t));
+		envp_concat = utf16_envp = (wchar_t *) g_malloc0 (len*sizeof (wchar_t));
 
 		envp_temp = envp;
 		while (*envp_temp) {
@@ -499,7 +500,7 @@ mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
 		}
 		inferior->process->argc = argc;
 		inferior->process->argv = (gchar **) g_malloc0 ( (argc+1) * sizeof (gpointer));
-		argv_concat = utf16_argv = (wchar_t *) g_malloc (len*sizeof (wchar_t));
+		argv_concat = utf16_argv = (wchar_t *) g_malloc0 (len*sizeof (wchar_t));
 
 		argv_temp = argv;
 		while (*argv_temp) {

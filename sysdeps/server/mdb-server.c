@@ -491,7 +491,7 @@ server_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 			&int_size, &long_size, &addr_size, &is_bigendian);
 
 		if (result != COMMAND_ERROR_NONE)
-			return result;
+			return (ErrorCode) result;
 
 		buffer_add_int (buf, int_size);
 		buffer_add_int (buf, long_size);
@@ -522,7 +522,7 @@ server_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 
 		bpm_iid = decode_int (p, &p, end);
 
-		bpm = g_hash_table_lookup (bpm_hash, GUINT_TO_POINTER (bpm_iid));
+		bpm = (BreakpointManager *) g_hash_table_lookup (bpm_hash, GUINT_TO_POINTER (bpm_iid));
 
 		g_message (G_STRLOC ": create inferior: %d - %p", bpm_iid, bpm);
 
@@ -606,13 +606,10 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 			cwd = g_get_current_dir ();
 		}
 
-		argv [0] = g_strdup_printf ("X:\\Work\\Martin\\mdb\\testnativetypes.exe");
-		// argv [0] = g_strdup_printf ("/data/martin/testnativetypes");
-
 		result = mono_debugger_server_spawn (inferior, cwd, (const gchar **) argv, NULL, FALSE, &child_pid, NULL, &error);
 
 		if (result != COMMAND_ERROR_NONE)
-			return result;
+			return (ErrorCode) result;
 
 		g_hash_table_insert (inferior_by_pid, GUINT_TO_POINTER (child_pid), inferior);
 
@@ -634,7 +631,7 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 
 		result = mono_debugger_server_get_signal_info (inferior, &sinfo);
 		if (result != COMMAND_ERROR_NONE)
-			return result;
+			return (ErrorCode) result;
 
 		buffer_add_int (buf, sinfo->sigkill);
 		buffer_add_int (buf, sinfo->sigstop);
@@ -662,7 +659,7 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 			inferior, &exe_file, &cwd, &nargs, &cmdline_args);
 
 		if (result != COMMAND_ERROR_NONE)
-			return result;
+			return (ErrorCode) result;
 
 		buffer_add_string (buf, exe_file);
 		buffer_add_string (buf, cwd);
@@ -683,7 +680,7 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 
 		result = mono_debugger_server_get_frame (inferior, &frame);
 		if (result != COMMAND_ERROR_NONE)
-			return result;
+			return (ErrorCode) result;
 
 		buffer_add_long (buf, frame.address);
 		buffer_add_long (buf, frame.stack_pointer);
@@ -760,7 +757,7 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		result = mono_debugger_server_get_registers (inferior, regs);
 		if (result != COMMAND_ERROR_NONE) {
 			g_free (regs);
-			return result;
+			return (ErrorCode) result;
 		}
 
 		buffer_add_int (buf, count);
@@ -860,7 +857,7 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		return ERR_NOT_IMPLEMENTED;
 	}
 
-	return result;
+	return (ErrorCode) result;
 }
 
 static ErrorCode
@@ -1099,7 +1096,6 @@ mdb_server_main_loop_iteration (void)
 		else
 			err = inferior_data->ret;
 
-		g_free (data);
 		break;
 #else
 		err = inferior_commands (command, id, inferior, p, end, &buf);

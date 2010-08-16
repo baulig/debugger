@@ -1,5 +1,6 @@
 using System;
-using System.Threading;
+using ST = System.Threading;
+using SD = System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace Mono.Debugger.Backend
@@ -22,8 +23,8 @@ namespace Mono.Debugger.Backend
 
 		public static string CurrentThread {
 			get {
-				int pid = mono_debugger_server_get_current_pid ();
-				long thread = mono_debugger_server_get_current_thread ();
+				int pid = SD.Process.GetCurrentProcess ().Id;
+				int thread = ST.Thread.CurrentThread.ManagedThreadId;
 				return String.Format ("[{0}:{1}:0x{2:x}]",
 						      Environment.MachineName, pid, thread);
 			}
@@ -82,21 +83,21 @@ namespace Mono.Debugger.Backend
 		public void Lock ()
 		{
 			Debug ("{0} locking {1}", CurrentThread, Name);
-			Monitor.Enter (this);
+			ST.Monitor.Enter (this);
 			Debug ("{0} locked {1}", CurrentThread, Name);
 		}
 
 		public void Unlock ()
 		{
 			Debug ("{0} unlocking {1}", CurrentThread, Name);
-			Monitor.Exit (this);
+			ST.Monitor.Exit (this);
 			Debug ("{0} unlocked {1}", CurrentThread, Name);
 		}
 
 		public override bool TryLock ()
 		{
 			Debug ("{0} trying to lock {1}", CurrentThread, Name);
-			bool success = Monitor.TryEnter (this);
+			bool success = ST.Monitor.TryEnter (this);
 			if (success)
 				Debug ("{0} locked {1}", CurrentThread, Name);
 			else
@@ -117,13 +118,13 @@ namespace Mono.Debugger.Backend
 		public void Wait ()
 		{
 			Debug ("{0} waiting {1}", CurrentThread, Name);
-			Monitor.Wait (this);
+			ST.Monitor.Wait (this);
 			Debug ("{0} done waiting {1}", CurrentThread, Name);
 		}
 
 		public bool Wait (int milliseconds) {
 			Debug ("{0} waiting {1}", CurrentThread, Name);
-			bool ret = Monitor.Wait (this, milliseconds);
+			bool ret = ST.Monitor.Wait (this, milliseconds);
 			Debug ("{0} done waiting {1}", CurrentThread, Name);
 			return ret;
 		}
@@ -131,7 +132,7 @@ namespace Mono.Debugger.Backend
 		public void Signal ()
 		{
 			Debug ("{0} signal {1}", CurrentThread, Name);
-			Monitor.Pulse (this);
+			ST.Monitor.Pulse (this);
 		}
 
 		protected override void DoDispose ()
