@@ -23,12 +23,14 @@ namespace Mono.Debugger.Server
 		int iid;
 
 		DwarfReader dwarf;
+		StabsReader stabs;
 		RemoteSymbolFile symfile;
 
 		ArrayList simple_symbols;
 		RemoteSymbolTable simple_symtab;
 
-		bool has_debugging_info;
+		bool dwarf_supported;
+		bool stabs_supported;
 
 		TargetAddress start_address = TargetAddress.Null;
 		TargetAddress end_address = TargetAddress.Null;
@@ -46,7 +48,9 @@ namespace Mono.Debugger.Server
 			target_name = server.Connection.BfdGetTargetName (iid);
 
 			if (DwarfReader.IsSupported (this))
-				has_debugging_info = true;
+				dwarf_supported = true;
+			else if (StabsReader.IsSupported (this))
+				stabs_supported = true;
 
 			symfile = new RemoteSymbolFile (this);
 
@@ -88,7 +92,7 @@ namespace Mono.Debugger.Server
 		}
 
 		protected bool HasDebuggingInfo {
-			get { return has_debugging_info; }
+			get { return dwarf_supported || stabs_supported; }
 		}
 
 		TargetAddress create_address (long addr)
@@ -173,7 +177,13 @@ namespace Mono.Debugger.Server
 
 		public override void ReadDebuggingInfo ()
 		{
-			if (!has_debugging_info || (dwarf != null))
+			read_dwarf ();
+			read_stabs ();
+		}
+
+		void read_dwarf ()
+		{
+			if (!dwarf_supported || (dwarf != null))
 				return;
 
 			try {
@@ -182,12 +192,29 @@ namespace Mono.Debugger.Server
 			} catch (Exception ex) {
 				Console.WriteLine ("Cannot read DWARF debugging info from " +
 						   "symbol file `{0}': {1}", FileName, ex);
-				has_debugging_info = false;
+				dwarf_supported = false;
 				return;
 			}
 		}
 
-		protected bool SymbolsLoaded {
+		void read_stabs ()
+		{
+			if (!stabs_supported || (stabs != null))
+				return;
+
+			try {
+				stabs = new StabsReader (os, this, module);
+				// stabs.ReadTypes ();
+			} catch (Exception ex) {
+				Console.WriteLine ("Cannot read STABS debugging info from " +
+						   "symbol file `{0}': {1}", FileName, ex);
+				stabs_supported = false;
+				return;
+			}
+		}
+
+		protected bool SymbolsLoaded
+		{
 			get { return (dwarf != null); }
 		}
 

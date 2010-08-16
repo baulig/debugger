@@ -79,6 +79,7 @@
     <Compile Include="backend\os\ExecutableReader.cs" />
     <Compile Include="backend\os\LinuxOperatingSystem.cs" />
     <Compile Include="backend\os\OperatingSystemBackend.cs" />
+    <Compile Include="backend\os\StabsReader.cs" />
     <Compile Include="backend\os\WindowsOperatingSystem.cs" />
     <Compile Include="backend\ProcessStart.cs" />
     <Compile Include="backend\server\BreakpointManager.cs" />
