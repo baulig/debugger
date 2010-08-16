@@ -33,3 +33,10 @@
 /BUILD
 /hack-inc/
 /compile
+/*.suo
+/bin/
+/obj/
+/*.csproj.user
+/ipch/
+/*.sdf
+/*.opensdf

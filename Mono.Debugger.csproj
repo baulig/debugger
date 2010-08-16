@@ -1,0 +1,266 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
+    <ProductVersion>8.0.30703</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{6539FD35-246D-4FE4-9E3C-B0870EC3CE22}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>MonoDebugger</RootNamespace>
+    <AssemblyName>MonoDebugger</AssemblyName>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkProfile>Client</TargetFrameworkProfile>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
+    <PlatformTarget>x86</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>TRACE;DEBUG;CECIL,DEBUGGER_SOURCE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
+    <PlatformTarget>x86</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject />
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Mono.Cecil">
+      <HintPath>build\Mono.Cecil.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="backend\arch\Architecture.cs" />
+    <Compile Include="backend\arch\Architecture_Arm.cs" />
+    <Compile Include="backend\arch\Architecture_I386.cs" />
+    <Compile Include="backend\arch\Architecture_X86_64.cs" />
+    <Compile Include="backend\arch\CoreFile.cs" />
+    <Compile Include="backend\arch\Disassembler.cs" />
+    <Compile Include="backend\arch\Instruction.cs" />
+    <Compile Include="backend\arch\Instruction_I386.cs" />
+    <Compile Include="backend\arch\Instruction_X86_64.cs" />
+    <Compile Include="backend\arch\Opcodes.cs" />
+    <Compile Include="backend\arch\Opcodes_I386.cs" />
+    <Compile Include="backend\arch\Opcodes_X86_64.cs" />
+    <Compile Include="backend\arch\X86_Architecture.cs" />
+    <Compile Include="backend\arch\X86_Instruction.cs" />
+    <Compile Include="backend\arch\X86_Opcodes.cs" />
+    <Compile Include="backend\BreakpointHandle.cs" />
+    <Compile Include="backend\EventQueue.cs" />
+    <Compile Include="backend\Inferior.cs" />
+    <Compile Include="backend\mono\MetadataHelper.cs" />
+    <Compile Include="backend\mono\MonoLanguageBackend.cs" />
+    <Compile Include="backend\mono\MonoSymbolFile.cs" />
+    <Compile Include="backend\mono\MonoThreadManager.cs" />
+    <Compile Include="backend\os\Bfd.cs" />
+    <Compile Include="backend\os\BfdDisassembler.cs" />
+    <Compile Include="backend\os\DarwinOperatingSystem.cs" />
+    <Compile Include="backend\os\DwarfFrameReader.cs" />
+    <Compile Include="backend\os\DwarfReader.cs" />
+    <Compile Include="backend\os\ExecutableReader.cs" />
+    <Compile Include="backend\os\LinuxOperatingSystem.cs" />
+    <Compile Include="backend\os\OperatingSystemBackend.cs" />
+    <Compile Include="backend\os\WindowsOperatingSystem.cs" />
+    <Compile Include="backend\ProcessStart.cs" />
+    <Compile Include="backend\server\BreakpointManager.cs" />
+    <Compile Include="backend\server\Connection.cs" />
+    <Compile Include="backend\server\DebuggerServer.cs" />
+    <Compile Include="backend\server\NativeBreakpointManager.cs" />
+    <Compile Include="backend\server\NativeDebuggerServer.cs" />
+    <Compile Include="backend\server\NativeThreadManager.cs" />
+    <Compile Include="backend\server\RemoteBreakpointManager.cs" />
+    <Compile Include="backend\server\RemoteDebuggerServer.cs" />
+    <Compile Include="backend\server\RemoteExecutableReader.cs" />
+    <Compile Include="backend\server\RemoteThreadManager.cs" />
+    <Compile Include="backend\SingleSteppingEngine.cs" />
+    <Compile Include="backend\SymbolTableManager.cs" />
+    <Compile Include="backend\TargetAccess.cs" />
+    <Compile Include="backend\TargetMemoryAccess.cs" />
+    <Compile Include="backend\TargetReader.cs" />
+    <Compile Include="backend\ThreadDB.cs" />
+    <Compile Include="backend\ThreadManager.cs" />
+    <Compile Include="backend\ThreadServant.cs" />
+    <Compile Include="build\AssemblyInfo.cs" />
+    <Compile Include="classes\AddressBreakpoint.cs" />
+    <Compile Include="classes\AssemblerMethod.cs" />
+    <Compile Include="classes\Backtrace.cs" />
+    <Compile Include="classes\Block.cs" />
+    <Compile Include="classes\Breakpoint.cs" />
+    <Compile Include="classes\Debugger.cs" />
+    <Compile Include="classes\DebuggerConfiguration.cs">
+      <DependentUpon>DebuggerConfiguration.xsd</DependentUpon>
+    </Compile>
+    <Compile Include="classes\DebuggerOptions.cs" />
+    <Compile Include="classes\DebuggerSession.cs" />
+    <Compile Include="classes\Display.cs" />
+    <Compile Include="classes\Event.cs" />
+    <Compile Include="classes\ExceptionCatchPoint.cs" />
+    <Compile Include="classes\ExpressionBreakpoint.cs" />
+    <Compile Include="classes\ExpressionEvaluator.cs" />
+    <Compile Include="classes\GUIManager.cs" />
+    <Compile Include="classes\InternalError.cs" />
+    <Compile Include="classes\ISymbolTable.cs" />
+    <Compile Include="classes\ITargetNotification.cs" />
+    <Compile Include="classes\LineNumberTable.cs" />
+    <Compile Include="classes\MainMethodBreakpoint.cs" />
+    <Compile Include="classes\Method.cs" />
+    <Compile Include="classes\MethodSource.cs" />
+    <Compile Include="classes\Module.cs" />
+    <Compile Include="classes\ObjectCache.cs" />
+    <Compile Include="classes\Operation.cs" />
+    <Compile Include="classes\Process.cs" />
+    <Compile Include="classes\SourceAddress.cs" />
+    <Compile Include="classes\SourceBreakpoint.cs" />
+    <Compile Include="classes\SourceBuffer.cs" />
+    <Compile Include="classes\SourceFileFactory.cs" />
+    <Compile Include="classes\SourceInfo.cs" />
+    <Compile Include="classes\SourceLocation.cs" />
+    <Compile Include="classes\StackFrame.cs" />
+    <Compile Include="classes\StepFrame.cs" />
+    <Compile Include="classes\Style.cs" />
+    <Compile Include="classes\SymbolTable.cs" />
+    <Compile Include="classes\SymbolTableCollection.cs" />
+    <Compile Include="classes\SymbolTableException.cs" />
+    <Compile Include="classes\TargetBinaryAccess.cs" />
+    <Compile Include="classes\TargetBinaryReader.cs" />
+    <Compile Include="classes\TargetBinaryWriter.cs" />
+    <Compile Include="classes\TargetEvent.cs" />
+    <Compile Include="classes\TargetException.cs" />
+    <Compile Include="classes\TargetInfo.cs" />
+    <Compile Include="classes\TargetInvocationException.cs" />
+    <Compile Include="classes\TargetMemoryArea.cs" />
+    <Compile Include="classes\TargetMemoryException.cs" />
+    <Compile Include="classes\Thread.cs" />
+    <Compile Include="classes\ThreadGroup.cs" />
+    <Compile Include="classes\Utils.cs" />
+    <Compile Include="interface\AddressDomain.cs" />
+    <Compile Include="interface\DebuggerMarshalByRefObject.cs" />
+    <Compile Include="interface\Report.cs" />
+    <Compile Include="interface\TargetAddress.cs" />
+    <Compile Include="languages\AbsoluteTargetLocation.cs" />
+    <Compile Include="languages\BitfieldTargetLocation.cs" />
+    <Compile Include="languages\ClientSuppliedTargetLocation.cs" />
+    <Compile Include="languages\DereferencedTargetLocation.cs" />
+    <Compile Include="languages\Language.cs" />
+    <Compile Include="languages\mono\CapturedVariable.cs" />
+    <Compile Include="languages\mono\MonoArrayObject.cs" />
+    <Compile Include="languages\mono\MonoArrayType.cs" />
+    <Compile Include="languages\mono\MonoClassInfo.cs" />
+    <Compile Include="languages\mono\MonoClassObject.cs" />
+    <Compile Include="languages\mono\MonoClassType.cs" />
+    <Compile Include="languages\mono\MonoDebuggerSupport.cs" />
+    <Compile Include="languages\mono\MonoEnumType.cs" />
+    <Compile Include="languages\mono\MonoFunctionType.cs" />
+    <Compile Include="languages\mono\MonoFundamentalType.cs" />
+    <Compile Include="languages\mono\MonoGenericInstanceObject.cs" />
+    <Compile Include="languages\mono\MonoGenericInstanceType.cs" />
+    <Compile Include="languages\mono\MonoGenericParameterType.cs" />
+    <Compile Include="languages\mono\MonoMember.cs" />
+    <Compile Include="languages\mono\MonoMethodSignature.cs" />
+    <Compile Include="languages\mono\MonoNullableObject.cs" />
+    <Compile Include="languages\mono\MonoNullableType.cs" />
+    <Compile Include="languages\mono\MonoObjectObject.cs" />
+    <Compile Include="languages\mono\MonoObjectType.cs" />
+    <Compile Include="languages\mono\MonoPointerObject.cs" />
+    <Compile Include="languages\mono\MonoPointerType.cs" />
+    <Compile Include="languages\mono\MonoStringObject.cs" />
+    <Compile Include="languages\mono\MonoStringType.cs" />
+    <Compile Include="languages\mono\MonoStructType.cs" />
+    <Compile Include="languages\mono\MonoVariable.cs" />
+    <Compile Include="languages\mono\MonoVariableLocation.cs" />
+    <Compile Include="languages\mono\MonoVoidType.cs" />
+    <Compile Include="languages\mono\Utils.cs" />
+    <Compile Include="languages\native\ITypeEntry.cs" />
+    <Compile Include="languages\native\NativeArrayObject.cs" />
+    <Compile Include="languages\native\NativeArrayType.cs" />
+    <Compile Include="languages\native\NativeClass.cs" />
+    <Compile Include="languages\native\NativeEnumType.cs" />
+    <Compile Include="languages\native\NativeFunctionObject.cs" />
+    <Compile Include="languages\native\NativeFunctionPointer.cs" />
+    <Compile Include="languages\native\NativeFunctionType.cs" />
+    <Compile Include="languages\native\NativeFundamentalType.cs" />
+    <Compile Include="languages\native\NativeLanguage.cs" />
+    <Compile Include="languages\native\NativeOpaqueObject.cs" />
+    <Compile Include="languages\native\NativeOpaqueType.cs" />
+    <Compile Include="languages\native\NativePointerObject.cs" />
+    <Compile Include="languages\native\NativePointerType.cs" />
+    <Compile Include="languages\native\NativeStringObject.cs" />
+    <Compile Include="languages\native\NativeStringType.cs" />
+    <Compile Include="languages\native\NativeStructObject.cs" />
+    <Compile Include="languages\native\NativeStructType.cs" />
+    <Compile Include="languages\native\NativeTypeAlias.cs" />
+    <Compile Include="languages\RelativeTargetLocation.cs" />
+    <Compile Include="languages\TargetArrayObject.cs" />
+    <Compile Include="languages\TargetArrayType.cs" />
+    <Compile Include="languages\TargetClass.cs" />
+    <Compile Include="languages\TargetClassObject.cs" />
+    <Compile Include="languages\TargetClassType.cs" />
+    <Compile Include="languages\TargetEnumObject.cs" />
+    <Compile Include="languages\TargetEnumType.cs" />
+    <Compile Include="languages\TargetFunctionType.cs" />
+    <Compile Include="languages\TargetFundamentalObject.cs" />
+    <Compile Include="languages\TargetFundamentalType.cs" />
+    <Compile Include="languages\TargetGenericInstanceObject.cs" />
+    <Compile Include="languages\TargetGenericInstanceType.cs" />
+    <Compile Include="languages\TargetGenericParameterType.cs" />
+    <Compile Include="languages\TargetLocation.cs" />
+    <Compile Include="languages\TargetMember.cs" />
+    <Compile Include="languages\TargetMethodSignature.cs" />
+    <Compile Include="languages\TargetNullableObject.cs" />
+    <Compile Include="languages\TargetNullableType.cs" />
+    <Compile Include="languages\TargetNullObject.cs" />
+    <Compile Include="languages\TargetObject.cs" />
+    <Compile Include="languages\TargetObjectKind.cs" />
+    <Compile Include="languages\TargetObjectObject.cs" />
+    <Compile Include="languages\TargetObjectType.cs" />
+    <Compile Include="languages\TargetPointerObject.cs" />
+    <Compile Include="languages\TargetPointerType.cs" />
+    <Compile Include="languages\TargetStructObject.cs" />
+    <Compile Include="languages\TargetStructType.cs" />
+    <Compile Include="languages\TargetType.cs" />
+    <Compile Include="languages\TargetTypeAlias.cs" />
+    <Compile Include="languages\TargetVariable.cs" />
+    <Compile Include="symbolwriter\MonoSymbolFile.cs" />
+    <Compile Include="symbolwriter\MonoSymbolTable.cs" />
+    <Compile Include="symbolwriter\MonoSymbolWriter.cs" />
+    <Compile Include="symbolwriter\ndesk-options.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Properties\" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="classes\DebuggerConfiguration.xsd">
+      <SubType>Designer</SubType>
+    </None>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PreBuildEvent>copy $(SolutionDir)\build\AssemblyInfo.cs.win $(SolutionDir)\build\AssemblyInfo.cs</PreBuildEvent>
+  </PropertyGroup>
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

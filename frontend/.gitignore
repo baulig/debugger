@@ -1,3 +1,7 @@
 /Makefile.in
 /Makefile
 /y.output
+/bin/
+/obj/
+/AssemblyInfo.cs
+/*.csproj.user
