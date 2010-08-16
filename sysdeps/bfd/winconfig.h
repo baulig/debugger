@@ -9,7 +9,7 @@
 #define HAVE_DECL_BASENAME 0
 
 /* Define to 1 if you have the declaration of `ffs', and to 0 if you don't. */
-#define HAVE_DECL_FFS 1
+/* #undef HAVE_DECL_FFS */
 
 /* Define to 1 if you have the declaration of `free', and to 0 if you don't.
    */
@@ -115,7 +115,7 @@
 #define HAVE_STRING_H 1
 
 /* Define to 1 if you have the `strtoull' function. */
-#define HAVE_STRTOULL 1
+/* #undef HAVE_STRTOULL */
 
 /* Define to 1 if you have the `sysconf' function. */
 /* #undef HAVE_SYSCONF */

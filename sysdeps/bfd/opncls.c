@@ -38,6 +38,10 @@
 #define S_IXOTH 0001	/* Execute by others.  */
 #endif
 
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
+#endif
+
 /* Counter used to initialize the bfd identifier.  */
 
 static unsigned int _bfd_id_counter = 0;
@@ -632,6 +636,7 @@ bfd_openw (const char *filename, const char *target)
 static inline void
 _maybe_make_executable (bfd * abfd)
 {
+#ifndef WINDOWS
   /* If the file was open for writing and is now executable,
      make it so.  */
   if (abfd->direction == write_direction
@@ -653,6 +658,7 @@ _maybe_make_executable (bfd * abfd)
 		  & (buf.st_mode | ((S_IXUSR | S_IXGRP | S_IXOTH) &~ mask))));
 	}
     }
+#endif
 }
 
 /*

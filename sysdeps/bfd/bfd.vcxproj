@@ -88,7 +88,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>include;.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_DEBUG;__i386__;TARGET_X86;i386;WIN32;_WIN32;__WIN32__;_WINDOWS;WINDOWS;HOST_WIN32;TARGET_WIN32;_CRT_SECURE_NO_DEPRECATE;_LIB;_CRT_NONSTDC_NO_DEPRECATE;HAVE_CONFIG_H;ALMOST_STDC;HAVE_i386pe_vec;HAVE_i386pei_vec;HAVE_bfd_elf32_i386_vec;HAVE_bfd_elf32_little_generic_vec;HAVE_bfd_elf32_bin_generic_vec;ARCH_i386;SELECT_VECS=&amp;i386pe_vec,&amp;i386pei_vec,&amp;bfd_elf32_i386_vec,&amp;bfd_elf32_little_generic_vec,&amp;bfd_elf32_big_generic_vec;SELECT_ARCHS="&amp;bfd_i386_arch";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;__i386__;TARGET_X86;i386;WIN32;_WIN32;__WIN32__;_WINDOWS;WINDOWS;HOST_WIN32;TARGET_WIN32;_CRT_SECURE_NO_DEPRECATE;_LIB;_CRT_NONSTDC_NO_DEPRECATE;HAVE_CONFIG_H;ALMOST_STDC;HAVE_i386pe_vec;HAVE_i386pei_vec;HAVE_bfd_elf32_i386_vec;HAVE_bfd_elf32_little_generic_vec;HAVE_bfd_elf32_bin_generic_vec;ARCH_i386;SELECT_VECS=&amp;i386pe_vec,&amp;i386pei_vec,&amp;bfd_elf32_i386_vec,&amp;bfd_elf32_little_generic_vec,&amp;bfd_elf32_big_generic_vec;SELECT_ARCHITECTURES=&amp;bfd_i386_arch;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -98,6 +98,9 @@
       <TreatWarningAsError>true</TreatWarningAsError>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
     </ClCompile>
+    <Link>
+      <EntryPointSymbol>main</EntryPointSymbol>
+    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <PreBuildEvent>
@@ -164,6 +167,8 @@
     <ClCompile Include="binary.c" />
     <ClCompile Include="cache.c" />
     <ClCompile Include="coffgen.c" />
+    <ClCompile Include="compress.c" />
+    <ClCompile Include="cpu-i386.c" />
     <ClCompile Include="cofflink.c" />
     <ClCompile Include="corefile.c" />
     <ClCompile Include="dwarf1.c" />
@@ -177,17 +182,20 @@
     <ClCompile Include="elf32-gen.c" />
     <ClCompile Include="elf32-i386.c" />
     <ClCompile Include="elf32.c" />
+    <ClCompile Include="elflink.c" />
     <ClCompile Include="format.c" />
     <ClCompile Include="hash.c" />
     <ClCompile Include="ihex.c" />
     <ClCompile Include="init.c" />
     <ClCompile Include="libbfd.c" />
+    <ClCompile Include="libiberty\alloca.c" />
     <ClCompile Include="libiberty\asprintf.c" />
     <ClCompile Include="libiberty\basename.c" />
     <ClCompile Include="libiberty\concat.c" />
     <ClCompile Include="libiberty\cp-demangle.c" />
     <ClCompile Include="libiberty\cp-demint.c" />
     <ClCompile Include="libiberty\cplus-dem.c" />
+    <ClCompile Include="libiberty\ffs.c" />
     <ClCompile Include="libiberty\fnmatch.c" />
     <ClCompile Include="libiberty\hashtab.c" />
     <ClCompile Include="libiberty\hex.c" />
@@ -197,6 +205,8 @@
     <ClCompile Include="libiberty\safe-ctype.c" />
     <ClCompile Include="libiberty\snprintf.c" />
     <ClCompile Include="libiberty\stpcpy.c" />
+    <ClCompile Include="libiberty\strcasecmp.c" />
+    <ClCompile Include="libiberty\strncasecmp.c" />
     <ClCompile Include="libiberty\unlink-if-ordinary.c" />
     <ClCompile Include="libiberty\vasprintf.c" />
     <ClCompile Include="libiberty\vsnprintf.c" />

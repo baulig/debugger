@@ -18,3 +18,7 @@
 /autom4te.cache
 /bfd_stdint.h
 /stamp-*
+/Win32_Debug/
+/*.sdf
+/*.sui
+/*.vcxproj.user
