@@ -25,6 +25,10 @@ namespace Mono.Debugger.SymbolWriter
 			get; set;
 		}
 
+		public static bool ShowGuid {
+			get; set;
+		}
+
 		static Dictionary<int,bool> sources = new Dictionary<int,bool> ();
 		public static Dictionary<int,bool> Sources {
 			get { return sources; }
@@ -67,12 +71,12 @@ namespace Mono.Debugger.SymbolWriter
 			this.File = file;
 		}
 
-		protected void Message (string format, params object[] args)
+		protected static void Message (string format, params object[] args)
 		{
 			Console.WriteLine (format, args);
 		}
 
-		protected void Debug (string format, params object[] args)
+		protected static void Debug (string format, params object[] args)
 		{
 			if (Verbose)
 				Console.WriteLine (format, args);
@@ -122,10 +126,16 @@ namespace Mono.Debugger.SymbolWriter
 			Message ("Symbol file {0} checked ok.", File.FileName);
 		}
 
+		public void PrintGuid ()
+		{
+			Message ("Reading {0}, version {1}.{2}, Guid {3}.", File.FileName, File.MajorVersion,
+				 File.MinorVersion, File.Guid);
+		}
+
 		public void PrintSources ()
 		{
-			Message ("Reading {0}, version {1}.{2}.", File.FileName, File.MajorVersion,
-				 File.MinorVersion);
+			Message ("Reading {0}, version {1}.{2}, Guid {3}.", File.FileName, File.MajorVersion,
+				 File.MinorVersion, File.Guid);
 
 			foreach (SourceFileEntry file in File.Sources) {
 				if (Sources.Count > 0) {
@@ -505,6 +515,7 @@ namespace Mono.Debugger.SymbolWriter
 			Verify = true;
 			var p = new OptionSet () {
 				{ "verbose", v => Verbose = v != null },
+				{ "guid", v => ShowGuid = v != null },
 				{ "sources:", v => {
 					if (v != null)
 						sources.Add (Int32.Parse (v), true);
@@ -533,7 +544,7 @@ namespace Mono.Debugger.SymbolWriter
 			};
 			List<string> extra = p.Parse (args);
 
-			if (ShowSources || ShowCompileUnits || ShowMethods || ShowLineNumberTables || ShowLocals)
+			if (ShowGuid || ShowSources || ShowCompileUnits || ShowMethods || ShowLineNumberTables || ShowLocals)
 				Verify = false;
 
 			bool fail = false;
@@ -551,16 +562,29 @@ namespace Mono.Debugger.SymbolWriter
 			Mono.Cecil.AssemblyDefinition asm;
 
 			try {
+				if (filename.EndsWith (".mdb")) {
+					if (ShowGuid) {
+						file = MonoSymbolFile.ReadSymbolFile (filename);
+						Message ("Reading {0}, version {1}.{2}, guid {3}.", file.FileName, file.MajorVersion,
+							 file.MinorVersion, file.Guid);
+						return 0;
+					}
+
+					filename = filename.Substring (0, filename.Length-4);
+				}
+
 				asm = Mono.Cecil.AssemblyFactory.GetAssembly (filename);
 				file = MonoSymbolFile.ReadSymbolFile (asm, filename + ".mdb");
 			} catch (Exception ex) {
-				Console.WriteLine ("Can't read {0}: {1}", filename, ex.Message);
+				Console.WriteLine ("Can't read {0}: {1}", filename, ex);
 				return -1;
 			}
 
 			MdbSymbolReader reader = new MdbSymbolReader (asm, file);
 
 			try {
+				if (ShowGuid)
+					reader.PrintGuid ();
 				if (ShowSources)
 					reader.PrintSources ();
 				if (ShowCompileUnits)

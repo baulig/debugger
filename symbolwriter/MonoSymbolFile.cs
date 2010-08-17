@@ -460,6 +460,12 @@ namespace Mono.CompilerServices.SymbolWriter
 		{
 			return new MonoSymbolFile (filename, assembly);
 		}
+
+		public static MonoSymbolFile ReadSymbolFile (string filename)
+		{
+			return new MonoSymbolFile (filename);
+		}
+
 #else
 		protected MonoSymbolFile (string filename, Assembly assembly) : this (filename)
 		{
@@ -482,11 +488,6 @@ namespace Mono.CompilerServices.SymbolWriter
 			return new MonoSymbolFile (name, assembly);
 		}
 #endif
-
-		public static MonoSymbolFile ReadSymbolFile (string mdbFilename)
-		{
-			return new MonoSymbolFile (mdbFilename, null);
-		}
 
 		public int CompileUnitCount {
 			get { return ot.CompileUnitCount; }
