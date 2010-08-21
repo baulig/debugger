@@ -74,6 +74,7 @@
     <Compile Include="backend\os\Bfd.cs" />
     <Compile Include="backend\os\BfdDisassembler.cs" />
     <Compile Include="backend\os\DarwinOperatingSystem.cs" />
+    <Compile Include="backend\os\DebuggingFileReader.cs" />
     <Compile Include="backend\os\DwarfFrameReader.cs" />
     <Compile Include="backend\os\DwarfReader.cs" />
     <Compile Include="backend\os\ExecutableReader.cs" />

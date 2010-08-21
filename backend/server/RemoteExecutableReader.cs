@@ -22,8 +22,7 @@ namespace Mono.Debugger.Server
 		string file;
 		int iid;
 
-		DwarfReader dwarf;
-		StabsReader stabs;
+		DebuggingFileReader debug_info;
 		RemoteSymbolFile symfile;
 
 		ArrayList simple_symbols;
@@ -183,12 +182,13 @@ namespace Mono.Debugger.Server
 
 		void read_dwarf ()
 		{
-			if (!dwarf_supported || (dwarf != null))
+			if (!dwarf_supported || (debug_info != null))
 				return;
 
 			try {
-				dwarf = new DwarfReader (os, this, module);
+				var dwarf = new DwarfReader (os, this, module);
 				dwarf.ReadTypes ();
+				debug_info = dwarf;
 			} catch (Exception ex) {
 				Console.WriteLine ("Cannot read DWARF debugging info from " +
 						   "symbol file `{0}': {1}", FileName, ex);
@@ -199,12 +199,11 @@ namespace Mono.Debugger.Server
 
 		void read_stabs ()
 		{
-			if (!stabs_supported || (stabs != null))
+			if (!stabs_supported || (debug_info != null))
 				return;
 
 			try {
-				stabs = new StabsReader (os, this, module);
-				// stabs.ReadTypes ();
+				debug_info = new StabsReader (os, this, module);
 			} catch (Exception ex) {
 				Console.WriteLine ("Cannot read STABS debugging info from " +
 						   "symbol file `{0}': {1}", FileName, ex);
@@ -215,15 +214,15 @@ namespace Mono.Debugger.Server
 
 		protected bool SymbolsLoaded
 		{
-			get { return (dwarf != null); }
+			get { return (debug_info != null); }
 		}
 
-		protected DwarfReader DwarfReader {
+		protected DebuggingFileReader DebugInfo {
 			get {
-				if (dwarf == null)
+				if (debug_info == null)
 					throw new InvalidOperationException ();
 
-				return dwarf;
+				return debug_info;
 			}
 		}
 
@@ -278,21 +277,21 @@ namespace Mono.Debugger.Server
 			}
 
 			public override SourceFile[] Sources {
-				get { return ExecutableReader.DwarfReader.Sources; }
+				get { return ExecutableReader.DebugInfo.Sources; }
 			}
 
 			public override MethodSource[] GetMethods (SourceFile file)
 			{
-				return ExecutableReader.DwarfReader.GetMethods (file);
+				return ExecutableReader.DebugInfo.GetMethods (file);
 			}
 
 			public override MethodSource FindMethod (string name)
 			{
-				return ExecutableReader.DwarfReader.FindMethod (name);
+				return ExecutableReader.DebugInfo.FindMethod (name);
 			}
 
 			public override ISymbolTable SymbolTable {
-				get { return ExecutableReader.DwarfReader.SymbolTable; }
+				get { return ExecutableReader.DebugInfo.SymbolTable; }
 			}
 
 			public override Symbol SimpleLookup (TargetAddress address, bool exact_match)
