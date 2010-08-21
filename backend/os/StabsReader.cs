@@ -77,15 +77,15 @@ namespace Mono.Debugger.Backend
 						current_method = new StabsTargetMethod (this, current_file, symbol, stab_value);
 						methods.Add (current_method);
 					} else {
-						if (stab_value != 0)
-							current_method.SetEndAddress (stab_value);
+						if (current_method != null)
+							current_method.CloseMethod (stab_value);
 						current_method = null;
 					}
 				} else if (stab_type == 0x44) { // N_SLINE
 					Console.WriteLine ("LINE: {0:x} {1:x} {2:x} {3}",
 						stab_other, stab_desc, stab_value, symbol);
 					if (current_method != null)
-						current_method.Source.AddLine ((int) stab_desc, stab_value);
+						current_method.LineNumberTable.AddLine ((int) stab_desc, stab_value);
 				} else if (stab_type == 0x80) { // N_LSYM
 				} else if (stab_type == 0x82) { // N_BINCL
 				} else if (stab_type == 0xA2) { // N_EINCL
@@ -121,7 +121,7 @@ namespace Mono.Debugger.Backend
 
 		public override MethodSource[] GetMethods (SourceFile file)
 		{
-			return null;
+			return methods.Where (x => x.SourceFile == file).Select (x => x.MethodSource).ToArray ();
 		}
 
 		public override MethodSource FindMethod (string name)
@@ -260,6 +260,7 @@ namespace Mono.Debugger.Backend
 			StabsReader stabs;
 			StabsSourceFile file;
 			StabsMethodSource source;
+			StabsLineNumberTable lnt;
 			long start_addr;
 
 			public StabsTargetMethod (StabsReader stabs, StabsSourceFile file, string name, long start_addr)
@@ -269,7 +270,12 @@ namespace Mono.Debugger.Backend
 				this.file = file;
 				this.start_addr = start_addr;
 
-				source = new StabsMethodSource (this);
+				lnt = new StabsLineNumberTable (this);
+			}
+
+			internal StabsReader StabsReader
+			{
+				get { return stabs; }
 			}
 
 			internal StabsSourceFile SourceFile
@@ -277,14 +283,16 @@ namespace Mono.Debugger.Backend
 				get { return file; }
 			}
 
-			internal StabsMethodSource Source
+			internal StabsLineNumberTable LineNumberTable
 			{
-				get { return source; }
+				get { return lnt; }
 			}
 
-			internal void SetEndAddress (long end)
+			internal void CloseMethod (long end_addr)
 			{
-				SetAddresses (stabs.GetAddress (start_addr), stabs.GetAddress (end));
+				source = new StabsMethodSource (this);
+				SetAddresses (stabs.GetAddress (start_addr), stabs.GetAddress (start_addr + end_addr));
+				SetLineNumbers (lnt);
 			}
 
 			public override int Domain
@@ -304,12 +312,17 @@ namespace Mono.Debugger.Backend
 
 			public override bool HasSource
 			{
-				get { return source.StartRow > 0; }
+				get { return source != null; }
 			}
 
 			public override MethodSource MethodSource
 			{
-				get { return source; }
+				get {
+					if (source == null)
+						throw new InvalidOperationException ();
+
+					return source;
+				}
 			}
 
 			public override object MethodHandle
@@ -356,19 +369,10 @@ namespace Mono.Debugger.Backend
 		class StabsMethodSource : MethodSource
 		{
 			StabsTargetMethod method;
-			int start_row = -1;
-			int end_row = -1;
 
 			public StabsMethodSource (StabsTargetMethod method)
 			{
 				this.method = method;
-			}
-
-			internal void AddLine (int line, long address)
-			{
-				if (start_row < 0)
-					start_row = line;
-				end_row = line;
 			}
 
 			public override Module Module
@@ -423,12 +427,12 @@ namespace Mono.Debugger.Backend
 
 			public override int StartRow
 			{
-				get { return start_row; }
+				get { return method.LineNumberTable.StartRow; }
 			}
 
 			public override int EndRow
 			{
-				get { return end_row; }
+				get { return method.LineNumberTable.EndRow; }
 			}
 
 			public override string[] GetNamespaces ()
@@ -439,6 +443,167 @@ namespace Mono.Debugger.Backend
 			public override Method NativeMethod
 			{
 				get { return method; }
+			}
+		}
+
+		class StabsLineNumberTable : LineNumberTable
+		{
+			StabsTargetMethod method;
+			List<LineEntry> addresses = new List<LineEntry> ();
+
+			int start_row;
+			int end_row;
+
+			public StabsLineNumberTable (StabsTargetMethod method)
+			{
+				this.method = method;
+			}
+
+			public override bool HasMethodBounds
+			{
+				get { return false; }
+			}
+
+			public override TargetAddress MethodStartAddress
+			{
+				get { throw new InvalidOperationException (); }
+			}
+
+			public override TargetAddress MethodEndAddress
+			{
+				get { throw new InvalidOperationException (); }
+			}
+
+			internal int StartRow
+			{
+				get { return start_row; }
+			}
+
+			internal int EndRow
+			{
+				get { return end_row; }
+			}
+
+			internal void AddLine (int line, long address)
+			{
+				if (start_row == 0)
+					start_row = line;
+				end_row = line;
+				var target_addr = method.StabsReader.GetAddress (address);
+				addresses.Add (new LineEntry (target_addr, 0, line));
+			}
+
+			public override TargetAddress Lookup (int line, int column)
+			{
+				if (column == -1)
+					return Lookup (line);
+
+				if ((addresses == null) || (line < StartRow) || (line > EndRow))
+					return TargetAddress.Null;
+
+				bool found_a_range = false;
+
+				for (int i = 0; i < addresses.Count; i++) {
+					LineEntry entry = addresses[i];
+
+					if (entry.SourceRange == null)
+						continue;
+
+					SourceRange range = entry.SourceRange.Value;
+					found_a_range = true;
+
+					if ((line < range.StartLine) || (line > range.EndLine))
+						continue;
+					if ((line == range.StartLine) && (column < range.StartColumn))
+						continue;
+					if ((line == range.EndLine) && (column > range.EndColumn))
+						continue;
+
+					return entry.Address;
+				}
+
+				//
+				// If the symbol file doesn't contain any source ranges for this
+				// method, default to traditional line-based lookup.
+				//
+
+				if (!found_a_range)
+					return Lookup (line);
+
+				return TargetAddress.Null;
+			}
+
+			public override TargetAddress Lookup (int line)
+			{
+				if ((addresses == null) || (line < StartRow) || (line > EndRow))
+					return TargetAddress.Null;
+
+				for (int i = 0; i < addresses.Count; i++) {
+					LineEntry entry = addresses[i];
+
+					if (line <= entry.Line)
+						return entry.Address;
+				}
+
+				return TargetAddress.Null;
+			}
+
+			public override SourceAddress Lookup (TargetAddress address)
+			{
+				if (address.IsNull || (address < method.StartAddress) || (address >= method.EndAddress))
+					return null;
+
+				if (addresses.Count < 1)
+					return null;
+
+				TargetAddress next_address = method.EndAddress;
+				TargetAddress next_not_hidden = method.EndAddress;
+
+				for (int i = addresses.Count - 1; i >= 0; i--) {
+					LineEntry entry = addresses[i];
+
+					int range = (int) (next_not_hidden - address);
+
+					next_address = entry.Address;
+					if (!entry.IsHidden)
+						next_not_hidden = entry.Address;
+
+					if (next_address > address)
+						continue;
+
+					int offset = (int) (address - next_address);
+					return new SourceAddress (method.SourceFile, null, entry.Line, offset, range);
+				}
+
+				if (addresses.Count < 1)
+					return null;
+
+				return new SourceAddress (method.SourceFile, null, addresses[0].Line,
+					(int) (address - method.StartAddress), (int) (addresses[0].Address - address),
+					addresses[0].SourceRange);
+			}
+
+			public override void DumpLineNumbers (TextWriter writer)
+			{
+				writer.WriteLine ();
+				writer.Write ("Dumping Line Number Table: {0} - {1} {2}",
+					       method.Name, method.StartAddress, method.EndAddress);
+				if (method.HasMethodBounds)
+					writer.Write (" - {0} {1}", method.MethodStartAddress,
+						      method.MethodEndAddress);
+				writer.WriteLine ();
+				writer.WriteLine ();
+
+				writer.WriteLine ("Generated Lines (file / line / address):");
+				writer.WriteLine ("----------------------------------------");
+
+				for (int i = 0; i < addresses.Count; i++) {
+					LineEntry entry = addresses[i];
+					writer.WriteLine ("{0,4} {1,4} {2,4}  {3}", i,
+							  entry.File, entry.Line, entry.Address);
+				}
+
+				writer.WriteLine ("----------------------------------------");
 			}
 		}
 
