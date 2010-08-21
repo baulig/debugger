@@ -20,6 +20,9 @@ namespace Mono.Debugger.Backend
 		public override bool GetTrampoline (TargetMemoryAccess memory, TargetAddress address,
 						    out TargetAddress trampoline, out bool is_start)
 		{
+			trampoline = TargetAddress.Null;
+			is_start = false;
+			return false;
 			throw new NotImplementedException();
 		}
 

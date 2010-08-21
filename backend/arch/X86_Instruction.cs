@@ -507,9 +507,12 @@ namespace Mono.Debugger.Architectures
 			if (InstructionType != Type.Unknown) {
 				insn_size = (int) reader.Offset;
 				has_insn_size = true;
-			} else {
+			} else if (Opcodes.Disassembler != null) {
 				insn_size = Opcodes.Disassembler.GetInstructionSize (memory, address);
 				has_insn_size = true;
+			} else {
+				insn_size = 1;
+				has_insn_size = false;
 			}
 
 			if (has_insn_size) {

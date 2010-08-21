@@ -1527,8 +1527,7 @@ namespace Mono.Debugger.Backend
 			/*
 			 * Don't step into any signal handlers.
 			 */
-
-			if (inferior.IsManagedSignal (inferior.GetPendingSignal ())) {
+			if (inferior.HasSignals && inferior.IsManagedSignal (inferior.GetPendingSignal ())) {
 				do_continue (inferior.CurrentFrame);
 			} else {
 				inferior.Step ();

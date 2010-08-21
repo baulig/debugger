@@ -270,7 +270,7 @@ namespace Mono.Debugger.Backend
 				this.file = file;
 				this.start_addr = start_addr;
 
-				lnt = new StabsLineNumberTable (this);
+				lnt = new StabsLineNumberTable (this, start_addr);
 			}
 
 			internal StabsReader StabsReader
@@ -283,7 +283,7 @@ namespace Mono.Debugger.Backend
 				get { return file; }
 			}
 
-			internal StabsLineNumberTable LineNumberTable
+			new internal StabsLineNumberTable LineNumberTable
 			{
 				get { return lnt; }
 			}
@@ -449,14 +449,17 @@ namespace Mono.Debugger.Backend
 		class StabsLineNumberTable : LineNumberTable
 		{
 			StabsTargetMethod method;
+			long start_addr;
+
 			List<LineEntry> addresses = new List<LineEntry> ();
 
 			int start_row;
 			int end_row;
 
-			public StabsLineNumberTable (StabsTargetMethod method)
+			public StabsLineNumberTable (StabsTargetMethod method, long start_addr)
 			{
 				this.method = method;
+				this.start_addr = start_addr;
 			}
 
 			public override bool HasMethodBounds
@@ -489,8 +492,8 @@ namespace Mono.Debugger.Backend
 				if (start_row == 0)
 					start_row = line;
 				end_row = line;
-				var target_addr = method.StabsReader.GetAddress (address);
-				addresses.Add (new LineEntry (target_addr, 0, line));
+				var target_address = method.StabsReader.GetAddress (start_addr + address);
+				addresses.Add (new LineEntry (target_address, 0, line));
 			}
 
 			public override TargetAddress Lookup (int line, int column)
