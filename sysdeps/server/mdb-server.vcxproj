@@ -19,7 +19,6 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="bfdglue.c" />
     <ClCompile Include="breakpoints.c" />
     <ClCompile Include="debugger-mutex.c" />
     <None Include="i386-arch.c">
@@ -33,7 +32,6 @@
     <ClCompile Include="x86-arch.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="bfdglue.h" />
     <ClInclude Include="breakpoints.h" />
     <ClInclude Include="debugger-mutex.h" />
     <ClInclude Include="i386-arch.h" />

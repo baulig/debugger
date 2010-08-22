@@ -473,8 +473,19 @@ main (int argc, char *argv[])
 
 	mdb_server_main_loop (conn_fd);
 
-	close (conn_fd);
+#if WINDOWS
+	shutdown (fd, SD_BOTH);
+	shutdown (conn_fd, SD_BOTH);
+
+	closesocket (fd);
+	closesocket (conn_fd);
+#else
+	shutdown (fd, SHUT_RDWR);
+	shutdown (conn_fd, SHUT_RDWR);
+
 	close (fd);
+	close (conn_fd);
+#endif
 
 	exit (0);
 }
