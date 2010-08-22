@@ -176,7 +176,6 @@ namespace Mono.Debugger
 		bool is_execed;
 		bool is_forked;
 		bool initialized;
-		DebuggerMutex thread_lock_mutex;
 		bool has_thread_lock;
 
 		private Process (ThreadManager manager, DebuggerSession session)
@@ -185,8 +184,6 @@ namespace Mono.Debugger
 			this.session = session;
 
 			operation_host = new MyOperationHost (this);
-
-			thread_lock_mutex = new DebuggerMutex ("thread_lock_mutex");
 
 			stopped_event = new ST.ManualResetEvent (false);
 
@@ -795,47 +792,56 @@ namespace Mono.Debugger
 		// </summary>
 		internal void AcquireGlobalThreadLock (SingleSteppingEngine caller)
 		{
-			if (has_thread_lock)
-				throw new InternalError ("Recursive thread lock");
+			lock (this) {
+				if (has_thread_lock)
+					throw new InternalError ("Recursive thread lock");
 
-			thread_lock_mutex.Lock ();
-			Report.Debug (DebugFlags.Threads,
-				      "Acquiring global thread lock: {0}", caller);
-			has_thread_lock = true;
-			foreach (ThreadServant thread in thread_hash.Values) {
-				if (thread == caller)
-					continue;
-				thread.AcquireThreadLock ();
+				Report.Debug (DebugFlags.Threads,
+					      "Acquiring global thread lock: {0}", caller);
+
+				foreach (ThreadServant thread in thread_hash.Values) {
+					if (thread == caller)
+						continue;
+					thread.AcquireThreadLock ();
+				}
+
+				has_thread_lock = true;
+
+				Report.Debug (DebugFlags.Threads,
+					      "Done acquiring global thread lock: {0}",
+					      caller);
 			}
-			Report.Debug (DebugFlags.Threads,
-				      "Done acquiring global thread lock: {0}",
-				      caller);
 		}
 
 		internal void ReleaseGlobalThreadLock (SingleSteppingEngine caller)
 		{
-			Report.Debug (DebugFlags.Threads,
-				      "Releasing global thread lock: {0}", caller);
+			lock (this) {
+				if (!has_thread_lock)
+					throw new InternalError ("Not thread-locked");
 
-			foreach (ThreadServant thread in thread_hash.Values) {
-				if (thread == caller)
-					continue;
-				thread.ReleaseThreadLock ();
+				Report.Debug (DebugFlags.Threads,
+					      "Releasing global thread lock: {0}", caller);
+
+				foreach (ThreadServant thread in thread_hash.Values) {
+					if (thread == caller)
+						continue;
+					thread.ReleaseThreadLock ();
+				}
+
+				has_thread_lock = false;
+
+				Report.Debug (DebugFlags.Threads,
+					      "Released global thread lock: {0}", caller);
 			}
-			has_thread_lock = false;
-			thread_lock_mutex.Unlock ();
-			Report.Debug (DebugFlags.Threads,
-				      "Released global thread lock: {0}", caller);
 		}
 
 		internal void DropGlobalThreadLock ()
 		{
-			if (thread_hash.Count != 0)
-				throw new InternalError ();
+			lock (this) {
+				if (thread_hash.Count != 0)
+					throw new InternalError ();
 
-			if (has_thread_lock) {
 				has_thread_lock = false;
-				thread_lock_mutex.Unlock ();
 			}
 		}
 
@@ -1127,11 +1133,6 @@ namespace Mono.Debugger
 				thread_db = null;
 			}
 #endif
-
-			if (thread_lock_mutex != null) {
-				thread_lock_mutex.Dispose ();
-				thread_lock_mutex = null;
-			}
 
 			exception_handlers = null;
 
