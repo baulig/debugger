@@ -1570,7 +1570,7 @@ namespace Mono.Debugger.Backend
 
 		protected bool MethodHasSource (Method method)
 		{
-			if ((method == null) || !method.HasLineNumbers || !method.HasMethodBounds)
+			if ((method == null) || !method.HasLineNumbers || !method.HasSource)
 				return false;
 
 			if (method.WrapperType == WrapperType.ManagedToNative) {
@@ -1588,19 +1588,8 @@ namespace Mono.Debugger.Backend
 					return false;
 			}
 
-			if (!method.HasSource || method.IsWrapper || method.IsCompilerGenerated)
+			if (method.IsWrapper || method.IsCompilerGenerated)
 				return false;
-
-			LineNumberTable lnt = method.LineNumberTable;
-			if (lnt == null)
-				return false;
-
-			SourceAddress addr = lnt.Lookup (method.MethodStartAddress);
-			if (addr == null) {
-				Report.Error ("OOOOPS - No source for method: {0}", method);
-				lnt.DumpLineNumbers (Console.Out);
-				return false;
-			}
 
 			return true;
 		}
