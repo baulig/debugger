@@ -25,9 +25,7 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#ifdef MDB_SERVER
 #include "mdb-server.h"
-#endif
 
 /*
  * NOTE:  The manpage is wrong about the POKE_* commands - the last argument
@@ -358,6 +356,8 @@ mdb_server_attach (ServerHandle *handle, guint32 pid)
 	return _server_ptrace_setup_inferior (handle);
 }
 
+#ifndef MDB_SERVER
+
 static void
 process_output (int fd, gboolean is_stderr, ChildOutputFunc func)
 {
@@ -371,8 +371,6 @@ process_output (int fd, gboolean is_stderr, ChildOutputFunc func)
 	buffer [count] = 0;
 	func (is_stderr, buffer);
 }
-
-#ifndef MDB_SERVER
 
 static void
 _server_ptrace_io_thread_main (IOThreadData *io_data, ChildOutputFunc func)
@@ -487,9 +485,7 @@ disasm_fprintf_func (gpointer stream, const char *message, ...)
 static void
 disasm_print_address_func (bfd_vma addr, struct disassemble_info *info)
 {
-	ServerHandle *server = info->application_data;
 	char buf[30];
-
 	sprintf_vma (buf, addr);
 	(*info->fprintf_func) (info->stream, "0x%s", buf);
 }

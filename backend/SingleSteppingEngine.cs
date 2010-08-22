@@ -2960,11 +2960,11 @@ namespace Mono.Debugger.Backend
 		protected override void DoExecute ()
 		{
 			Report.Debug (DebugFlags.SSE,
-				      "{0} start execute: {1} {2} {3}", sse, sse.Process.IsAttached,
-				      inferior.CurrentFrame, inferior.EntryPoint);
+				      "{0} start execute: {1} {2} {3} {4}", sse, sse.Process.IsAttached,
+				      inferior.CurrentFrame, inferior.EntryPoint, sse.manager.HasThreadEvents);
 
 			if (!sse.Process.IsAttached && sse.manager.HasThreadEvents)
-				sse.do_continue ();
+				sse.do_continue (inferior.EntryPoint);
 			else
 				sse.ProcessEvent (new DebuggerServer.ChildEvent (DebuggerServer.ChildEventType.CHILD_STOPPED, 0, 0, 0));
 		}

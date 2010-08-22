@@ -606,8 +606,6 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		cwd = decode_string (p, &p, end);
 		argc = decode_int (p, &p, end);
 
-		g_message (G_STRLOC ": spawn: %s - %d", cwd, argc);
-
 		argv = g_new0 (char *, argc + 1);
 		for (i = 0; i < argc; i++)
 			argv [i] = decode_string (p, &p, end);

@@ -81,6 +81,8 @@ handle_inferior_event (ServerHandle *server, int status)
 			stopsig = 0;
 
 		if (stopsig == SIGSTOP) {
+			e = g_new0 (ServerEvent, 1);
+			e->sender_iid = server->iid;
 			e->type = SERVER_EVENT_CHILD_INTERRUPTED;
 			return e;
 		}
