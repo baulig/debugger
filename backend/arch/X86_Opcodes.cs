@@ -9,15 +9,12 @@ namespace Mono.Debugger.Architectures
 	{
 		Process process;
 		TargetMemoryInfo target_info;
-		Disassembler disassembler;
 
 		protected X86_Opcodes (Process process)
 		{
 			this.process = process;
 
 			target_info = process.ThreadManager.GetTargetMemoryInfo (AddressDomain.Global);
-			if (!Inferior.IsRunningOnWindows)
-				disassembler = new BfdDisassembler (null, Is64BitMode);
 		}
 
 		public abstract bool Is64BitMode {
@@ -29,19 +26,11 @@ namespace Mono.Debugger.Architectures
 		}
 
 		internal Disassembler Disassembler {
-			get { return disassembler; }
+			get { return process.Architecture.Disassembler; }
 		}
 
 		internal Process Process {
 			get { return process; }
-		}
-
-		protected override void DoDispose ()
-		{
-			if (disassembler != null) {
-				disassembler.Dispose ();
-				disassembler = null;
-			}
 		}
 
 		internal override Instruction ReadInstruction (TargetMemoryAccess memory,
