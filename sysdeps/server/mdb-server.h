@@ -46,44 +46,12 @@ mdb_server_main_loop_iteration (void);
 extern void
 mdb_server_process_child_event (ServerEvent *e);
 
-typedef struct _MdbExeReader MdbExeReader;
-
-extern MdbExeReader *
-mdb_server_create_exe_reader (const char *filename);
-
-extern guint64
-mdb_exe_reader_get_start_address (MdbExeReader *reader);
-
-extern guint64
-mdb_exe_reader_lookup_symbol (MdbExeReader *reader, const char *name);
-
-extern gchar *
-mdb_exe_reader_get_target_name (MdbExeReader *reader);
-
-extern gboolean
-mdb_exe_reader_has_section (MdbExeReader *reader, const char *name);
-
-extern guint64
-mdb_exe_reader_get_section_address (MdbExeReader *reader, const char *name);
-
-extern gpointer
-mdb_exe_reader_get_section_contents (MdbExeReader *reader, const char *name, guint32 *out_size);
 
 extern gboolean
 mdb_server_inferior_command (InferiorDelegate *delegate);
 
 extern gchar *
 mdb_server_disassemble_insn (ServerHandle *inferior, guint64 address, guint32 *out_insn_size);
-
-extern const gchar *
-mdb_exe_reader_lookup_symbol_by_addr (MdbExeReader *reader, guint64 address);
-
-#if defined(__linux__) || defined(__FreeBSD__)
-
-extern guint64
-mdb_exe_reader_get_dynamic_info (ServerHandle *server, MdbExeReader *reader);
-
-#endif
 
 G_END_DECLS
 

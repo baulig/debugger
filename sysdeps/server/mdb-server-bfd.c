@@ -1,6 +1,8 @@
 #include <mdb-server.h>
+#include <mdb-server-bfd.h>
 #include <string.h>
 #include <bfd.h>
+#include <dis-asm.h>
 #if (defined(__linux__) || defined(__FreeBSD__)) && (defined(__i386__) || defined(__x86_64__))
 #include <link.h>
 #include <elf.h>
@@ -254,3 +256,108 @@ mdb_exe_reader_get_dynamic_info (ServerHandle *server, MdbExeReader *reader)
 }
 
 #endif
+
+#define DISASM_BUFSIZE 1024
+
+struct _MdbDisassembler
+{
+	ServerHandle *server;
+	MdbExeReader *main_bfd;
+	struct disassemble_info info;
+	char disasm_buffer [DISASM_BUFSIZE];
+};
+
+static int
+disasm_read_memory_func (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length, struct disassemble_info *info)
+{
+	MdbDisassembler *disasm = info->application_data;
+
+	return mdb_server_read_memory (disasm->server, memaddr, length, myaddr);
+}
+
+static int
+disasm_fprintf_func (gpointer stream, const char *message, ...)
+{
+	MdbDisassembler *disasm = stream;
+	va_list args;
+	char *start;
+	int len, max, retval;
+
+	len = strlen (disasm->disasm_buffer);
+	start = disasm->disasm_buffer + len;
+	max = DISASM_BUFSIZE - len;
+
+	va_start (args, message);
+	retval = vsnprintf (start, max, message, args);
+	va_end (args);
+
+	return retval;
+}
+
+static void
+disasm_print_address_func (bfd_vma addr, struct disassemble_info *info)
+{
+	MdbDisassembler *disasm = info->application_data;
+	const gchar *sym;
+	char buf[30];
+
+	sprintf_vma (buf, addr);
+
+	if (disasm->main_bfd) {
+		sym = mdb_exe_reader_lookup_symbol_by_addr (disasm->main_bfd, addr);
+		if (sym) {
+			(*info->fprintf_func) (info->stream, "%s(0x%s)", sym, buf);
+			return;
+		}
+	}
+
+	(*info->fprintf_func) (info->stream, "0x%s", buf);
+}
+
+MdbDisassembler *
+mdb_exe_reader_get_disassembler (ServerHandle *server, MdbExeReader *main_bfd)
+{
+	MdbDisassembler *disasm;
+
+	disasm = g_new0 (MdbDisassembler, 1);
+
+	disasm->server = server;
+	disasm->main_bfd = main_bfd;
+
+	INIT_DISASSEMBLE_INFO (disasm->info, stderr, fprintf);
+	disasm->info.flavour = bfd_target_coff_flavour;
+	disasm->info.arch = bfd_get_arch (main_bfd->bfd);
+	disasm->info.mach = bfd_get_mach (main_bfd->bfd);
+	disasm->info.octets_per_byte = bfd_octets_per_byte (main_bfd->bfd);
+	disasm->info.display_endian = disasm->info.endian = main_bfd->bfd->xvec->byteorder;
+
+	disasm->info.read_memory_func = disasm_read_memory_func;
+	disasm->info.print_address_func = disasm_print_address_func;
+	disasm->info.fprintf_func = disasm_fprintf_func;
+	disasm->info.application_data = disasm;
+	disasm->info.stream = disasm;
+
+	return disasm;
+}
+
+gchar *
+mdb_exe_reader_disassemble_insn (MdbDisassembler *disasm, guint64 address, guint32 *out_insn_size)
+{
+	int ret;
+
+	memset (disasm->disasm_buffer, 0, DISASM_BUFSIZE);
+
+#if defined(__x86_64__) || defined(__i386__)
+	ret = print_insn_i386 ((gsize) address, &disasm->info);
+#elif defined(__ARM__)
+	if (bfd_little_endian (disasm->main_bfd))
+		ret = print_insn_littlearm ((gsize) address, &disasm->info);
+	else
+		ret = print_insn_bigarm ((gsize) address, &disasm
+#endif
+
+	if (out_insn_size)
+		*out_insn_size = ret;
+
+	return g_strdup (disasm->disasm_buffer);
+}

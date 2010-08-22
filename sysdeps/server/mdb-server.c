@@ -1,5 +1,6 @@
 #include <config.h>
 #include <mdb-server.h>
+#include <mdb-server-bfd.h>
 #include <debugger-mutex.h>
 #include <errno.h>
 #include <stdlib.h>

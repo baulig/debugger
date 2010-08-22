@@ -1,4 +1,5 @@
 #include <mdb-server.h>
+#include <mdb-server-bfd.h>
 #include "x86-arch.h"
 #include <string.h>
 #include <assert.h>
@@ -8,8 +9,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <glib.h>
-#include <bfd.h>
-#include <dis-asm.h>
 
 #include "i386-arch.h"
 
@@ -20,9 +19,8 @@ typedef struct
 	guint32 argc;
 	gchar **argv;
 	gchar *exe_path;
-	struct disassemble_info *disassembler;
-	char disasm_buffer [1024];
 	MdbExeReader *main_bfd;
+	MdbDisassembler *disassembler;
 } ProcessHandle;
 
 struct InferiorHandle
@@ -778,96 +776,15 @@ mdb_inferior_make_memory_executable (InferiorHandle *inferior, guint64 start, gu
 	return COMMAND_ERROR_NONE;
 }
 
-static int
-disasm_read_memory_func (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length, struct disassemble_info *info)
-{
-	ServerHandle *server = info->application_data;
-
-	return mdb_server_read_memory (server, memaddr, length, myaddr);
-}
-
-static int
-disasm_fprintf_func (gpointer stream, const char *message, ...)
-{
-	ProcessHandle *process = stream;
-	va_list args;
-	char *start;
-	int len, max, retval;
-
-	len = strlen (process->disasm_buffer);
-	start = process->disasm_buffer + len;
-	max = 1024 - len;
-
-	va_start (args, message);
-	retval = vsnprintf (start, max, message, args);
-	va_end (args);
-
-	return retval;
-}
-
-static void
-disasm_print_address_func (bfd_vma addr, struct disassemble_info *info)
-{
-	ServerHandle *server = info->application_data;
-	ProcessHandle *process = server->inferior->process;
-	const gchar *sym;
-	char buf[30];
-
-	sprintf_vma (buf, addr);
-
-	if (process->main_bfd) {
-		sym = mdb_exe_reader_lookup_symbol_by_addr (process->main_bfd, addr);
-		if (sym) {
-			(*info->fprintf_func) (info->stream, "%s(0x%s)", sym, buf);
-			return;
-		}
-	}
-
-	(*info->fprintf_func) (info->stream, "0x%s", buf);
-}
-
-static void
-init_disassembler (ServerHandle *server)
-{
-	ProcessHandle *process = server->inferior->process;
-	struct disassemble_info *info;
-
-	if (process->disassembler)
-		return;
-
-	info = g_new0 (struct disassemble_info, 1);
-	INIT_DISASSEMBLE_INFO (*info, stderr, fprintf);
-	info->flavour = bfd_target_coff_flavour;
-	info->arch = bfd_arch_i386;
-	info->mach = bfd_mach_i386_i386;
-	info->octets_per_byte = 1;
-	info->display_endian = info->endian = BFD_ENDIAN_LITTLE;
-
-	info->read_memory_func = disasm_read_memory_func;
-	info->print_address_func = disasm_print_address_func;
-	info->fprintf_func = disasm_fprintf_func;
-	info->application_data = server;
-	info->stream = process;
-
-	process->disassembler = info;
-}
-
 gchar *
 mdb_server_disassemble_insn (ServerHandle *server, guint64 address, guint32 *out_insn_size)
 {
 	ProcessHandle *process = server->inferior->process;
-	int ret;
 
-	init_disassembler (server);
+	if (!process->disassembler)
+		process->disassembler = mdb_exe_reader_get_disassembler (server, process->main_bfd);
 
-	memset (process->disasm_buffer, 0, 1024);
-
-	ret = print_insn_i386 ((gsize) address, process->disassembler);
-
-	if (out_insn_size)
-		*out_insn_size = ret;
-
-	return g_strdup (process->disasm_buffer);
+	return mdb_exe_reader_disassemble_insn (process->disassembler, address, out_insn_size);
 }
 
 InferiorVTable i386_windows_inferior = {

@@ -36,6 +36,7 @@
     <ClInclude Include="debugger-mutex.h" />
     <ClInclude Include="i386-arch.h" />
     <ClInclude Include="library.h" />
+    <ClInclude Include="mdb-server-bfd.h" />
     <ClInclude Include="mdb-server.h" />
     <ClInclude Include="server.h" />
     <ClInclude Include="x86-arch.h" />
