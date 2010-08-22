@@ -19,42 +19,42 @@ mdb_server_get_capabilities (void)
 }
 
 static ServerCommandError
-_server_ptrace_check_errno (InferiorHandle *inferior)
+_server_ptrace_check_errno (ServerHandle *server)
 {
 	gchar *filename;
 
 	if (!errno)
 		return COMMAND_ERROR_NONE;
 	else if (errno != ESRCH) {
-		g_message (G_STRLOC ": %d - %s", inferior->pid, g_strerror (errno));
+		g_message (G_STRLOC ": %d - %s", server->inferior->pid, g_strerror (errno));
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 	}
 
-	filename = g_strdup_printf ("/proc/%d/stat", inferior->pid);
+	filename = g_strdup_printf ("/proc/%d/stat", server->inferior->pid);
 	if (g_file_test (filename, G_FILE_TEST_EXISTS)) {
 		g_free (filename);
 		return COMMAND_ERROR_NOT_STOPPED;
 	}
 
-	g_warning (G_STRLOC ": %d - %s - %d (%s)", inferior->pid, filename,
+	g_warning (G_STRLOC ": %d - %s - %d (%s)", server->inferior->pid, filename,
 		   errno, g_strerror (errno));
 	g_free (filename);
 	return COMMAND_ERROR_NO_TARGET;
 }
 
 ServerCommandError
-mdb_inferior_make_memory_executable (InferiorHandle *inferior, guint64 start, guint32 size)
+mdb_inferior_make_memory_executable (ServerHandle *server, guint64 start, guint32 size)
 {
 	return COMMAND_ERROR_NONE;
 }
 
 static ServerCommandError
-_ptrace_set_dr (InferiorHandle *handle, int regnum, guint64 value)
+_ptrace_set_dr (ServerHandle *server, int regnum, guint64 value)
 {
 	errno = 0;
-	ptrace (PTRACE_POKEUSER, handle->pid, offsetof (struct user, u_debugreg [regnum]), value);
+	ptrace (PTRACE_POKEUSER, server->inferior->pid, offsetof (struct user, u_debugreg [regnum]), value);
 	if (errno) {
-		g_message (G_STRLOC ": %d - %d - %s", handle->pid, regnum, g_strerror (errno));
+		g_message (G_STRLOC ": %d - %d - %s", server->inferior->pid, regnum, g_strerror (errno));
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 	}
 
@@ -63,14 +63,14 @@ _ptrace_set_dr (InferiorHandle *handle, int regnum, guint64 value)
 
 
 static ServerCommandError
-_ptrace_get_dr (InferiorHandle *handle, int regnum, guint64 *value)
+_ptrace_get_dr (ServerHandle *server, int regnum, guint64 *value)
 {
 	int ret;
 
 	errno = 0;
-	ret = ptrace (PTRACE_PEEKUSER, handle->pid, offsetof (struct user, u_debugreg [regnum]));
+	ret = ptrace (PTRACE_PEEKUSER, server->inferior->pid, offsetof (struct user, u_debugreg [regnum]));
 	if (errno) {
-		g_message (G_STRLOC ": %d - %d - %s", handle->pid, regnum, g_strerror (errno));
+		g_message (G_STRLOC ": %d - %d - %s", server->inferior->pid, regnum, g_strerror (errno));
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 	}
 
@@ -79,27 +79,27 @@ _ptrace_get_dr (InferiorHandle *handle, int regnum, guint64 *value)
 }
 
 extern ServerCommandError
-mdb_inferior_get_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
+mdb_inferior_get_registers (ServerHandle *server, INFERIOR_REGS_TYPE *regs)
 {
 	ServerCommandError result;
 	int i;
 
-	if (ptrace (PT_GETREGS, inferior->pid, NULL, &regs->regs) != 0)
-		return _server_ptrace_check_errno (inferior);
+	if (ptrace (PT_GETREGS, server->inferior->pid, NULL, &regs->regs) != 0)
+		return _server_ptrace_check_errno (server);
 
-	if (ptrace (PT_GETFPREGS, inferior->pid, NULL, &regs->fpregs) != 0)
-		return _server_ptrace_check_errno (inferior);
+	if (ptrace (PT_GETFPREGS, server->inferior->pid, NULL, &regs->fpregs) != 0)
+		return _server_ptrace_check_errno (server);
 
-	result = _ptrace_get_dr (inferior, DR_CONTROL, &regs->dr_control);
+	result = _ptrace_get_dr (server, DR_CONTROL, &regs->dr_control);
 	if (result)
 		return result;
 
-	result = _ptrace_get_dr (inferior, DR_STATUS, &regs->dr_status);
+	result = _ptrace_get_dr (server, DR_STATUS, &regs->dr_status);
 	if (result)
 		return result;
 
 	for (i = 0; i < DR_NADDR; i++) {
-		result = _ptrace_get_dr (inferior, i, &regs->dr_regs[i]);
+		result = _ptrace_get_dr (server, i, &regs->dr_regs[i]);
 		if (result)
 			return result;
 	}
@@ -108,27 +108,27 @@ mdb_inferior_get_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
 }
 
 ServerCommandError
-mdb_inferior_set_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
+mdb_inferior_set_registers (ServerHandle *server, INFERIOR_REGS_TYPE *regs)
 {
 	ServerCommandError result;
 	int i;
 
-	if (ptrace (PT_SETREGS, inferior->pid, NULL, &regs->regs) != 0)
-		return _server_ptrace_check_errno (inferior);
+	if (ptrace (PT_SETREGS, server->inferior->pid, NULL, &regs->regs) != 0)
+		return _server_ptrace_check_errno (server);
 
-	if (ptrace (PT_SETFPREGS, inferior->pid, NULL, &regs->fpregs) != 0)
-		return _server_ptrace_check_errno (inferior);
+	if (ptrace (PT_SETFPREGS, server->inferior->pid, NULL, &regs->fpregs) != 0)
+		return _server_ptrace_check_errno (server);
 
-	result = _ptrace_set_dr (inferior, DR_CONTROL, regs->dr_control);
+	result = _ptrace_set_dr (server, DR_CONTROL, regs->dr_control);
 	if (result)
 		return result;
 
-	result = _ptrace_set_dr (inferior, DR_STATUS, regs->dr_status);
+	result = _ptrace_set_dr (server, DR_STATUS, regs->dr_status);
 	if (result)
 		return result;
 
 	for (i = 0; i < DR_NADDR; i++) {
-		result = _ptrace_set_dr (inferior, i, regs->dr_regs[i]);
+		result = _ptrace_set_dr (server, i, regs->dr_regs[i]);
 		if (result)
 			return result;
 	}
@@ -137,12 +137,12 @@ mdb_inferior_set_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
 }
 
 ServerCommandError
-mdb_inferior_read_memory (InferiorHandle *inferior, guint64 start, guint32 size, gpointer buffer)
+mdb_inferior_read_memory (ServerHandle *server, guint64 start, guint32 size, gpointer buffer)
 {
 	guint8 *ptr = buffer;
 
 	while (size) {
-		int ret = pread64 (inferior->os.mem_fd, ptr, size, start);
+		int ret = pread64 (server->inferior->os.mem_fd, ptr, size, start);
 		if (ret < 0) {
 			if (errno == EINTR)
 				continue;
@@ -161,7 +161,7 @@ mdb_inferior_read_memory (InferiorHandle *inferior, guint64 start, guint32 size,
 }
 
 ServerCommandError
-mdb_inferior_write_memory (InferiorHandle *inferior, guint64 start,
+mdb_inferior_write_memory (ServerHandle *server, guint64 start,
 			   guint32 size, gconstpointer buffer)
 {
 	ServerCommandError result;
@@ -173,8 +173,8 @@ mdb_inferior_write_memory (InferiorHandle *inferior, guint64 start,
 		long word = *ptr++;
 
 		errno = 0;
-		if (ptrace (PT_WRITE_D, inferior->pid, GUINT_TO_POINTER (addr), word) != 0)
-			return _server_ptrace_check_errno (inferior);
+		if (ptrace (PT_WRITE_D, server->inferior->pid, GUINT_TO_POINTER (addr), word) != 0)
+			return _server_ptrace_check_errno (server);
 
 		addr += sizeof (long);
 		size -= sizeof (long);
@@ -183,56 +183,52 @@ mdb_inferior_write_memory (InferiorHandle *inferior, guint64 start,
 	if (!size)
 		return COMMAND_ERROR_NONE;
 
-	result = mdb_inferior_read_memory (inferior, addr, sizeof (long), &temp);
+	result = mdb_inferior_read_memory (server, addr, sizeof (long), &temp);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
 	memcpy (&temp, ptr, size);
 
-	return mdb_inferior_write_memory (inferior, addr, sizeof (long), &temp);
+	return mdb_inferior_write_memory (server, addr, sizeof (long), &temp);
 }
 
 ServerCommandError
-mdb_inferior_poke_word (InferiorHandle *inferior, guint64 addr, gsize value)
+mdb_inferior_poke_word (ServerHandle *server, guint64 addr, gsize value)
 {
 	errno = 0;
-	if (ptrace (PT_WRITE_D, inferior->pid, GUINT_TO_POINTER (addr), value) != 0)
-		return _server_ptrace_check_errno (inferior);
+	if (ptrace (PT_WRITE_D, server->inferior->pid, GUINT_TO_POINTER (addr), value) != 0)
+		return _server_ptrace_check_errno (server);
 
 	return COMMAND_ERROR_NONE;
 }
 
 ServerCommandError
-mdb_server_continue (ServerHandle *handle)
+mdb_server_continue (ServerHandle *server)
 {
-	InferiorHandle *inferior = handle->inferior;
-
 	errno = 0;
-	inferior->stepping = FALSE;
-	if (ptrace (PT_CONTINUE, inferior->pid, (caddr_t) 1, inferior->last_signal)) {
-		return _server_ptrace_check_errno (inferior);
+	server->inferior->stepping = FALSE;
+	if (ptrace (PT_CONTINUE, server->inferior->pid, (caddr_t) 1, server->inferior->last_signal)) {
+		return _server_ptrace_check_errno (server);
 	}
 
 	return COMMAND_ERROR_NONE;
 }
 
 ServerCommandError
-mdb_server_step (ServerHandle *handle)
+mdb_server_step (ServerHandle *server)
 {
-	InferiorHandle *inferior = handle->inferior;
-
 	errno = 0;
-	inferior->stepping = TRUE;
-	if (ptrace (PT_STEP, inferior->pid, (caddr_t) 1, inferior->last_signal))
-		return _server_ptrace_check_errno (inferior);
+	server->inferior->stepping = TRUE;
+	if (ptrace (PT_STEP, server->inferior->pid, (caddr_t) 1, server->inferior->last_signal))
+		return _server_ptrace_check_errno (server);
 
 	return COMMAND_ERROR_NONE;
 }
 
 static ServerCommandError
-mdb_server_kill (ServerHandle *handle)
+mdb_server_kill (ServerHandle *server)
 {
-	if (ptrace (PTRACE_KILL, handle->inferior->pid, NULL, 0))
+	if (ptrace (PTRACE_KILL, server->inferior->pid, NULL, 0))
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 
 	return COMMAND_ERROR_NONE;

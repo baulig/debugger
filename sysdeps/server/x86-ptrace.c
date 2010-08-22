@@ -25,8 +25,6 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#include "mdb-server.h"
-
 /*
  * NOTE:  The manpage is wrong about the POKE_* commands - the last argument
  *        is the data (a word) to be written, not a pointer to it.
@@ -141,15 +139,15 @@ mdb_server_detach (ServerHandle *handle)
 }
 
 ServerCommandError
-mdb_inferior_peek_word (InferiorHandle *inferior, guint64 start, guint64 *retval)
+mdb_inferior_peek_word (ServerHandle *server, guint64 start, guint64 *retval)
 {
-	return mdb_inferior_read_memory (inferior, start, sizeof (gsize), retval);
+	return mdb_inferior_read_memory (server, start, sizeof (gsize), retval);
 }
 
 ServerCommandError
 mdb_server_peek_word (ServerHandle *server, guint64 start, guint64 *retval)
 {
-	return mdb_inferior_read_memory (server->inferior, start, sizeof (gsize), retval);
+	return mdb_inferior_read_memory (server, start, sizeof (gsize), retval);
 }
 
 ServerCommandError
@@ -157,7 +155,7 @@ mdb_server_read_memory (ServerHandle *server, guint64 start, guint32 size, gpoin
 {
 	ServerCommandError result;
 
-	result = mdb_inferior_read_memory (server->inferior, start, size, buffer);
+	result = mdb_inferior_read_memory (server, start, size, buffer);
 	if (result)
 		return result;
 
@@ -168,7 +166,7 @@ mdb_server_read_memory (ServerHandle *server, guint64 start, guint32 size, gpoin
 ServerCommandError
 mdb_server_write_memory (ServerHandle *handle, guint64 start, guint32 size, gconstpointer buffer)
 {
-	return mdb_inferior_write_memory (handle->inferior, start, size, buffer);
+	return mdb_inferior_write_memory (handle, start, size, buffer);
 }
 
 static ServerHandle *
@@ -444,93 +442,28 @@ mdb_server_get_current_thread (void)
 }
 
 void
-_mdb_inferior_set_last_signal (InferiorHandle *inferior, int last_signal)
+_mdb_inferior_set_last_signal (ServerHandle *server, int last_signal)
 {
-	inferior->last_signal = last_signal;
+	server->inferior->last_signal = last_signal;
 }
 
 int
-_mdb_inferior_get_last_signal (InferiorHandle *inferior)
+_mdb_inferior_get_last_signal (ServerHandle *server)
 {
-	return inferior->last_signal;
-}
-
-static int
-disasm_read_memory_func (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length, struct disassemble_info *info)
-{
-	ServerHandle *server = info->application_data;
-
-	return mdb_server_read_memory (server, memaddr, length, myaddr);
-}
-
-static int
-disasm_fprintf_func (gpointer stream, const char *message, ...)
-{
-	ServerHandle *server = stream;
-	va_list args;
-	char *start;
-	int len, max, retval;
-
-	len = strlen (server->inferior->disasm_buffer);
-	start = server->inferior->disasm_buffer + len;
-	max = 1024 - len;
-
-	va_start (args, message);
-	retval = vsnprintf (start, max, message, args);
-	va_end (args);
-
-	return retval;
-}
-
-static void
-disasm_print_address_func (bfd_vma addr, struct disassemble_info *info)
-{
-	char buf[30];
-	sprintf_vma (buf, addr);
-	(*info->fprintf_func) (info->stream, "0x%s", buf);
-}
-
-static void
-init_disassembler (ServerHandle *server)
-{
-	struct disassemble_info *info;
-
-	if (server->inferior->disassembler)
-		return;
-
-	info = g_new0 (struct disassemble_info, 1);
-	INIT_DISASSEMBLE_INFO (*info, stderr, fprintf);
-	info->flavour = bfd_target_elf_flavour;
-	info->arch = bfd_arch_i386;
-	info->mach = bfd_mach_i386_i386;
-	info->octets_per_byte = 1;
-	info->display_endian = info->endian = BFD_ENDIAN_LITTLE;
-
-	info->application_data = server;
-	info->read_memory_func = disasm_read_memory_func;
-	info->print_address_func = disasm_print_address_func;
-	info->fprintf_func = disasm_fprintf_func;
-	info->stream = server;
-
-	server->inferior->disassembler = info;
+	return server->inferior->last_signal;
 }
 
 gchar *
 mdb_server_disassemble_insn (ServerHandle *server, guint64 address, guint32 *out_insn_size)
 {
-	int ret;
+	InferiorHandle *inferior = server->inferior;
 
-	init_disassembler (server);
+	if (!inferior->disassembler)
+		inferior->disassembler = mdb_exe_reader_get_disassembler (server, inferior->main_bfd);
 
-	memset (server->inferior->disasm_buffer, 0, 1024);
-
-	ret = print_insn_i386 (address, server->inferior->disassembler);
-
-	if (out_insn_size)
-		*out_insn_size = ret;
-
-	return g_strdup (server->inferior->disasm_buffer);
+	return mdb_exe_reader_disassemble_insn (inferior->disassembler, address, out_insn_size);
 }
+
 
 #ifdef __linux__
 #include "x86-linux-ptrace.c"

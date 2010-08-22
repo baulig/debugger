@@ -197,7 +197,7 @@ mdb_arch_lookup_breakpoint (ServerHandle *server, guint32 idx, BreakpointManager
 ServerCommandError
 mdb_arch_get_registers (ServerHandle *server)
 {
-	return mdb_inferior_get_registers (server->inferior, &server->arch->current_regs);
+	return mdb_inferior_get_registers (server, &server->arch->current_regs);
 }
 
 ServerCommandError
@@ -237,14 +237,14 @@ mdb_server_push_registers (ServerHandle *server, guint64 *new_esp)
 	INFERIOR_REG_RSP (arch->current_regs) -= sizeof (arch->current_regs);
 #endif
 
-	result = mdb_inferior_set_registers (server->inferior, &arch->current_regs);
+	result = mdb_inferior_set_registers (server, &arch->current_regs);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
 	*new_esp = INFERIOR_REG_RSP (arch->current_regs);
 
 	return mdb_inferior_write_memory (
-		server->inferior, *new_esp, sizeof (arch->current_regs), &arch->current_regs);
+		server, *new_esp, sizeof (arch->current_regs), &arch->current_regs);
 }
 
 ServerCommandError
@@ -259,7 +259,7 @@ mdb_server_pop_registers (ServerHandle *server)
 	INFERIOR_REG_RSP (arch->current_regs) = arch->pushed_regs_rsp;
 	arch->pushed_regs_rsp = 0;
 
-	result = mdb_inferior_set_registers (server->inferior, &arch->current_regs);
+	result = mdb_inferior_set_registers (server, &arch->current_regs);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -302,15 +302,15 @@ runtime_info_enable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint
 	table_address = runtime->breakpoint_info_area + 8 * slot;
 	index_address = runtime->breakpoint_table + 4 * slot;
 
-	result = mdb_inferior_poke_word (server->inferior, table_address, (gsize) breakpoint->address);
+	result = mdb_inferior_poke_word (server, table_address, (gsize) breakpoint->address);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
-	result = mdb_inferior_poke_word (server->inferior, table_address + 4, (gsize) breakpoint->saved_insn);
+	result = mdb_inferior_poke_word (server, table_address + 4, (gsize) breakpoint->saved_insn);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
-	result = mdb_inferior_poke_word (server->inferior, index_address, (gsize) slot);
+	result = mdb_inferior_poke_word (server, index_address, (gsize) slot);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -331,7 +331,7 @@ runtime_info_disable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoin
 	slot = breakpoint->runtime_table_slot;
 	index_address = runtime->breakpoint_table + runtime->address_size * slot;
 
-	result = mdb_inferior_poke_word (server->inferior, index_address, 0);
+	result = mdb_inferior_poke_word (server, index_address, 0);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -345,7 +345,6 @@ mdb_arch_enable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
 {
 	ServerCommandError result;
 	ArchInfo *arch = server->arch;
-	InferiorHandle *inferior = server->inferior;
 	char bopcode = 0xcc;
 	gsize address;
 
@@ -373,7 +372,7 @@ mdb_arch_enable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
 		X86_DR_LOCAL_ENABLE (arch->current_regs, breakpoint->dr_index);
 		INFERIOR_REG_DR_N (arch->current_regs, breakpoint->dr_index) = address;
 
-		result = mdb_inferior_set_registers (inferior, &arch->current_regs);
+		result = mdb_inferior_set_registers (server, &arch->current_regs);
 		if (result != COMMAND_ERROR_NONE) {
 			g_warning (G_STRLOC);
 			return result;
@@ -381,7 +380,7 @@ mdb_arch_enable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
 
 		arch->dr_index [breakpoint->dr_index] = breakpoint->id;
 	} else {
-		result = mdb_inferior_read_memory (inferior, address, 1, &breakpoint->saved_insn);
+		result = mdb_inferior_read_memory (server, address, 1, &breakpoint->saved_insn);
 		if (result != COMMAND_ERROR_NONE)
 			return result;
 
@@ -391,7 +390,7 @@ mdb_arch_enable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
 				return result;
 		}
 
-		return mdb_inferior_write_memory (inferior, address, 1, &bopcode);
+		return mdb_inferior_write_memory (server, address, 1, &bopcode);
 	}
 
 	return COMMAND_ERROR_NONE;
@@ -402,7 +401,6 @@ mdb_arch_disable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
 {
 	ServerCommandError result;
 	ArchInfo *arch = server->arch;
-	InferiorHandle *inferior = server->inferior;
 	gsize address;
 
 	if (!breakpoint->enabled)
@@ -414,7 +412,7 @@ mdb_arch_disable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
 		X86_DR_DISABLE (arch->current_regs, breakpoint->dr_index);
 		INFERIOR_REG_DR_N (arch->current_regs, breakpoint->dr_index) = 0L;
 
-		result = mdb_inferior_set_registers (inferior, &arch->current_regs);
+		result = mdb_inferior_set_registers (server, &arch->current_regs);
 		if (result != COMMAND_ERROR_NONE) {
 			g_warning (G_STRLOC);
 			return result;
@@ -422,7 +420,7 @@ mdb_arch_disable_breakpoint (ServerHandle *server, BreakpointInfo *breakpoint)
 
 		arch->dr_index [breakpoint->dr_index] = 0;
 	} else {
-		result = mdb_inferior_write_memory (inferior, address, 1, &breakpoint->saved_insn);
+		result = mdb_inferior_write_memory (server, address, 1, &breakpoint->saved_insn);
 		if (result != COMMAND_ERROR_NONE)
 			return result;
 
@@ -514,7 +512,7 @@ mdb_server_remove_hardware_breakpoints (ServerHandle *server)
 		INFERIOR_REG_DR_N (server->arch->current_regs, i) = 0L;
 		server->arch->dr_index [i] = 0;
 
-		mdb_inferior_set_registers (server->inferior, &server->arch->current_regs);
+		mdb_inferior_set_registers (server, &server->arch->current_regs);
 	}
 }
 
@@ -694,7 +692,7 @@ mdb_server_execute_instruction (ServerHandle *server, const guint8 *instruction,
 
 	server->arch->code_buffer = data;
 
-	result = mdb_inferior_write_memory (server->inferior, code_address, size, instruction);
+	result = mdb_inferior_write_memory (server, code_address, size, instruction);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -703,7 +701,7 @@ mdb_server_execute_instruction (ServerHandle *server, const guint8 *instruction,
 #endif
 	INFERIOR_REG_RIP (server->arch->current_regs) = code_address;
 
-	result = mdb_inferior_set_registers (server->inferior, &server->arch->current_regs);
+	result = mdb_inferior_set_registers (server, &server->arch->current_regs);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 

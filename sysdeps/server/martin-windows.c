@@ -12,7 +12,7 @@
 
 #include "i386-arch.h"
 
-typedef struct
+struct _ProcessHandle
 {
 	HANDLE process_handle;
 	DWORD process_id;
@@ -21,11 +21,10 @@ typedef struct
 	gchar *exe_path;
 	MdbExeReader *main_bfd;
 	MdbDisassembler *disassembler;
-} ProcessHandle;
+};
 
 struct InferiorHandle
 {
-	ProcessHandle *process;
 	HANDLE thread_handle;
 	DWORD thread_id;
 };
@@ -259,7 +258,7 @@ handle_debug_event (DEBUG_EVENT *de)
 	}
 
 	inferior = server->inferior;
-	process = server->inferior->process;
+	process = server->process;
 
 	g_message (G_STRLOC ": Got debug event: %d - %d/%d - %p", de->dwDebugEventCode, de->dwProcessId, de->dwThreadId, server);
 
@@ -315,7 +314,7 @@ handle_debug_event (DEBUG_EVENT *de)
 			char buf [1024];
 			DWORD exc_code;
 
-			if (mdb_inferior_read_memory (inferior, GPOINTER_TO_UINT (de->u.LoadDll.lpImageName), 4, &exc_code))
+			if (mdb_inferior_read_memory (server, GPOINTER_TO_UINT (de->u.LoadDll.lpImageName), 4, &exc_code))
 				break;
 
 			if (!exc_code)
@@ -325,12 +324,12 @@ handle_debug_event (DEBUG_EVENT *de)
 				wchar_t w_buf [1024];
 				size_t ret;
 
-				if (mdb_inferior_read_memory (server->inferior, exc_code, 300, w_buf))
+				if (mdb_inferior_read_memory (server, exc_code, 300, w_buf))
 					break;
 
 				ret = wcstombs (buf, w_buf, 300);
 			} else {
-				if (mdb_inferior_read_memory (server->inferior, exc_code, 300, buf))
+				if (mdb_inferior_read_memory (server, exc_code, 300, buf))
 					break;
 			}
 
@@ -413,7 +412,7 @@ mdb_server_create_inferior (BreakpointManager *bpm)
 	handle->bpm = bpm;
 	handle->arch = mdb_arch_initialize ();
 	handle->inferior = g_new0 (InferiorHandle, 1);
-	handle->inferior->process = g_new0 (ProcessHandle, 1);
+	handle->process = g_new0 (ProcessHandle, 1);
 
 	return handle;
 }
@@ -496,15 +495,15 @@ mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
 			argv_temp++;
 			argc++;
 		}
-		inferior->process->argc = argc;
-		inferior->process->argv = (gchar **) g_malloc0 ( (argc+1) * sizeof (gpointer));
+		server->process->argc = argc;
+		server->process->argv = (gchar **) g_malloc0 ( (argc+1) * sizeof (gpointer));
 		argv_concat = utf16_argv = (wchar_t *) g_malloc0 (len*sizeof (wchar_t));
 
 		argv_temp = argv;
 		while (*argv_temp) {
 			gunichar2* utf16_argv_temp = g_utf8_to_utf16 (*argv_temp, -1, NULL, NULL, NULL);
 			int written = _snwprintf (argv_concat, len, L"%s ", utf16_argv_temp);
-			inferior->process->argv [index++] = g_strdup (*argv_temp);
+			server->process->argv [index++] = g_strdup (*argv_temp);
 			g_free (utf16_argv_temp);
 			argv_concat += written;
 			len -= written;
@@ -548,8 +547,8 @@ mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
 	g_message (G_STRLOC ": SPAWN: %d/%d", pi.dwProcessId, pi.dwThreadId);
 
 	*child_pid = pi.dwProcessId;
-	inferior->process->process_handle = pi.hProcess;
-	inferior->process->process_id = pi.dwProcessId;
+	server->process->process_handle = pi.hProcess;
+	server->process->process_id = pi.dwProcessId;
 
 	inferior->thread_handle = pi.hThread;
 	inferior->thread_id = pi.dwThreadId;
@@ -560,13 +559,13 @@ mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
 }
 
 ServerCommandError
-mdb_inferior_get_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
+mdb_inferior_get_registers (ServerHandle *server, INFERIOR_REGS_TYPE *regs)
 {
 	memset (regs, 0, sizeof (regs));
 	regs->context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS |
 		CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS | CONTEXT_DEBUG_REGISTERS;
 
-	if (!GetThreadContext (inferior->thread_handle, &regs->context)) {
+	if (!GetThreadContext (server->inferior->thread_handle, &regs->context)) {
 		g_warning (G_STRLOC ": get_registers: %s", get_last_error ());
 		return COMMAND_ERROR_MEMORY_ACCESS;
 	}
@@ -582,7 +581,7 @@ mdb_inferior_get_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
 }
 
 ServerCommandError
-mdb_inferior_set_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
+mdb_inferior_set_registers (ServerHandle *server, INFERIOR_REGS_TYPE *regs)
 {
 	regs->context.Dr6 = regs->dr_status;
 	regs->context.Dr7 = regs->dr_control;
@@ -594,7 +593,7 @@ mdb_inferior_set_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
 	regs->context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS |
 		CONTEXT_FLOATING_POINT | CONTEXT_EXTENDED_REGISTERS | CONTEXT_DEBUG_REGISTERS;
 
-	if (!SetThreadContext (inferior->thread_handle, &regs->context))
+	if (!SetThreadContext (server->inferior->thread_handle, &regs->context))
 		return COMMAND_ERROR_MEMORY_ACCESS;
 
 	return COMMAND_ERROR_NONE;
@@ -613,21 +612,21 @@ mdb_process_read_memory (ProcessHandle *process, guint64 start, guint32 size, gp
 }
 
 extern ServerCommandError
-mdb_inferior_read_memory (InferiorHandle *inferior, guint64 start, guint32 size, gpointer buffer)
+mdb_inferior_read_memory (ServerHandle *server, guint64 start, guint32 size, gpointer buffer)
 {
-	return mdb_process_read_memory (inferior->process, start, size, buffer);
+	return mdb_process_read_memory (server->process, start, size, buffer);
 }
 
 extern ServerCommandError
-mdb_inferior_write_memory (InferiorHandle *inferior, guint64 start, guint32 size, gconstpointer buffer)
+mdb_inferior_write_memory (ServerHandle *server, guint64 start, guint32 size, gconstpointer buffer)
 {
 	SetLastError (0);
-	if (!WriteProcessMemory (inferior->process->process_handle, GINT_TO_POINTER ((guint32) start), buffer, size, NULL)) {
+	if (!WriteProcessMemory (server->process->process_handle, GINT_TO_POINTER ((guint32) start), buffer, size, NULL)) {
 		g_warning (G_STRLOC ": %s", get_last_error ());
 		return COMMAND_ERROR_MEMORY_ACCESS;
 	}
 
-	if (!FlushInstructionCache (inferior->process->process_handle, GINT_TO_POINTER ((guint32) start), size)) {
+	if (!FlushInstructionCache (server->process->process_handle, GINT_TO_POINTER ((guint32) start), size)) {
 		g_warning (G_STRLOC ": %s", get_last_error ());
 		return COMMAND_ERROR_MEMORY_ACCESS;
 	}
@@ -639,7 +638,7 @@ mdb_inferior_write_memory (InferiorHandle *inferior, guint64 start, guint32 size
 ServerCommandError
 mdb_server_read_memory (ServerHandle *server, guint64 start, guint32 size, gpointer buffer)
 {
-	if (mdb_inferior_read_memory (server->inferior, start, size, buffer))
+	if (mdb_inferior_read_memory (server, start, size, buffer))
 		return COMMAND_ERROR_MEMORY_ACCESS;
 
 	mdb_server_remove_breakpoints_from_target_memory (server, start, size, buffer);
@@ -649,32 +648,32 @@ mdb_server_read_memory (ServerHandle *server, guint64 start, guint32 size, gpoin
 ServerCommandError
 mdb_server_write_memory (ServerHandle *server, guint64 start, guint32 size, gconstpointer buffer)
 {
-	if (mdb_inferior_write_memory (server->inferior, start, size, buffer));
+	if (mdb_inferior_write_memory (server, start, size, buffer));
 		return COMMAND_ERROR_MEMORY_ACCESS;
 
 	return COMMAND_ERROR_NONE;
 }
 
 ServerCommandError
-mdb_inferior_peek_word (InferiorHandle *inferior, guint64 start, guint64 *retval)
+mdb_inferior_peek_word (ServerHandle *server, guint64 start, guint64 *retval)
 {
-	return mdb_inferior_read_memory (inferior, start, sizeof (gsize), retval);
+	return mdb_inferior_read_memory (server, start, sizeof (gsize), retval);
 }
 
 ServerCommandError
-mdb_inferior_poke_word (InferiorHandle *inferior, guint64 start, gsize word)
+mdb_inferior_poke_word (ServerHandle *server, guint64 start, gsize word)
 {
-	return mdb_inferior_write_memory (inferior, start, sizeof (gsize), &word);
+	return mdb_inferior_write_memory (server, start, sizeof (gsize), &word);
 }
 
 static BOOL
-set_step_flag (InferiorHandle *inferior, BOOL on)
+set_step_flag (ServerHandle *server, BOOL on)
 {
 	CONTEXT context;
 
 	context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS | CONTEXT_FLOATING_POINT;
 
-	if (!GetThreadContext (inferior->thread_handle, &context)) {
+	if (!GetThreadContext (server->inferior->thread_handle, &context)) {
 		g_warning (G_STRLOC ": GetThreadContext() failed");
 		return FALSE;
 	}
@@ -684,7 +683,7 @@ set_step_flag (InferiorHandle *inferior, BOOL on)
         else
 		context.EFlags &= ~TF_BIT;
 
-	if (!SetThreadContext (inferior->thread_handle, &context)) {
+	if (!SetThreadContext (server->inferior->thread_handle, &context)) {
 		g_warning (G_STRLOC ": SetThreadContext() failed");
 		return FALSE;
 	}
@@ -695,14 +694,12 @@ set_step_flag (InferiorHandle *inferior, BOOL on)
 ServerCommandError
 mdb_server_step (ServerHandle *server)
 {
-	InferiorHandle *inferior = server->inferior;
+	set_step_flag (server, TRUE);
 
-	set_step_flag (inferior, TRUE);
+	g_warning (G_STRLOC ": step (%d/%d)", server->process->process_id, server->inferior->thread_id);
 
-	g_warning (G_STRLOC ": step (%d/%d)", inferior->process->process_id, inferior->thread_id);
-
-	if (!ContinueDebugEvent (inferior->process->process_id, inferior->thread_id, DBG_CONTINUE)) {
-		g_warning (G_STRLOC ": step (%d/%d): %s", inferior->process->process_id, inferior->thread_id, get_last_error ());
+	if (!ContinueDebugEvent (server->process->process_id, server->inferior->thread_id, DBG_CONTINUE)) {
+		g_warning (G_STRLOC ": step (%d/%d): %s", server->process->process_id, server->inferior->thread_id, get_last_error ());
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 	}
 
@@ -714,14 +711,12 @@ mdb_server_step (ServerHandle *server)
 ServerCommandError
 mdb_server_continue (ServerHandle *server)
 {
-	InferiorHandle *inferior = server->inferior;
+	set_step_flag (server, FALSE);
 
-	set_step_flag (inferior, FALSE);
+	g_warning (G_STRLOC ": continue (%d/%d)", server->process->process_id, server->inferior->thread_id);
 
-	g_warning (G_STRLOC ": continue (%d/%d)", inferior->process->process_id, inferior->thread_id);
-
-	if (!ContinueDebugEvent (inferior->process->process_id, inferior->thread_id, DBG_CONTINUE)) {
-		g_warning (G_STRLOC ": continue (%d/%d): %s", inferior->process->process_id, inferior->thread_id, get_last_error ());
+	if (!ContinueDebugEvent (server->process->process_id, server->inferior->thread_id, DBG_CONTINUE)) {
+		g_warning (G_STRLOC ": continue (%d/%d): %s", server->process->process_id, server->inferior->thread_id, get_last_error ());
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 	}
 
@@ -734,7 +729,7 @@ ServerCommandError
 mdb_server_get_application (ServerHandle *server, gchar **exe_file, gchar **cwd,
 			    guint32 *nargs, gchar ***cmdline_args)
 {
-	ProcessHandle *process = server->inferior->process;
+	ProcessHandle *process = server->process;
 	guint32 index = 0;
 	GPtrArray *array;
 	gchar **ptr;
@@ -746,7 +741,7 @@ mdb_server_get_application (ServerHandle *server, gchar **exe_file, gchar **cwd,
 	gunichar2 utf16_cmd_line [10240];
 	gunichar2 utf16_env_vars [10240];
 	BOOL ret;
-	if (!GetModuleFileNameEx (handle->inferior->process_handle, NULL, utf16_exe_file, sizeof (utf16_exe_file)/sizeof (utf16_exe_file [0]))) {
+	if (!GetModuleFileNameEx (handle->process_handle, NULL, utf16_exe_file, sizeof (utf16_exe_file)/sizeof (utf16_exe_file [0]))) {
 		DWORD error = GetLastError ();
 		return COMMAND_ERROR_INTERNAL_ERROR;
 	}
@@ -771,7 +766,7 @@ mdb_server_get_application (ServerHandle *server, gchar **exe_file, gchar **cwd,
 }
 
 ServerCommandError
-mdb_inferior_make_memory_executable (InferiorHandle *inferior, guint64 start, guint32 size)
+mdb_inferior_make_memory_executable (ServerHandle *server, guint64 start, guint32 size)
 {
 	return COMMAND_ERROR_NONE;
 }
@@ -779,7 +774,7 @@ mdb_inferior_make_memory_executable (InferiorHandle *inferior, guint64 start, gu
 gchar *
 mdb_server_disassemble_insn (ServerHandle *server, guint64 address, guint32 *out_insn_size)
 {
-	ProcessHandle *process = server->inferior->process;
+	ProcessHandle *process = server->process;
 
 	if (!process->disassembler)
 		process->disassembler = mdb_exe_reader_get_disassembler (server, process->main_bfd);

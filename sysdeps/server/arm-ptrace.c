@@ -8,7 +8,7 @@
 #include <server.h>
 #include <breakpoints.h>
 #include <mdb-server.h>
-#include <dis-asm.h>
+#include <mdb-server-bfd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -37,8 +37,7 @@ struct InferiorHandle
 	int output_fd [2], error_fd [2];
 	int is_thread;
 	INFERIOR_REGS_TYPE current_regs;
-	struct disassemble_info *disassembler;
-	char disasm_buffer [1024];
+	MdbDisassembler *disassembler;
 	MdbExeReader *main_bfd;
 };
 
@@ -298,15 +297,15 @@ mdb_server_get_current_thread (void)
 }
 
 void
-_mdb_inferior_set_last_signal (InferiorHandle *inferior, int last_signal)
+_mdb_inferior_set_last_signal (ServerHandle *server, int last_signal)
 {
-	inferior->last_signal = last_signal;
+	server->inferior->last_signal = last_signal;
 }
 
 int
-_mdb_inferior_get_last_signal (InferiorHandle *inferior)
+_mdb_inferior_get_last_signal (ServerHandle *server)
 {
-	return inferior->last_signal;
+	return server->inferior->last_signal;
 }
 
 ServerType
@@ -322,49 +321,49 @@ mdb_server_get_capabilities (void)
 }
 
 static ServerCommandError
-_server_ptrace_check_errno (InferiorHandle *inferior)
+_server_ptrace_check_errno (ServerHandle *server)
 {
 	gchar *filename;
 
 	if (!errno)
 		return COMMAND_ERROR_NONE;
 	else if (errno != ESRCH) {
-		g_message (G_STRLOC ": %d - %s", inferior->pid, g_strerror (errno));
+		g_message (G_STRLOC ": %d - %s", server->inferior->pid, g_strerror (errno));
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 	}
 
-	filename = g_strdup_printf ("/proc/%d/stat", inferior->pid);
+	filename = g_strdup_printf ("/proc/%d/stat", server->inferior->pid);
 	if (g_file_test (filename, G_FILE_TEST_EXISTS)) {
 		g_free (filename);
 		return COMMAND_ERROR_NOT_STOPPED;
 	}
 
-	g_warning (G_STRLOC ": %d - %s - %d (%s)", inferior->pid, filename,
+	g_warning (G_STRLOC ": %d - %s - %d (%s)", server->inferior->pid, filename,
 		   errno, g_strerror (errno));
 	g_free (filename);
 	return COMMAND_ERROR_NO_TARGET;
 }
 
 ServerCommandError
-mdb_inferior_make_memory_executable (InferiorHandle *inferior, guint64 start, guint32 size)
+mdb_inferior_make_memory_executable (ServerHandle *server, guint64 start, guint32 size)
 {
 	return COMMAND_ERROR_NONE;
 }
 
 extern ServerCommandError
-mdb_inferior_get_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
+mdb_inferior_get_registers (ServerHandle *server, INFERIOR_REGS_TYPE *regs)
 {
-	if (ptrace (PTRACE_GETREGS, inferior->pid, NULL, &regs->regs) != 0)
-		return _server_ptrace_check_errno (inferior);
+	if (ptrace (PTRACE_GETREGS, server->inferior->pid, NULL, &regs->regs) != 0)
+		return _server_ptrace_check_errno (server);
 
 	return COMMAND_ERROR_NONE;
 }
 
 ServerCommandError
-mdb_inferior_set_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs)
+mdb_inferior_set_registers (ServerHandle *server, INFERIOR_REGS_TYPE *regs)
 {
-	if (ptrace (PTRACE_SETREGS, inferior->pid, NULL, &regs->regs) != 0)
-		return _server_ptrace_check_errno (inferior);
+	if (ptrace (PTRACE_SETREGS, server->inferior->pid, NULL, &regs->regs) != 0)
+		return _server_ptrace_check_errno (server);
 
 	return COMMAND_ERROR_NONE;
 }
@@ -388,11 +387,11 @@ mdb_server_set_registers (ServerHandle *server, guint64 *values)
 	for (i = 0; i < 18; i++)
 		server->inferior->current_regs.regs.uregs [i] = values [i];
 
-	return mdb_inferior_set_registers (server->inferior, &server->inferior->current_regs);
+	return mdb_inferior_set_registers (server, &server->inferior->current_regs);
 }
 
 ServerCommandError
-mdb_inferior_read_memory (InferiorHandle *inferior, guint64 start, guint32 size, gpointer buffer)
+mdb_inferior_read_memory (ServerHandle *server, guint64 start, guint32 size, gpointer buffer)
 {
 	ServerCommandError result;
 	long *ptr = buffer;
@@ -401,10 +400,10 @@ mdb_inferior_read_memory (InferiorHandle *inferior, guint64 start, guint32 size,
 
 	while (size >= sizeof (long)) {
 		errno = 0;
-		*ptr++ = ptrace (PTRACE_PEEKDATA, inferior->pid, GINT_TO_POINTER (addr), NULL);
+		*ptr++ = ptrace (PTRACE_PEEKDATA, server->inferior->pid, GINT_TO_POINTER (addr), NULL);
 		if (errno) {
 			g_message (G_STRLOC ": peek failed!");
-			return _server_ptrace_check_errno (inferior);
+			return _server_ptrace_check_errno (server);
 		}
 
 		addr += sizeof (long);
@@ -414,7 +413,7 @@ mdb_inferior_read_memory (InferiorHandle *inferior, guint64 start, guint32 size,
 	if (!size)
 		return COMMAND_ERROR_NONE;
 
-	result = mdb_inferior_read_memory (inferior, addr, sizeof (long), &temp);
+	result = mdb_inferior_read_memory (server, addr, sizeof (long), &temp);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -424,7 +423,7 @@ mdb_inferior_read_memory (InferiorHandle *inferior, guint64 start, guint32 size,
 }
 
 ServerCommandError
-mdb_inferior_write_memory (InferiorHandle *inferior, guint64 start,
+mdb_inferior_write_memory (ServerHandle *server, guint64 start,
 			   guint32 size, gconstpointer buffer)
 {
 	ServerCommandError result;
@@ -436,8 +435,8 @@ mdb_inferior_write_memory (InferiorHandle *inferior, guint64 start,
 		long word = *ptr++;
 
 		errno = 0;
-		if (ptrace (PTRACE_POKEDATA, inferior->pid, GINT_TO_POINTER (addr), GINT_TO_POINTER (word)) != 0)
-			return _server_ptrace_check_errno (inferior);
+		if (ptrace (PTRACE_POKEDATA, server->inferior->pid, GINT_TO_POINTER (addr), GINT_TO_POINTER (word)) != 0)
+			return _server_ptrace_check_errno (server);
 
 		addr += sizeof (long);
 		size -= sizeof (long);
@@ -446,21 +445,21 @@ mdb_inferior_write_memory (InferiorHandle *inferior, guint64 start,
 	if (!size)
 		return COMMAND_ERROR_NONE;
 
-	result = mdb_inferior_read_memory (inferior, addr, sizeof (long), &temp);
+	result = mdb_inferior_read_memory (server, addr, sizeof (long), &temp);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
 	memcpy (&temp, ptr, size);
 
-	return mdb_inferior_write_memory (inferior, addr, sizeof (long), &temp);
+	return mdb_inferior_write_memory (server, addr, sizeof (long), &temp);
 }
 
 ServerCommandError
-mdb_inferior_poke_word (InferiorHandle *inferior, guint64 addr, gsize value)
+mdb_inferior_poke_word (ServerHandle *server, guint64 addr, gsize value)
 {
 	errno = 0;
-	if (ptrace (PTRACE_POKEDATA, inferior->pid, GINT_TO_POINTER ((gsize) addr), GINT_TO_POINTER (value)) != 0)
-		return _server_ptrace_check_errno (inferior);
+	if (ptrace (PTRACE_POKEDATA, server->inferior->pid, GINT_TO_POINTER ((gsize) addr), GINT_TO_POINTER (value)) != 0)
+		return _server_ptrace_check_errno (server);
 
 	return COMMAND_ERROR_NONE;
 }
@@ -472,7 +471,7 @@ mdb_server_peek_word (ServerHandle *server, guint64 start, guint64 *retval)
 
 	errno = 0;
 	if (ptrace (PTRACE_POKEDATA, server->inferior->pid, GINT_TO_POINTER ((gsize) start), &word) != 0)
-		return _server_ptrace_check_errno (server->inferior);
+		return _server_ptrace_check_errno (server);
 
 	*retval = word;
 	return COMMAND_ERROR_NONE;
@@ -483,7 +482,7 @@ mdb_server_read_memory (ServerHandle *server, guint64 start, guint32 size, gpoin
 {
 	ServerCommandError result;
 
-	result = mdb_inferior_read_memory (server->inferior, start, size, buffer);
+	result = mdb_inferior_read_memory (server, start, size, buffer);
 	if (result)
 		return result;
 
@@ -494,44 +493,39 @@ mdb_server_read_memory (ServerHandle *server, guint64 start, guint32 size, gpoin
 ServerCommandError
 mdb_server_write_memory (ServerHandle *handle, guint64 start, guint32 size, gconstpointer buffer)
 {
-	return mdb_inferior_write_memory (handle->inferior, start, size, buffer);
+	return mdb_inferior_write_memory (handle, start, size, buffer);
 }
 
 ServerCommandError
-mdb_server_continue (ServerHandle *handle)
+mdb_server_continue (ServerHandle *server)
 {
-	InferiorHandle *inferior = handle->inferior;
-
 	errno = 0;
-	inferior->stepping = FALSE;
-	if (ptrace (PTRACE_CONT, inferior->pid, (caddr_t) 1, GINT_TO_POINTER (inferior->last_signal))) {
-		return _server_ptrace_check_errno (inferior);
+	server->inferior->stepping = FALSE;
+	if (ptrace (PTRACE_CONT, server->inferior->pid, (caddr_t) 1, GINT_TO_POINTER (server->inferior->last_signal))) {
+		return _server_ptrace_check_errno (server);
 	}
 
 	return COMMAND_ERROR_NONE;
 }
 
 ServerCommandError
-mdb_server_step (ServerHandle *handle)
+mdb_server_step (ServerHandle *server)
 {
-	InferiorHandle *inferior = handle->inferior;
-
 	errno = 0;
-	inferior->stepping = TRUE;
-	if (ptrace (PTRACE_SINGLESTEP, inferior->pid, (caddr_t) 1, GINT_TO_POINTER (inferior->last_signal)))
-		return _server_ptrace_check_errno (inferior);
+	server->inferior->stepping = TRUE;
+	if (ptrace (PTRACE_SINGLESTEP, server->inferior->pid, (caddr_t) 1, GINT_TO_POINTER (server->inferior->last_signal)))
+		return _server_ptrace_check_errno (server);
 
 	return COMMAND_ERROR_NONE;
 }
 
 static ServerCommandError
-mdb_server_resume (ServerHandle *handle)
+mdb_server_resume (ServerHandle *server)
 {
-	InferiorHandle *inferior = handle->inferior;
-	if (inferior->stepping)
-		return mdb_server_step (handle);
+	if (server->inferior->stepping)
+		return mdb_server_step (server);
 	else
-		return mdb_server_continue (handle);
+		return mdb_server_continue (server);
 }
 
 static ServerCommandError
@@ -716,7 +710,7 @@ mdb_server_get_target_info (guint32 *target_int_size, guint32 *target_long_size,
 ServerCommandError
 mdb_arch_get_registers (ServerHandle *server)
 {
-	return mdb_inferior_get_registers (server->inferior, &server->inferior->current_regs);
+	return mdb_inferior_get_registers (server, &server->inferior->current_regs);
 }
 
 ServerCommandError
@@ -754,94 +748,15 @@ mdb_server_insert_breakpoint (ServerHandle *server, guint64 address, guint32 *bh
 	return COMMAND_ERROR_NONE;
 }
 
-static int
-disasm_read_memory_func (bfd_vma memaddr, bfd_byte *myaddr, unsigned int length, struct disassemble_info *info)
-{
-	InferiorHandle *inferior = info->application_data;
-
-	return mdb_inferior_read_memory (inferior, memaddr, length, myaddr);
-}
-
-static int
-disasm_fprintf_func (gpointer stream, const char *message, ...)
-{
-	InferiorHandle *inferior = stream;
-	va_list args;
-	char *start;
-	int len, max, retval;
-
-	len = strlen (inferior->disasm_buffer);
-	start = inferior->disasm_buffer + len;
-	max = 1024 - len;
-
-	va_start (args, message);
-	retval = vsnprintf (start, max, message, args);
-	va_end (args);
-
-	return retval;
-}
-
-static void
-disasm_print_address_func (bfd_vma addr, struct disassemble_info *info)
-{
-	InferiorHandle *inferior = info->application_data;
-	const gchar *sym;
-	char buf[30];
-
-	sprintf_vma (buf, addr);
-
-	if (inferior->main_bfd) {
-		sym = mdb_exe_reader_lookup_symbol_by_addr (inferior->main_bfd, addr);
-		if (sym) {
-			(*info->fprintf_func) (info->stream, "%s(0x%s)", sym, buf);
-			return;
-		}
-	}
-
-	(*info->fprintf_func) (info->stream, "0x%s", buf);
-}
-
-static void
-init_disassembler (InferiorHandle *inferior)
-{
-	struct disassemble_info *info;
-
-	if (inferior->disassembler)
-		return;
-
-	info = g_new0 (struct disassemble_info, 1);
-	INIT_DISASSEMBLE_INFO (*info, stderr, fprintf);
-	info->flavour = bfd_target_coff_flavour;
-	info->arch = bfd_arch_i386;
-	info->mach = bfd_mach_i386_i386;
-	info->octets_per_byte = 1;
-	info->display_endian = info->endian = BFD_ENDIAN_LITTLE;
-
-	info->application_data = inferior;
-	info->read_memory_func = disasm_read_memory_func;
-	info->print_address_func = disasm_print_address_func;
-	info->fprintf_func = disasm_fprintf_func;
-	info->stream = inferior;
-
-	inferior->disassembler = info;
-}
-
 gchar *
 mdb_server_disassemble_insn (ServerHandle *server, guint64 address, guint32 *out_insn_size)
 {
 	InferiorHandle *inferior = server->inferior;
-	int ret;
 
-	init_disassembler (inferior);
+	if (!inferior->disassembler)
+		inferior->disassembler = mdb_exe_reader_get_disassembler (server, inferior->main_bfd);
 
-	memset (inferior->disasm_buffer, 0, 1024);
-
-	ret = print_insn_little_arm (address, inferior->disassembler);
-
-	if (out_insn_size)
-		*out_insn_size = ret;
-
-	return g_strdup (inferior->disasm_buffer);
+	return mdb_exe_reader_disassemble_insn (inferior->disassembler, address, out_insn_size);
 }
 
 ServerCommandError

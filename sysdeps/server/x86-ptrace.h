@@ -1,8 +1,8 @@
 #ifndef __MONO_DEBUGGER_X86_64_PTRACE_H__
 #define __MONO_DEBUGGER_X86_64_PTRACE_H__
 
-#include <bfd.h>
-#include <dis-asm.h>
+#include <mdb-server.h>
+#include <mdb-server-bfd.h>
 
 typedef struct OSData OSData;
 
@@ -17,20 +17,20 @@ struct InferiorHandle
 	int output_fd [2], error_fd [2];
 	int is_thread;
 
-	struct disassemble_info *disassembler;
-	char disasm_buffer [1024];
+	MdbDisassembler *disassembler;
+	MdbExeReader *main_bfd;
 };
 
 #include "linux-ptrace.h"
 
 static ServerCommandError
-_server_ptrace_check_errno (InferiorHandle *);
+_server_ptrace_check_errno (ServerHandle *server);
 
 static ServerCommandError
-_server_ptrace_setup_inferior (ServerHandle *handle);
+_server_ptrace_setup_inferior (ServerHandle *server);
 
 static void
-_server_ptrace_finalize_inferior (ServerHandle *handle);
+_server_ptrace_finalize_inferior (ServerHandle *server);
 
 #ifndef MDB_SERVER
 

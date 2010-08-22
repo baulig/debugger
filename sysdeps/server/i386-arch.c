@@ -90,8 +90,8 @@ mdb_server_call_method (ServerHandle *handle, guint64 method_address,
 	cdata->callback_argument = callback_argument;
 
 #if defined(__linux__) || defined(__FreeBSD__)
-	cdata->saved_signal = _mdb_inferior_get_last_signal (handle->inferior);
-	_mdb_inferior_set_last_signal (handle->inferior, 0);
+	cdata->saved_signal = _mdb_inferior_get_last_signal (handle);
+	_mdb_inferior_set_last_signal (handle, 0);
 #endif
 
 	call_disp = (int) method_address - new_esp;
@@ -102,11 +102,11 @@ mdb_server_call_method (ServerHandle *handle, guint64 method_address,
 	*((guint32 *) (code+16)) = method_argument1 & 0xffffffff;
 	*((guint32 *) (code+21)) = call_disp - 25;
 
-	result = mdb_inferior_write_memory (handle->inferior, (gsize) new_esp, size, code);
+	result = mdb_inferior_write_memory (handle, (gsize) new_esp, size, code);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
-	result = mdb_inferior_make_memory_executable (handle->inferior, (gsize) new_esp, size);
+	result = mdb_inferior_make_memory_executable (handle, (gsize) new_esp, size);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -117,7 +117,7 @@ mdb_server_call_method (ServerHandle *handle, guint64 method_address,
 
 	g_ptr_array_add (arch->callback_stack, cdata);
 
-	result = mdb_inferior_set_registers (handle->inferior, &arch->current_regs);
+	result = mdb_inferior_set_registers (handle, &arch->current_regs);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -162,8 +162,8 @@ mdb_server_call_method_1 (ServerHandle *handle, guint64 method_address,
 	cdata->callback_argument = callback_argument;
 
 #if defined(__linux__) || defined(__FreeBSD__)
-	cdata->saved_signal = _mdb_inferior_get_last_signal (handle->inferior);
-	_mdb_inferior_set_last_signal (handle->inferior, 0);
+	cdata->saved_signal = _mdb_inferior_get_last_signal (handle);
+	_mdb_inferior_set_last_signal (handle, 0);
 #endif
 
 	call_disp = (int) method_address - new_esp;
@@ -177,11 +177,11 @@ mdb_server_call_method_1 (ServerHandle *handle, guint64 method_address,
 	*((guint32 *) (code+31)) = method_argument & 0xffffffff;
 	*((guint32 *) (code+36)) = call_disp - 40;
 
-	result = mdb_inferior_write_memory (handle->inferior, (gsize) new_esp, size, code);
+	result = mdb_inferior_write_memory (handle, (gsize) new_esp, size, code);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
-	result = mdb_inferior_make_memory_executable (handle->inferior, (gsize) new_esp, size);
+	result = mdb_inferior_make_memory_executable (handle, (gsize) new_esp, size);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -192,7 +192,7 @@ mdb_server_call_method_1 (ServerHandle *handle, guint64 method_address,
 
 	g_ptr_array_add (arch->callback_stack, cdata);
 
-	result = mdb_inferior_set_registers (handle->inferior, &arch->current_regs);
+	result = mdb_inferior_set_registers (handle, &arch->current_regs);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -237,8 +237,8 @@ mdb_server_call_method_2 (ServerHandle *handle, guint64 method_address,
 	cdata->pushed_registers = new_esp + 4;
 
 #if defined(__linux__) || defined(__FreeBSD__)
-	cdata->saved_signal = _mdb_inferior_get_last_signal (handle->inferior);
-	_mdb_inferior_set_last_signal (handle->inferior, 0);
+	cdata->saved_signal = _mdb_inferior_get_last_signal (handle);
+	_mdb_inferior_set_last_signal (handle, 0);
 #endif
 
 	if (data_size > 0) {
@@ -247,12 +247,12 @@ mdb_server_call_method_2 (ServerHandle *handle, guint64 method_address,
 		cdata->data_size = data_size;
 	}
 
-	result = mdb_inferior_write_memory (handle->inferior, (gsize) new_esp, size, code);
+	result = mdb_inferior_write_memory (handle, (gsize) new_esp, size, code);
 	g_free (code);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
-	result = mdb_inferior_make_memory_executable (handle->inferior, (gsize) new_esp, size);
+	result = mdb_inferior_make_memory_executable (handle, (gsize) new_esp, size);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -264,7 +264,7 @@ mdb_server_call_method_2 (ServerHandle *handle, guint64 method_address,
 
 	g_ptr_array_add (arch->callback_stack, cdata);
 
-	result = mdb_inferior_set_registers (handle->inferior, &arch->current_regs);
+	result = mdb_inferior_set_registers (handle, &arch->current_regs);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -311,16 +311,16 @@ mdb_server_call_method_3 (ServerHandle *handle, guint64 method_address,
 	cdata->callback_argument = callback_argument;
 
 #if defined(__linux__) || defined(__FreeBSD__)
-	cdata->saved_signal = _mdb_inferior_get_last_signal (handle->inferior);
-	_mdb_inferior_set_last_signal (handle->inferior, 0);
+	cdata->saved_signal = _mdb_inferior_get_last_signal (handle);
+	_mdb_inferior_set_last_signal (handle, 0);
 #endif
 
-	result = mdb_inferior_write_memory (handle->inferior, (unsigned long) new_esp, size, code);
+	result = mdb_inferior_write_memory (handle, (unsigned long) new_esp, size, code);
 	g_free (code);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
-	result = mdb_inferior_make_memory_executable (handle->inferior, (gsize) new_esp, size);
+	result = mdb_inferior_make_memory_executable (handle, (gsize) new_esp, size);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -333,7 +333,7 @@ mdb_server_call_method_3 (ServerHandle *handle, guint64 method_address,
 
 	g_ptr_array_add (arch->callback_stack, cdata);
 
-	result = mdb_inferior_set_registers (handle->inferior, &arch->current_regs);
+	result = mdb_inferior_set_registers (handle, &arch->current_regs);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -393,16 +393,16 @@ mdb_server_call_method_invoke (ServerHandle *handle, guint64 invoke_method,
 	cdata->is_rti = TRUE;
 
 #if defined(__linux__) || defined(__FreeBSD__)
-	cdata->saved_signal = _mdb_inferior_get_last_signal (handle->inferior);
-	_mdb_inferior_set_last_signal (handle->inferior, 0);
+	cdata->saved_signal = _mdb_inferior_get_last_signal (handle);
+	_mdb_inferior_set_last_signal (handle, 0);
 #endif
 
-	result = mdb_inferior_write_memory (handle->inferior, (gsize) new_esp, size, code);
+	result = mdb_inferior_write_memory (handle, (gsize) new_esp, size, code);
 	g_free (code);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
-	result = mdb_inferior_make_memory_executable (handle->inferior, (gsize) new_esp, size);
+	result = mdb_inferior_make_memory_executable (handle, (gsize) new_esp, size);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -415,7 +415,7 @@ mdb_server_call_method_invoke (ServerHandle *handle, guint64 invoke_method,
 
 	g_ptr_array_add (arch->callback_stack, cdata);
 
-	result = mdb_inferior_set_registers (handle->inferior, &arch->current_regs);
+	result = mdb_inferior_set_registers (handle, &arch->current_regs);
 	if (result != COMMAND_ERROR_NONE)
 		return result;
 
@@ -435,7 +435,6 @@ ServerEvent *
 mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 {
 	ArchInfo *arch = server->arch;
-	InferiorHandle *inferior = server->inferior;
 	CodeBufferData *cbuffer = NULL;
 	CallbackData *cdata;
 	ServerEvent *e;
@@ -465,7 +464,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 		guint32 addr = (gsize) INFERIOR_REG_RSP (arch->current_regs) + 4;
 		guint64 data [3];
 
-		if (mdb_inferior_read_memory (inferior, addr, 24, &data))
+		if (mdb_inferior_read_memory (server, addr, 24, &data))
 			return e;
 
 		e->arg = data [0];
@@ -478,7 +477,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 	for (i = 0; i < DR_NADDR; i++) {
 		if (X86_DR_WATCH_HIT (arch->current_regs, i)) {
 			INFERIOR_REG_DR_STATUS (arch->current_regs) = 0;
-			mdb_inferior_set_registers (inferior, &arch->current_regs);
+			mdb_inferior_set_registers (server, &arch->current_regs);
 			e->arg = arch->dr_index [i];
 			e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
 			return e;
@@ -487,7 +486,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 
 	if (mdb_arch_check_breakpoint (server, (gsize) INFERIOR_REG_RIP (arch->current_regs) - 1, &e->arg)) {
 		INFERIOR_REG_RIP (arch->current_regs)--;
-		mdb_inferior_set_registers (inferior, &arch->current_regs);
+		mdb_inferior_set_registers (server, &arch->current_regs);
 		e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
 		return e;
 	}
@@ -499,7 +498,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 		if (cdata->pushed_registers) {
 			guint32 pushed_regs [9];
 
-			if (mdb_inferior_read_memory (inferior, cdata->pushed_registers, 36, &pushed_regs)) {
+			if (mdb_inferior_read_memory (server, cdata->pushed_registers, 36, &pushed_regs)) {
 				g_warning (G_STRLOC ": Can't restore registers after returning from a call");
 
 				e->type = SERVER_EVENT_INTERNAL_ERROR;
@@ -517,7 +516,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 			INFERIOR_REG_RIP (cdata->saved_regs) = pushed_regs [8];
 		}
 
-		if (mdb_inferior_set_registers (inferior, &cdata->saved_regs) != COMMAND_ERROR_NONE) {
+		if (mdb_inferior_set_registers (server, &cdata->saved_regs) != COMMAND_ERROR_NONE) {
 			g_warning (G_STRLOC ": Can't restore registers after returning from a call");
 			e->type = SERVER_EVENT_INTERNAL_ERROR;
 			return e;
@@ -530,7 +529,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 			e->opt_data_size = cdata->data_size;
 			e->opt_data = g_malloc0 (cdata->data_size);
 
-			if (mdb_inferior_read_memory (server->inferior, cdata->data_pointer, cdata->data_size, e->opt_data)) {
+			if (mdb_inferior_read_memory (server, cdata->data_pointer, cdata->data_size, e->opt_data)) {
 				e->type = SERVER_EVENT_INTERNAL_ERROR;
 				return e;
 			}
@@ -538,7 +537,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 
 
 		if (cdata->exc_address &&
-		    (mdb_inferior_peek_word (server->inferior, cdata->exc_address, &exc_object) != COMMAND_ERROR_NONE)) {
+		    (mdb_inferior_peek_word (server, cdata->exc_address, &exc_object) != COMMAND_ERROR_NONE)) {
 			g_warning (G_STRLOC ": Can't get exc object");
 			e->type = SERVER_EVENT_INTERNAL_ERROR;
 			return e;
@@ -547,7 +546,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 		e->data2 = (gsize) exc_object;
 
 #if defined(__linux__) || defined(__FreeBSD__)
-		_mdb_inferior_set_last_signal (inferior, cdata->saved_signal);
+		_mdb_inferior_set_last_signal (server, cdata->saved_signal);
 #endif
 
 		g_ptr_array_remove (arch->callback_stack, cdata);
@@ -586,7 +585,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 		INFERIOR_REG_RIP (arch->current_regs) = cbuffer->original_rip;
 		if (cbuffer->update_ip)
 			INFERIOR_REG_RIP (arch->current_regs) += cbuffer->insn_size;
-		if (mdb_inferior_set_registers (inferior, &arch->current_regs) != COMMAND_ERROR_NONE) {
+		if (mdb_inferior_set_registers (server, &arch->current_regs) != COMMAND_ERROR_NONE) {
 			g_error (G_STRLOC ": Can't restore registers");
 		}
 
@@ -595,7 +594,7 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig)
 		return e;
 	}
 
-	if (mdb_inferior_peek_word (server->inferior, GPOINTER_TO_INT (INFERIOR_REG_RIP (arch->current_regs) - 1), &code) != COMMAND_ERROR_NONE)
+	if (mdb_inferior_peek_word (server, GPOINTER_TO_INT (INFERIOR_REG_RIP (arch->current_regs) - 1), &code) != COMMAND_ERROR_NONE)
 		return e;
 
 	if ((code & 0xff) == 0xcc) {
@@ -654,7 +653,7 @@ mdb_server_set_registers (ServerHandle *handle, guint64 *values)
 	INFERIOR_REG_RSP (arch->current_regs) = (gsize) values [DEBUGGER_REG_RSP];
 	INFERIOR_REG_SS (arch->current_regs) = (gsize) values [DEBUGGER_REG_SS];
 
-	return mdb_inferior_set_registers (handle->inferior, &arch->current_regs);
+	return mdb_inferior_set_registers (handle, &arch->current_regs);
 }
 
 void
@@ -702,11 +701,11 @@ mdb_server_abort_invoke (ServerHandle *handle, guint64 rti_id)
 	if (!cdata || !cdata->is_rti || (cdata->callback_argument != rti_id))
 		return COMMAND_ERROR_NO_CALLBACK_FRAME;
 
-	if (mdb_inferior_set_registers (handle->inferior, &cdata->saved_regs) != COMMAND_ERROR_NONE)
+	if (mdb_inferior_set_registers (handle, &cdata->saved_regs) != COMMAND_ERROR_NONE)
 		g_error (G_STRLOC ": Can't restore registers after returning from a call");
 
 #if defined(__linux__) || defined(__FreeBSD__)
-	_mdb_inferior_set_last_signal (handle->inferior, cdata->saved_signal);
+	_mdb_inferior_set_last_signal (handle, cdata->saved_signal);
 #endif
 
 	g_ptr_array_remove (handle->arch->callback_stack, cdata);
@@ -784,5 +783,5 @@ mdb_server_restart_notification (ServerHandle *handle)
 		return COMMAND_ERROR_INTERNAL_ERROR;
 
 	INFERIOR_REG_RIP (handle->arch->current_regs)--;
-	return mdb_inferior_set_registers (handle->inferior, &handle->arch->current_regs);
+	return mdb_inferior_set_registers (handle, &handle->arch->current_regs);
 }

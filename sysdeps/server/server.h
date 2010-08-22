@@ -19,12 +19,14 @@ typedef enum {
 } ChildStoppedAction;
 
 typedef struct _ArchInfo ArchInfo;
+typedef struct _ProcessHandle ProcessHandle;
 typedef struct _InferiorRegsType INFERIOR_REGS_TYPE;
 
 struct _ServerHandle {
 	guint32 iid;
 	ArchInfo *arch;
 	InferiorHandle *inferior;
+	ProcessHandle *process;
 	MonoRuntimeInfo *mono_runtime;
 	BreakpointManager *bpm;
 };
@@ -214,35 +216,35 @@ mdb_arch_child_stopped (ServerHandle *server, int stopsig);
  */
 
 extern ServerCommandError
-mdb_inferior_get_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs);
+mdb_inferior_get_registers (ServerHandle *server, INFERIOR_REGS_TYPE *regs);
 
 extern ServerCommandError
-mdb_inferior_set_registers (InferiorHandle *inferior, INFERIOR_REGS_TYPE *regs);
+mdb_inferior_set_registers (ServerHandle *server, INFERIOR_REGS_TYPE *regs);
 
 extern ServerCommandError
-mdb_inferior_read_memory (InferiorHandle *inferior, guint64 start, guint32 size, gpointer buffer);
+mdb_inferior_read_memory (ServerHandle *server, guint64 start, guint32 size, gpointer buffer);
 
 extern ServerCommandError
-mdb_inferior_write_memory (InferiorHandle *inferior, guint64 start, guint32 size, gconstpointer buffer);
+mdb_inferior_write_memory (ServerHandle *server, guint64 start, guint32 size, gconstpointer buffer);
 
 extern ServerCommandError
-mdb_inferior_peek_word (InferiorHandle *inferior, guint64 start, guint64 *retval);
+mdb_inferior_peek_word (ServerHandle *server, guint64 start, guint64 *retval);
 
 extern ServerCommandError
-mdb_inferior_poke_word (InferiorHandle *inferior, guint64 addr, gsize value);
+mdb_inferior_poke_word (ServerHandle *server, guint64 addr, gsize value);
 
 extern ServerCommandError
-mdb_inferior_make_memory_executable (InferiorHandle *inferior, guint64 start, guint32 size);
+mdb_inferior_make_memory_executable (ServerHandle *server, guint64 start, guint32 size);
 
 /*
  * Private stuff
  */
 
 extern void
-_mdb_inferior_set_last_signal (InferiorHandle *inferior, int last_signal);
+_mdb_inferior_set_last_signal (ServerHandle *server, int last_signal);
 
 extern int
-_mdb_inferior_get_last_signal (InferiorHandle *inferior);
+_mdb_inferior_get_last_signal (ServerHandle *server);
 
 G_END_DECLS
 

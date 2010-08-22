@@ -279,7 +279,7 @@ mdb_server_detach_after_fork (ServerHandle *handle)
 	mono_debugger_breakpoint_manager_unlock ();
 
 	if (ptrace (PTRACE_DETACH, handle->inferior->pid, NULL, NULL) != 0)
-		return _server_ptrace_check_errno (handle->inferior);
+		return _server_ptrace_check_errno (handle);
 
 	return COMMAND_ERROR_NONE;
 }
