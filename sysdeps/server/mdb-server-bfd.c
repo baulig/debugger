@@ -17,6 +17,24 @@ struct _MdbExeReader
 };
 
 MdbExeReader *
+mdb_server_load_library (ServerHandle *server, const char *filename)
+{
+	ProcessHandle *process = server->process;
+	MdbExeReader *reader;
+
+	reader = mdb_server_create_exe_reader (filename);
+	if (!reader)
+		return NULL;
+
+	if (!process->main_bfd)
+		process->main_bfd = reader;
+	if (!process->bfd_hash)
+		process->bfd_hash = g_hash_table_new (NULL, NULL);
+	g_hash_table_insert (process->bfd_hash, g_strdup (filename), reader);
+	return reader;
+}
+
+MdbExeReader *
 mdb_server_create_exe_reader (const char *filename)
 {
 	MdbExeReader *reader = g_new0 (MdbExeReader, 1);

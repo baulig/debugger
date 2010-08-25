@@ -3,6 +3,8 @@
 
 #include <config.h>
 #include <library.h>
+#include <mdb-server.h>
+#include <mdb-server-bfd.h>
 #include <glib.h>
 
 G_BEGIN_DECLS
@@ -29,6 +31,12 @@ struct _ServerHandle {
 	ProcessHandle *process;
 	MonoRuntimeInfo *mono_runtime;
 	BreakpointManager *bpm;
+};
+
+struct _ProcessHandle {
+	GHashTable *bfd_hash;
+	MdbExeReader *main_bfd;
+	MdbDisassembler *disassembler;
 };
 
 /*
@@ -176,6 +184,9 @@ extern ServerCommandError
 mdb_server_spawn (ServerHandle *handle, const gchar *working_directory,
 		  const gchar **argv, const gchar **envp, gboolean redirect_fds,
 		  gint *child_pid, IOThreadData **io_data, gchar **error);
+
+extern MdbExeReader *
+mdb_server_load_library (ServerHandle *server, const char *filename);
 
 /*
  * Arch-specific methods

@@ -12,16 +12,15 @@
 
 #include "i386-arch.h"
 
-struct _ProcessHandle
+typedef struct
 {
+	ProcessHandle parent;
 	HANDLE process_handle;
 	DWORD process_id;
 	guint32 argc;
 	gchar **argv;
 	gchar *exe_path;
-	MdbExeReader *main_bfd;
-	MdbDisassembler *disassembler;
-};
+} WindowsProcessHandle;
 
 struct InferiorHandle
 {
@@ -30,7 +29,6 @@ struct InferiorHandle
 };
 
 static GHashTable *server_hash; // thread id -> ServerHandle *
-static GHashTable *bfd_hash; // filename -> MdbExeReader *
 
 #define DEBUG_EVENT_WAIT_TIMEOUT 5000
 #define BP_OPCODE 0xCC  /* INT 3 instruction */
@@ -92,7 +90,6 @@ mdb_server_global_init (void)
 	g_assert (!server_hash);
 
 	server_hash = g_hash_table_new (NULL, NULL);
-	bfd_hash = g_hash_table_new (NULL, NULL);
 
 	command_event = CreateEvent (NULL, FALSE, FALSE, NULL);
 	g_assert (command_event);
@@ -228,25 +225,12 @@ show_debug_event (DEBUG_EVENT *debug_event)
     
 }
 
-static MdbExeReader *
-load_dll (const char *filename)
-{
-	MdbExeReader *reader;
-
-	reader = mdb_server_create_exe_reader (filename);
-	g_message (G_STRLOC ": LOAD DLL: %s -> %p", filename, reader);
-	if (reader)
-		g_hash_table_insert (bfd_hash, g_strdup (filename), reader);
-
-	return reader;
-}
-
 static void
 handle_debug_event (DEBUG_EVENT *de)
 {
 	ServerHandle *server;
 	InferiorHandle *inferior;
-	ProcessHandle *process;
+	WindowsProcessHandle *process;
 
 	server = (ServerHandle *) g_hash_table_lookup (server_hash, GINT_TO_POINTER (de->dwThreadId));
 	if (!server) {
@@ -258,7 +242,7 @@ handle_debug_event (DEBUG_EVENT *de)
 	}
 
 	inferior = server->inferior;
-	process = server->process;
+	process = (WindowsProcessHandle *) server->process;
 
 	g_message (G_STRLOC ": Got debug event: %d - %d/%d - %p", de->dwDebugEventCode, de->dwProcessId, de->dwThreadId, server);
 
@@ -306,7 +290,7 @@ handle_debug_event (DEBUG_EVENT *de)
 			 */
 			if (GetModuleFileNameEx (process->process_handle, NULL, path, sizeof (path) / sizeof (TCHAR))) {
 				process->exe_path = tstring_to_string (path);
-				process->main_bfd = load_dll (process->exe_path);
+				mdb_server_load_library (server, process->exe_path);
 			}
 		}
 
@@ -333,7 +317,7 @@ handle_debug_event (DEBUG_EVENT *de)
 					break;
 			}
 
-			load_dll (buf);
+			mdb_server_load_library (server, buf);
 			break;
 		}
 		break;
@@ -412,7 +396,7 @@ mdb_server_create_inferior (BreakpointManager *bpm)
 	handle->bpm = bpm;
 	handle->arch = mdb_arch_initialize ();
 	handle->inferior = g_new0 (InferiorHandle, 1);
-	handle->process = g_new0 (ProcessHandle, 1);
+	handle->process = (ProcessHandle *) g_new0 (WindowsProcessHandle, 1);
 
 	return handle;
 }
@@ -428,10 +412,11 @@ mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
 		  const gchar **argv, const gchar **envp, gboolean redirect_fds,
 		  gint *child_pid, IOThreadData **io_data, gchar **error)
 {
+	WindowsProcessHandle *process = (WindowsProcessHandle *) server->process;
+	InferiorHandle *inferior = server->inferior;
 	wchar_t* utf16_argv = NULL;
 	wchar_t* utf16_envp = NULL;
 	wchar_t* utf16_working_directory = NULL;
-	InferiorHandle *inferior = server->inferior;
 	STARTUPINFO si = {0};
 	PROCESS_INFORMATION pi = {0};
 	SECURITY_ATTRIBUTES sa;
@@ -495,15 +480,15 @@ mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
 			argv_temp++;
 			argc++;
 		}
-		server->process->argc = argc;
-		server->process->argv = (gchar **) g_malloc0 ( (argc+1) * sizeof (gpointer));
+		process->argc = argc;
+		process->argv = (gchar **) g_malloc0 ( (argc+1) * sizeof (gpointer));
 		argv_concat = utf16_argv = (wchar_t *) g_malloc0 (len*sizeof (wchar_t));
 
 		argv_temp = argv;
 		while (*argv_temp) {
 			gunichar2* utf16_argv_temp = g_utf8_to_utf16 (*argv_temp, -1, NULL, NULL, NULL);
 			int written = _snwprintf (argv_concat, len, L"%s ", utf16_argv_temp);
-			server->process->argv [index++] = g_strdup (*argv_temp);
+			process->argv [index++] = g_strdup (*argv_temp);
 			g_free (utf16_argv_temp);
 			argv_concat += written;
 			len -= written;
@@ -547,8 +532,8 @@ mdb_server_spawn (ServerHandle *server, const gchar *working_directory,
 	g_message (G_STRLOC ": SPAWN: %d/%d", pi.dwProcessId, pi.dwThreadId);
 
 	*child_pid = pi.dwProcessId;
-	server->process->process_handle = pi.hProcess;
-	server->process->process_id = pi.dwProcessId;
+	process->process_handle = pi.hProcess;
+	process->process_id = pi.dwProcessId;
 
 	inferior->thread_handle = pi.hThread;
 	inferior->thread_id = pi.dwThreadId;
@@ -600,7 +585,7 @@ mdb_inferior_set_registers (ServerHandle *server, INFERIOR_REGS_TYPE *regs)
 }
 
 static ServerCommandError
-mdb_process_read_memory (ProcessHandle *process, guint64 start, guint32 size, gpointer buffer)
+mdb_process_read_memory (WindowsProcessHandle *process, guint64 start, guint32 size, gpointer buffer)
 {
 	SetLastError (0);
 	if (!ReadProcessMemory (process->process_handle, GINT_TO_POINTER ((guint) start), buffer, size, NULL)) {
@@ -614,19 +599,21 @@ mdb_process_read_memory (ProcessHandle *process, guint64 start, guint32 size, gp
 extern ServerCommandError
 mdb_inferior_read_memory (ServerHandle *server, guint64 start, guint32 size, gpointer buffer)
 {
-	return mdb_process_read_memory (server->process, start, size, buffer);
+	return mdb_process_read_memory ((WindowsProcessHandle *) server->process, start, size, buffer);
 }
 
 extern ServerCommandError
 mdb_inferior_write_memory (ServerHandle *server, guint64 start, guint32 size, gconstpointer buffer)
 {
+	WindowsProcessHandle *process = (WindowsProcessHandle *) server->process;
+
 	SetLastError (0);
-	if (!WriteProcessMemory (server->process->process_handle, GINT_TO_POINTER ((guint32) start), buffer, size, NULL)) {
+	if (!WriteProcessMemory (process->process_handle, GINT_TO_POINTER ((guint32) start), buffer, size, NULL)) {
 		g_warning (G_STRLOC ": %s", get_last_error ());
 		return COMMAND_ERROR_MEMORY_ACCESS;
 	}
 
-	if (!FlushInstructionCache (server->process->process_handle, GINT_TO_POINTER ((guint32) start), size)) {
+	if (!FlushInstructionCache (process->process_handle, GINT_TO_POINTER ((guint32) start), size)) {
 		g_warning (G_STRLOC ": %s", get_last_error ());
 		return COMMAND_ERROR_MEMORY_ACCESS;
 	}
@@ -694,12 +681,12 @@ set_step_flag (ServerHandle *server, BOOL on)
 ServerCommandError
 mdb_server_step (ServerHandle *server)
 {
+	WindowsProcessHandle *process = (WindowsProcessHandle *) server->process;
+
 	set_step_flag (server, TRUE);
 
-	g_warning (G_STRLOC ": step (%d/%d)", server->process->process_id, server->inferior->thread_id);
-
-	if (!ContinueDebugEvent (server->process->process_id, server->inferior->thread_id, DBG_CONTINUE)) {
-		g_warning (G_STRLOC ": step (%d/%d): %s", server->process->process_id, server->inferior->thread_id, get_last_error ());
+	if (!ContinueDebugEvent (process->process_id, server->inferior->thread_id, DBG_CONTINUE)) {
+		g_warning (G_STRLOC ": step (%d/%d): %s", process->process_id, server->inferior->thread_id, get_last_error ());
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 	}
 
@@ -711,12 +698,12 @@ mdb_server_step (ServerHandle *server)
 ServerCommandError
 mdb_server_continue (ServerHandle *server)
 {
+	WindowsProcessHandle *process = (WindowsProcessHandle *) server->process;
+
 	set_step_flag (server, FALSE);
 
-	g_warning (G_STRLOC ": continue (%d/%d)", server->process->process_id, server->inferior->thread_id);
-
-	if (!ContinueDebugEvent (server->process->process_id, server->inferior->thread_id, DBG_CONTINUE)) {
-		g_warning (G_STRLOC ": continue (%d/%d): %s", server->process->process_id, server->inferior->thread_id, get_last_error ());
+	if (!ContinueDebugEvent (process->process_id, server->inferior->thread_id, DBG_CONTINUE)) {
+		g_warning (G_STRLOC ": continue (%d/%d): %s", process->process_id, server->inferior->thread_id, get_last_error ());
 		return COMMAND_ERROR_UNKNOWN_ERROR;
 	}
 
@@ -729,7 +716,7 @@ ServerCommandError
 mdb_server_get_application (ServerHandle *server, gchar **exe_file, gchar **cwd,
 			    guint32 *nargs, gchar ***cmdline_args)
 {
-	ProcessHandle *process = server->process;
+	WindowsProcessHandle *process = (WindowsProcessHandle *) server->process;
 	guint32 index = 0;
 	GPtrArray *array;
 	gchar **ptr;
