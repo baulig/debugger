@@ -183,7 +183,7 @@ protected:
 	CallbackData *
 	GetCallbackData (void)
 	{
-		if (!callback_stack->len)
+		if (!callback_stack || !callback_stack->len)
 			return NULL;
 
 		return (CallbackData *) g_ptr_array_index (callback_stack, callback_stack->len - 1);

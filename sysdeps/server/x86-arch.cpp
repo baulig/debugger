@@ -177,7 +177,7 @@ X86Arch::ChildStopped (int stopsig)
 	gsize code;
 	int i;
 
-	if (!GetRegisters ())
+	if (GetRegisters ())
 		return NULL;
 
 	e = g_new0 (ServerEvent, 1);

@@ -104,6 +104,8 @@ protected:
 		this->bpm = bpm;
 		this->server = server;
 
+		last_signal = 0;
+
 		arch = mdb_arch_new (this);
 	}
 
