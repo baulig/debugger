@@ -167,5 +167,4 @@ AC_OUTPUT([
 Makefile
 src/Makefile
 src/eglib-config.h
-test/Makefile
 ])
