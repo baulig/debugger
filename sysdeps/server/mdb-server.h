@@ -151,6 +151,7 @@ private:
 	{
 		this->conn_fd = conn_fd;
 		exe_file_hash = g_hash_table_new (NULL, NULL);
+		main_reader = NULL;
 	}
 
 	friend int main (int argc, char *argv []);

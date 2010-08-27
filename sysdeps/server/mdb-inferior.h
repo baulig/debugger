@@ -106,6 +106,8 @@ protected:
 
 		last_signal = 0;
 
+		disassembler = NULL;
+
 		arch = mdb_arch_new (this);
 	}
 

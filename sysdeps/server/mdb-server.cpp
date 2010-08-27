@@ -329,10 +329,6 @@ send_reply_packet (int id, int error, Buffer *data)
 	int len;
 	gboolean res;
 
-#ifdef TRANSPORT_DEBUG
-	g_message (G_STRLOC);
-#endif
-	
 	len = data->p - data->buf + 11;
 	buffer_init (&buf, len);
 	buffer_add_int (&buf, len);
@@ -573,7 +569,7 @@ server_commands (MdbServer *server, int command, int id, guint8 *p, guint8 *end,
 		filename = decode_string (p, &p, end);
 		g_message (G_STRLOC ": create exe reader - %s", filename);
 
-		reader = mdb_server_create_exe_reader (filename);
+		reader = server->GetExeReader (filename);
 		if (!reader)
 			return ERR_CANNOT_OPEN_EXE;
 

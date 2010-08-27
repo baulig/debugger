@@ -80,6 +80,8 @@ public:
 protected:
 	ErrorCode SetupInferior (void);
 
+	bool WaitForNewThread (void);
+
 	ErrorCode CheckErrno (void);
 
 #if defined(__i386__) || defined(__x86_64__)
@@ -210,6 +212,9 @@ PTraceInferior::Spawn (const gchar *working_directory, const gchar **argv, const
 
 	*out_child_pid = pid;
 
+	if (!WaitForNewThread ())
+		return ERR_INTERNAL_ERROR;
+
 	return SetupInferior ();
 }
 
@@ -234,6 +239,36 @@ PTraceInferior::SetupInferior (void)
 
 	g_free (filename);
 	return ERR_NONE;
+}
+
+bool
+PTraceInferior::WaitForNewThread (void)
+{
+	guint32 ret = 0;
+	int status;
+
+	ret = waitpid (pid, &status, WUNTRACED | __WALL | __WCLONE);
+
+	/*
+	 * Safety check: make sure we got the correct event.
+	 */
+
+	if ((ret != pid) || !WIFSTOPPED (status) ||
+	    ((WSTOPSIG (status) != SIGSTOP) && (WSTOPSIG (status) != SIGTRAP))) {
+		g_warning (G_STRLOC ": Wait failed: %d, got pid %d, status %x", pid, ret, status);
+		return false;
+	}
+
+	/*
+	 * Just as an extra safety check.
+	 */
+
+	if (arch->GetRegisters ()) {
+		g_warning (G_STRLOC ": Failed to get registers: %d", pid);
+		return false;
+	}
+
+	return true;
 }
 
 ErrorCode
@@ -380,7 +415,7 @@ ErrorCode
 PTraceInferior::Step (void)
 {
 	errno = 0;
-	stepping = TRUE;
+	stepping = true;
 	if (ptrace (PTRACE_SINGLESTEP, pid, (caddr_t) 1, GINT_TO_POINTER (last_signal)))
 		return CheckErrno ();
 
@@ -391,7 +426,7 @@ ErrorCode
 PTraceInferior::Continue (void)
 {
 	errno = 0;
-	stepping = FALSE;
+	stepping = false;
 	if (ptrace (PTRACE_CONT, pid, (caddr_t) 1, GINT_TO_POINTER (last_signal)))
 		return CheckErrno ();
 

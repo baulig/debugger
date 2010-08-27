@@ -23,10 +23,14 @@ public:
 	virtual ErrorCode GetRegisterValues (guint64 *values) = 0;
 	virtual ErrorCode SetRegisterValues (const guint64 *values) = 0;
 
+	virtual ErrorCode GetRegisters (void) = 0;
+	virtual ErrorCode SetRegisters (void) = 0;
+
 protected:
 	MdbArch (MdbInferior *inferior)
 	{
 		this->inferior = inferior;
+		this->hw_bpm = NULL;
 	}
 
 	MdbInferior *inferior;
