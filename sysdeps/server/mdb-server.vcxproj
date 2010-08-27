@@ -19,26 +19,25 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="breakpoints.c" />
+    <ClCompile Include="breakpoints.cpp" />
     <ClCompile Include="debugger-mutex.c" />
-    <None Include="i386-arch.c">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-    </None>
-    <ClCompile Include="library.c" />
-    <ClCompile Include="martin-windows.c" />
-    <ClCompile Include="mdb-server-bfd.c" />
-    <ClCompile Include="mdb-server-windows.c" />
-    <ClCompile Include="mdb-server.c" />
-    <ClCompile Include="x86-arch.c" />
+    <ClCompile Include="i386-arch.cpp" />
+    <ClCompile Include="mdb-arch.cpp" />
+    <ClCompile Include="mdb-inferior.cpp" />
+    <ClCompile Include="x86-arch.cpp" />
+    <ClCompile Include="bfd-reader.cpp" />
+    <ClCompile Include="mdb-server-windows.cpp" />
+    <ClCompile Include="mdb-server.cpp" />
+    <ClCompile Include="windows-inferior.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="breakpoints.h" />
     <ClInclude Include="debugger-mutex.h" />
     <ClInclude Include="i386-arch.h" />
-    <ClInclude Include="library.h" />
-    <ClInclude Include="mdb-server-bfd.h" />
+    <ClInclude Include="mdb-arch.h" />
+    <ClInclude Include="mdb-exe-reader.h" />
+    <ClInclude Include="mdb-inferior.h" />
     <ClInclude Include="mdb-server.h" />
-    <ClInclude Include="server.h" />
     <ClInclude Include="x86-arch.h" />
   </ItemGroup>
   <ItemGroup>
@@ -128,6 +127,7 @@
       <WarningLevel>Level3</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+      <DisableLanguageExtensions>false</DisableLanguageExtensions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>psapi.lib;ws2_32.lib;mswsock.lib;%(AdditionalDependencies)</AdditionalDependencies>

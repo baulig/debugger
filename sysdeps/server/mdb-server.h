@@ -1,16 +1,25 @@
 #ifndef __MDB_SERVER_H__
 #define __MDB_SERVER_H__
 
-#include <server.h>
-
-G_BEGIN_DECLS
-
-typedef enum {
-	EVENT_KIND_TARGET_EVENT = 1
-} EventKind;
+#include <config.h>
+#include <glib.h>
 
 typedef enum {
 	ERR_NONE = 0,
+
+	ERR_INTERNAL_ERROR,
+	ERR_NO_TARGET,
+	ERR_ALREADY_HAVE_TARGET,
+	ERR_CANNOT_START_TARGET,
+	ERR_ALREADY_STOPPED,
+	ERR_RECURSIVE_CALL,
+	ERR_NO_SUCH_BREAKPOINT,
+	ERR_NO_SUCH_REGISTER,
+	ERR_DR_OCCUPIED,
+	ERR_MEMORY_ACCESS,
+	ERR_IO_ERROR,
+	ERR_NO_CALLBACK_FRAME,
+	ERR_PERMISSION_DENIED,
 
 	ERR_TARGET_ERROR_MASK = 0x0fff,
 
@@ -23,36 +32,128 @@ typedef enum {
 	ERR_NOT_STOPPED = 0x1007
 } ErrorCode;
 
+typedef enum {
+	SERVER_CAPABILITIES_NONE		= 0,
+	SERVER_CAPABILITIES_THREAD_EVENTS	= 1,
+	SERVER_CAPABILITIES_CAN_DETACH_ANY	= 2,
+	SERVER_CAPABILIITES_HAS_SIGNALS		= 4
+} ServerCapabilities;
+
+typedef enum {
+	SERVER_TYPE_UNKNOWN			= 0,
+	SERVER_TYPE_LINUX_PTRACE		= 1,
+	SERVER_TYPE_DARWIN			= 2,
+	SERVER_TYPE_WIN32			= 3
+} ServerType;
+
+typedef enum {
+	ARCH_TYPE_UNKNOWN			= 0,
+	ARCH_TYPE_I386				= 1,
+	ARCH_TYPE_X86_64			= 2,
+	ARCH_TYPE_ARM				= 3
+} ArchType;
+
+typedef enum {
+	EVENT_KIND_TARGET_EVENT = 1
+} EventKind;
+
 typedef struct {
 	void (* func) (gpointer user_data);
 	gpointer user_data;
 } InferiorDelegate;
 
-extern int
-mdb_server_init_os (void);
+typedef enum {
+	SERVER_EVENT_NONE,
+	SERVER_EVENT_UNKNOWN_ERROR = 1,
+	SERVER_EVENT_CHILD_EXITED = 2,
+	SERVER_EVENT_CHILD_STOPPED,
+	SERVER_EVENT_CHILD_SIGNALED,
+	SERVER_EVENT_CHILD_CALLBACK,
+	SERVER_EVENT_CHILD_CALLBACK_COMPLETED,
+	SERVER_EVENT_CHILD_HIT_BREAKPOINT,
+	SERVER_EVENT_CHILD_MEMORY_CHANGED,
+	SERVER_EVENT_CHILD_CREATED_THREAD,
+	SERVER_EVENT_CHILD_FORKED,
+	SERVER_EVENT_CHILD_EXECD,
+	SERVER_EVENT_CHILD_CALLED_EXIT,
+	SERVER_EVENT_CHILD_NOTIFICATION,
+	SERVER_EVENT_CHILD_INTERRUPTED,
+	SERVER_EVENT_RUNTIME_INVOKE_DONE,
+	SERVER_EVENT_INTERNAL_ERROR
+} ServerEventType;
 
-extern ServerHandle *
-mdb_server_get_inferior_by_pid (int pid);
+typedef struct {
+	ServerEventType type;
+	guint32 sender_iid;
+	guint32 opt_arg_iid;
+	guint64 arg;
+	guint64 data1;
+	guint64 data2;
+	guint32 opt_data_size;
+	gpointer opt_data;
+} ServerEvent;
 
-extern ServerEvent *
-mdb_server_handle_wait_event (void);
+typedef struct {
+	guint64 address;
+	guint64 stack_pointer;
+	guint64 frame_address;
+} StackFrame;
 
-extern void
-mdb_server_main_loop (int conn_fd);
+typedef struct {
+	int sigkill;
+	int sigstop;
+	int sigint;
+	int sigchld;
+	int sigfpe;
+	int sigquit;
+	int sigabrt;
+	int sigsegv;
+	int sigill;
+	int sigbus;
+	int sigwinch;
+	int kernel_sigrtmin;
+	int mono_thread_abort;
+} SignalInfo;
 
-extern gboolean
-mdb_server_main_loop_iteration (void);
+class MdbInferior;
+class MdbExeReader;
+class MdbDisassembler;
 
-extern void
-mdb_server_process_child_event (ServerEvent *e);
+class MdbServer
+{
+public:
+	static gboolean Initialize (void);
 
+	MdbExeReader *GetExeReader (const char *filename);
 
-extern gboolean
-mdb_server_inferior_command (InferiorDelegate *delegate);
+	MdbDisassembler *GetDisassembler (MdbInferior *inferior);
 
-extern gchar *
-mdb_server_disassemble_insn (ServerHandle *inferior, guint64 address, guint32 *out_insn_size);
+	void ProcessChildEvent (ServerEvent *e);
 
-G_END_DECLS
+protected:
+	MdbExeReader *main_reader;
+	GHashTable *exe_file_hash;
+
+	void MainLoop (void);
+	gboolean MainLoopIteration (void);
+	gboolean InferiorCommand (InferiorDelegate *delegate);
+
+	MdbInferior *GetInferiorByPid (int pid);
+
+#if defined(__linux__)
+	ServerEvent *HandleLinuxWaitEvent (void);
+#endif
+
+private:
+	int conn_fd;
+
+	MdbServer (int conn_fd)
+	{
+		this->conn_fd = conn_fd;
+		exe_file_hash = g_hash_table_new (NULL, NULL);
+	}
+
+	friend int main (int argc, char *argv []);
+};
 
 #endif

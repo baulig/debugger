@@ -1,6 +1,7 @@
 #include <config.h>
 #include <mdb-server.h>
-#include <mdb-server-bfd.h>
+#include <mdb-inferior.h>
+#include <mdb-exe-reader.h>
 #include <debugger-mutex.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -144,7 +145,7 @@ transport_send (guint8 *data, int len)
 	int res;
 
 	do {
-		res = send (conn_fd, data, len, 0);
+		res = send (conn_fd, (const char *) data, len, 0);
 	} while (res == -1 && errno == EINTR);
 	if (res != len)
 		return FALSE;
@@ -196,7 +197,7 @@ decode_string (guint8 *buf, guint8 **endbuf, guint8 *limit)
 	int len = decode_int (buf, &buf, limit);
 	char *s;
 
-	s = g_malloc (len + 1);
+	s = (char *) g_malloc0 (len + 1);
 	g_assert (s);
 
 	memcpy (s, buf, len);
@@ -218,7 +219,7 @@ typedef struct {
 static inline void
 buffer_init (Buffer *buf, int size)
 {
-	buf->buf = g_malloc (size);
+	buf->buf = (guint8 *) g_malloc (size);
 	buf->p = buf->buf;
 	buf->end = buf->buf + size;
 }
@@ -228,7 +229,7 @@ buffer_make_room (Buffer *buf, int size)
 {
 	if (buf->end - buf->p < size) {
 		int new_size = buf->end - buf->buf + size + 32;
-		guint8 *p = g_realloc (buf->buf, new_size);
+		guint8 *p = (guint8 *) g_realloc (buf->buf, new_size);
 		size = buf->p - buf->buf;
 		buf->buf = p;
 		buf->p = p + size;
@@ -348,14 +349,14 @@ send_reply_packet (int id, int error, Buffer *data)
 	return res;
 }
 
-ServerHandle *
-mdb_server_get_inferior_by_pid (int pid)
+MdbInferior *
+MdbServer::GetInferiorByPid (int pid)
 {
-	return (ServerHandle *) g_hash_table_lookup (inferior_by_pid, GUINT_TO_POINTER (pid));
+	return (MdbInferior *) g_hash_table_lookup (inferior_by_pid, GUINT_TO_POINTER (pid));
 }
 
 void
-mdb_server_process_child_event (ServerEvent *e)
+MdbServer::ProcessChildEvent (ServerEvent *e)
 {
 	Buffer buf;
 
@@ -368,7 +369,7 @@ mdb_server_process_child_event (ServerEvent *e)
 	buffer_add_long (&buf, e->data2);
 	buffer_add_int (&buf, e->opt_data_size);
 	if (e->opt_data)
-		buffer_add_data (&buf, e->opt_data, e->opt_data_size);
+		buffer_add_data (&buf, (guint8 *) e->opt_data, e->opt_data_size);
 
 	debugger_mutex_lock (main_mutex);
 	send_packet (CMD_SET_EVENT, CMD_COMPOSITE, &buf);
@@ -380,6 +381,7 @@ mdb_server_process_child_event (ServerEvent *e)
 int
 main (int argc, char *argv[])
 {
+	MdbServer *server;
 	struct sockaddr_in serv_addr, cli_addr;
 	int fd, res;
 	socklen_t cli_len;
@@ -392,12 +394,12 @@ main (int argc, char *argv[])
 
 	main_mutex = debugger_mutex_new ();
 
-	if (mdb_server_init_os ()) {
+	if (!MdbServer::Initialize ()) {
 		g_warning (G_STRLOC ": Failed to initialize OS backend.");
 		exit (-1);
 	}
 
-	mono_debugger_server_global_init ();
+	MdbInferior::Initialize ();
 
 	fd = socket (AF_INET, SOCK_STREAM, 0);
 #ifdef TRANSPORT_DEBUG
@@ -470,9 +472,11 @@ main (int argc, char *argv[])
 		flag = 1;
 	}
 
-	mono_debugger_breakpoint_manager_init ();
+	BreakpointManager::Initialize ();
 
-	mdb_server_main_loop (conn_fd);
+	server = new MdbServer (conn_fd);
+
+	server->MainLoop ();
 
 #if WINDOWS
 	shutdown (fd, SD_BOTH);
@@ -492,18 +496,16 @@ main (int argc, char *argv[])
 }
 
 static ErrorCode
-server_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
+server_commands (MdbServer *server, int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 {
 	switch (command) {
 	case CMD_SERVER_GET_TARGET_INFO: {
-		ServerCommandError result;
 		guint32 int_size, long_size, addr_size, is_bigendian;
+		ErrorCode result;
 
-		result = mono_debugger_server_get_target_info (
-			&int_size, &long_size, &addr_size, &is_bigendian);
-
-		if (result != COMMAND_ERROR_NONE)
-			return (ErrorCode) result;
+		result = MdbInferior::GetTargetInfo (&int_size, &long_size, &addr_size, &is_bigendian);
+		if (result)
+			return result;
 
 		buffer_add_int (buf, int_size);
 		buffer_add_int (buf, long_size);
@@ -513,24 +515,24 @@ server_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 	}
 
 	case CMD_SERVER_GET_SERVER_TYPE: {
-		buffer_add_int (buf, mono_debugger_server_get_server_type ());
+		buffer_add_int (buf, MdbInferior::GetServerType ());
 		break;
 	}
 
 	case CMD_SERVER_GET_ARCH_TYPE: {
-		buffer_add_int (buf, mono_debugger_server_get_arch_type ());
+		buffer_add_int (buf, MdbInferior::GetArchType ());
 		break;
 	}
 
 	case CMD_SERVER_GET_CAPABILITIES: {
-		buffer_add_int (buf, mono_debugger_server_get_capabilities ());
+		buffer_add_int (buf, MdbInferior::GetCapabilities ());
 		break;
 	}
 
 	case CMD_SERVER_CREATE_INFERIOR: {
-		ServerHandle *inferior;
+		MdbInferior *inferior;
 		BreakpointManager *bpm;
-		int iid, bpm_iid;
+		int bpm_iid;
 
 		bpm_iid = decode_int (p, &p, end);
 
@@ -541,13 +543,11 @@ server_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 		if (!bpm)
 			return ERR_NO_SUCH_BPM;
 
-		iid = ++next_unique_id;
-		inferior = mono_debugger_server_create_inferior (bpm);
-		inferior->iid = iid;
+		inferior = mdb_inferior_new (server, bpm);
 
-		g_hash_table_insert (inferior_hash, GUINT_TO_POINTER (iid), inferior);
+		g_hash_table_insert (inferior_hash, GUINT_TO_POINTER (inferior->GetID ()), inferior);
 
-		buffer_add_int (buf, iid);
+		buffer_add_int (buf, inferior->GetID ());
 		break;
 	}
 
@@ -556,7 +556,7 @@ server_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 		int iid;
 
 		iid = ++next_unique_id;
-		bpm = mono_debugger_breakpoint_manager_new ();
+		bpm = new BreakpointManager ();
 		g_hash_table_insert (bpm_hash, GUINT_TO_POINTER (iid), bpm);
 
 		g_message (G_STRLOC ": new bpm: %d - %p", iid, bpm);
@@ -594,9 +594,9 @@ server_commands (int command, int id, guint8 *p, guint8 *end, Buffer *buf)
 }
 
 static ErrorCode
-inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint8 *end, Buffer *buf)
+inferior_commands (int command, int id, MdbInferior *inferior, guint8 *p, guint8 *end, Buffer *buf)
 {
-	ServerCommandError result = COMMAND_ERROR_NONE;
+	ErrorCode result = ERR_NONE;
 
 	switch (command) {
 	case CMD_INFERIOR_SPAWN: {
@@ -616,10 +616,9 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 			cwd = g_get_current_dir ();
 		}
 
-		result = mono_debugger_server_spawn (inferior, cwd, (const gchar **) argv, NULL, FALSE, &child_pid, NULL, &error);
-
-		if (result != COMMAND_ERROR_NONE)
-			return (ErrorCode) result;
+		result = inferior->Spawn (cwd, (const gchar **) argv, NULL, &child_pid, &error);
+		if (result)
+			return result;
 
 		g_hash_table_insert (inferior_by_pid, GUINT_TO_POINTER (child_pid), inferior);
 
@@ -633,15 +632,15 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 	}
 
 	case CMD_INFERIOR_INIT_PROCESS:
-		result = mono_debugger_server_initialize_process (inferior);
+		result = inferior->InitializeProcess ();
 		break;
 
 	case CMD_INFERIOR_GET_SIGNAL_INFO: {
 		SignalInfo *sinfo;
 
-		result = mono_debugger_server_get_signal_info (inferior, &sinfo);
-		if (result != COMMAND_ERROR_NONE)
-			return (ErrorCode) result;
+		result = inferior->GetSignalInfo (&sinfo);
+		if (result)
+			return result;
 
 		buffer_add_int (buf, sinfo->sigkill);
 		buffer_add_int (buf, sinfo->sigstop);
@@ -657,7 +656,6 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		buffer_add_int (buf, sinfo->kernel_sigrtmin);
 
 		g_free (sinfo);
-
 		break;
 	}
 
@@ -665,11 +663,9 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		gchar *exe_file = NULL, *cwd = NULL, **cmdline_args = NULL;
 		guint32 nargs, i;
 
-		result = mono_debugger_server_get_application (
-			inferior, &exe_file, &cwd, &nargs, &cmdline_args);
-
-		if (result != COMMAND_ERROR_NONE)
-			return (ErrorCode) result;
+		result = inferior->GetApplication (&exe_file, &cwd, &nargs, &cmdline_args);
+		if (result)
+			return result;
 
 		buffer_add_string (buf, exe_file);
 		buffer_add_string (buf, cwd);
@@ -681,34 +677,32 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		g_free (exe_file);
 		g_free (cwd);
 		g_free (cmdline_args);
-
 		break;
 	}
 
 	case CMD_INFERIOR_GET_FRAME: {
 		StackFrame frame;
 
-		result = mono_debugger_server_get_frame (inferior, &frame);
-		if (result != COMMAND_ERROR_NONE)
-			return (ErrorCode) result;
+		result = inferior->GetFrame (&frame);
+		if (result)
+			return result;
 
 		buffer_add_long (buf, frame.address);
 		buffer_add_long (buf, frame.stack_pointer);
 		buffer_add_long (buf, frame.frame_address);
-
 		break;
 	}
 
 	case CMD_INFERIOR_STEP:
-		result = mono_debugger_server_step (inferior);
+		result = inferior->Step ();
 		break;
 
 	case CMD_INFERIOR_CONTINUE:
-		result = mono_debugger_server_continue (inferior);
+		result = inferior->Continue ();
 		break;
 
 	case CMD_INFERIOR_RESUME:
-		result = mono_debugger_server_resume (inferior);
+		result = inferior->Resume ();
 		break;
 
 	case CMD_INFERIOR_INSERT_BREAKPOINT: {
@@ -717,40 +711,27 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 
 		address = decode_long (p, &p, end);
 
-		result = mono_debugger_server_insert_breakpoint (
-			inferior, address, &breakpoint);
-
-		if (result == COMMAND_ERROR_NONE) {
+		result = inferior->InsertBreakpoint (address, &breakpoint);
+		if (result == ERR_NONE)
 			buffer_add_int (buf, breakpoint);
-		}
-
 		break;
 	}
 
 	case CMD_INFERIOR_ENABLE_BREAKPOINT: {
-		guint32 breakpoint;
-
-		breakpoint = decode_int (p, &p, end);
-
-		result = mono_debugger_server_enable_breakpoint (inferior, breakpoint);
+		guint32 breakpoint = decode_int (p, &p, end);
+		result = inferior->EnableBreakpoint (breakpoint);
 		break;
 	}
 
 	case CMD_INFERIOR_DISABLE_BREAKPOINT: {
-		guint32 breakpoint;
-
-		breakpoint = decode_int (p, &p, end);
-
-		result = mono_debugger_server_disable_breakpoint (inferior, breakpoint);
+		guint32 breakpoint = decode_int (p, &p, end);
+		result = inferior->DisableBreakpoint (breakpoint);
 		break;
 	}
 
 	case CMD_INFERIOR_REMOVE_BREAKPOINT: {
-		guint32 breakpoint;
-
-		breakpoint = decode_int (p, &p, end);
-
-		result = mono_debugger_server_remove_breakpoint (inferior, breakpoint);
+		guint32 breakpoint = decode_int (p, &p, end);
+		result = inferior->RemoveBreakpoint (breakpoint);
 		break;
 	}
 
@@ -758,16 +739,16 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		guint32 count, i;
 		guint64 *regs;
 
-		result = mono_debugger_server_count_registers (inferior, &count);
-		if (result != COMMAND_ERROR_NONE)
-			return ERR_UNKNOWN_ERROR;
+		result = inferior->GetRegisterCount (&count);
+		if (result)
+			return result;
 
 		regs = g_new0 (guint64, count);
 
-		result = mono_debugger_server_get_registers (inferior, regs);
-		if (result != COMMAND_ERROR_NONE) {
+		result = inferior->GetRegisters (regs);
+		if (result) {
 			g_free (regs);
-			return (ErrorCode) result;
+			return result;
 		}
 
 		buffer_add_int (buf, count);
@@ -787,9 +768,8 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 
 		buffer_make_room (buf, size);
 
-		result = mono_debugger_server_read_memory (inferior, address, size, buf->p);
-
-		if (result == COMMAND_ERROR_NONE)
+		result = inferior->ReadMemory (address, size, buf->p);
+		if (result == ERR_NONE)
 			buf->p += size;
 
 		break;
@@ -802,16 +782,15 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		address = decode_long (p, &p, end);
 		size = decode_int (p, &p, end);
 
-		result = mono_debugger_server_write_memory (inferior, address, size, p);
+		result = inferior->WriteMemory (address, size, p);
 		break;
 	}
 
 	case CMD_INFERIOR_GET_PENDING_SIGNAL: {
 		guint32 sig;
 
-		result = mono_debugger_server_get_pending_signal (inferior, &sig);
-
-		if (result == COMMAND_ERROR_NONE)
+		result = inferior->GetPendingSignal (&sig);
+		if (result == ERR_NONE)
 			buffer_add_int (buf, sig);
 
 		break;
@@ -823,31 +802,12 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		sig = decode_int (p, &p, end);
 		send_it = decode_byte (p, &p, end);
 
-		result = mono_debugger_server_set_signal (inferior, sig, send_it);
+		result = inferior->SetSignal (sig, send_it);
 		break;
 	}
 
-	case CMD_INFERIOR_GET_DYNAMIC_INFO: {
-#if (defined(__linux__) || defined(__FreeBSD__)) && (defined(__i386__) || defined(__x86_64__))
-		MdbExeReader *reader;
-		guint32 reader_iid;
-		guint64 dynamic_info;
-
-		reader_iid = decode_int (p, &p, end);
-
-		reader = g_hash_table_lookup (exe_reader_hash, GUINT_TO_POINTER (reader_iid));
-
-		if (!reader)
-			return ERR_NO_SUCH_EXE_READER;
-
-		dynamic_info = mdb_exe_reader_get_dynamic_info (inferior, reader);
-
-		buffer_add_long (buf, dynamic_info);
-		break;
-#else
+	case CMD_INFERIOR_GET_DYNAMIC_INFO:
 		return ERR_NOT_IMPLEMENTED;
-#endif
-	}
 
 	case CMD_INFERIOR_DISASSEMBLE_INSN: {
 		guint64 address;
@@ -856,7 +816,7 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 
 		address = decode_long (p, &p, end);
 
-		insn = mdb_server_disassemble_insn (inferior, address, &insn_size);
+		insn = inferior->DisassembleInstruction (address, &insn_size);
 		buffer_add_int (buf, insn_size);
 		buffer_add_string (buf, insn);
 		g_free (insn);
@@ -867,7 +827,7 @@ inferior_commands (int command, int id, ServerHandle *inferior, guint8 *p, guint
 		return ERR_NOT_IMPLEMENTED;
 	}
 
-	return (ErrorCode) result;
+	return result;
 }
 
 static ErrorCode
@@ -880,11 +840,11 @@ bpm_commands (int command, int id, BreakpointManager *bpm, guint8 *p, guint8 *en
 
 		address = decode_long (p, &p, end);
 
-		info = mono_debugger_breakpoint_manager_lookup (bpm, address);
+		info = bpm->Lookup (address);
 
 		if (info) {
 			buffer_add_int (buf, info->id);
-			buffer_add_byte (buf, info->enabled != 0);
+			buffer_add_byte (buf, info->enabled ? 1 : 0);
 		} else {
 			buffer_add_int (buf, 0);
 			buffer_add_byte (buf, 0);
@@ -898,7 +858,7 @@ bpm_commands (int command, int id, BreakpointManager *bpm, guint8 *p, guint8 *en
 
 		idx = decode_int (p, &p, end);
 
-		info = mono_debugger_breakpoint_manager_lookup_by_id (bpm, idx);
+		info = bpm->LookupById (idx);
 
 		if (!info) {
 			buffer_add_byte (buf, 0);
@@ -906,7 +866,7 @@ bpm_commands (int command, int id, BreakpointManager *bpm, guint8 *p, guint8 *en
 		}
 
 		buffer_add_byte (buf, 1);
-		buffer_add_byte (buf, info->enabled != 0);
+		buffer_add_byte (buf, info->enabled ? 1 : 0);
 		break;
 	}
 
@@ -924,7 +884,7 @@ exe_reader_commands (int command, int id, MdbExeReader *reader, guint8 *p, guint
 	case CMD_EXE_READER_GET_START_ADDRESS: {
 		guint64 address;
 
-		address = mdb_exe_reader_get_start_address (reader);
+		address = reader->GetStartAddress ();
 		buffer_add_long (buf, address);
 		break;
 	}
@@ -934,39 +894,33 @@ exe_reader_commands (int command, int id, MdbExeReader *reader, guint8 *p, guint
 		gchar *name;
 
 		name = decode_string (p, &p, end);
-		address = mdb_exe_reader_lookup_symbol (reader, name);
+		address = reader->LookupSymbol (name);
 		buffer_add_long (buf, address);
 		g_free (name);
 		break;
 	}
 
-	case CMD_EXE_READER_GET_TARGET_NAME: {
-		gchar *target_name;
-
-		target_name = mdb_exe_reader_get_target_name (reader);
-		buffer_add_string (buf, target_name);
-		g_free (target_name);
+	case CMD_EXE_READER_GET_TARGET_NAME:
+		buffer_add_string (buf, reader->GetTargetName ());
 		break;
-	}
 
 	case CMD_EXE_READER_HAS_SECTION: {
 		gchar *section_name;
 		gboolean has_section;
 
 		section_name = decode_string (p, &p, end);
-		has_section = mdb_exe_reader_has_section (reader, section_name);
+		has_section = reader->HasSection (section_name);
 		buffer_add_byte (buf, has_section ? 1 : 0);
 		g_free (section_name);
 		break;
 	}
-
 
 	case CMD_EXE_READER_GET_SECTION_ADDRESS: {
 		gchar *section_name;
 		guint64 address;
 
 		section_name = decode_string (p, &p, end);
-		address = mdb_exe_reader_get_section_address (reader, section_name);
+		address = reader->GetSectionAddress (section_name);
 		buffer_add_long (buf, address);
 		g_free (section_name);
 		break;
@@ -979,11 +933,11 @@ exe_reader_commands (int command, int id, MdbExeReader *reader, guint8 *p, guint
 
 		section_name = decode_string (p, &p, end);
 
-		contents = mdb_exe_reader_get_section_contents (reader, section_name, &size);
+		contents = reader->GetSectionContents (section_name, &size);
 		buffer_add_int (buf, size);
 
 		if (contents) {
-			buffer_add_data (buf, contents, size);
+			buffer_add_data (buf, (guint8 *) contents, size);
 			g_free (contents);
 		}
 
@@ -1003,7 +957,7 @@ exe_reader_commands (int command, int id, MdbExeReader *reader, guint8 *p, guint
 typedef struct {
 	int command;
 	int id;
-	ServerHandle *inferior;
+	MdbInferior *inferior;
 	guint8 *p;
 	guint8 *end;
 	Buffer *buf;
@@ -1021,7 +975,7 @@ inferior_command_proxy (gpointer user_data)
 #endif
 
 gboolean
-mdb_server_main_loop_iteration (void)
+MdbServer::MainLoopIteration (void)
 {
 	guint8 header [HEADER_LENGTH];
 	int res, len, id, flags, command_set, command;
@@ -1051,7 +1005,7 @@ mdb_server_main_loop_iteration (void)
 	g_message (G_STRLOC ": Received command %d/%d, id=%d.", command_set, command, id);
 #endif
 
-	data = g_malloc (len - HEADER_LENGTH);
+	data = (guint8 *) g_malloc (len - HEADER_LENGTH);
 	if (len - HEADER_LENGTH > 0) {
 		res = recv_length (conn_fd, data, len - HEADER_LENGTH, 0);
 		if (res != len - HEADER_LENGTH)
@@ -1069,7 +1023,7 @@ mdb_server_main_loop_iteration (void)
 	/* Process the request */
 	switch (command_set) {
 	case CMD_SET_SERVER:
-		err = server_commands (command, id, p, end, &buf);
+		err = server_commands (this, command, id, p, end, &buf);
 		break;
 
 	case CMD_SET_INFERIOR: {
@@ -1077,11 +1031,11 @@ mdb_server_main_loop_iteration (void)
 		InferiorDelegate delegate;
 		InferiorData *inferior_data;
 #endif
-		ServerHandle *inferior;
+		MdbInferior *inferior;
 		int iid;
 
 		iid = decode_int (p, &p, end);
-		inferior = g_hash_table_lookup (inferior_hash, GUINT_TO_POINTER (iid));
+		inferior = (MdbInferior *) g_hash_table_lookup (inferior_hash, GUINT_TO_POINTER (iid));
 
 		if (!inferior) {
 			err = ERR_NO_SUCH_INFERIOR;
@@ -1101,7 +1055,7 @@ mdb_server_main_loop_iteration (void)
 		delegate.func = inferior_command_proxy;
 		delegate.user_data = inferior_data;
 
-		if (!mdb_server_inferior_command (&delegate))
+		if (!InferiorCommand (&delegate))
 			err = ERR_NOT_STOPPED;
 		else
 			err = inferior_data->ret;
@@ -1118,7 +1072,7 @@ mdb_server_main_loop_iteration (void)
 		int iid;
 
 		iid = decode_int (p, &p, end);
-		bpm = g_hash_table_lookup (bpm_hash, GUINT_TO_POINTER (iid));
+		bpm = (BreakpointManager *) g_hash_table_lookup (bpm_hash, GUINT_TO_POINTER (iid));
 
 		if (!bpm) {
 			err = ERR_NO_SUCH_BPM;
@@ -1134,7 +1088,7 @@ mdb_server_main_loop_iteration (void)
 		int iid;
 
 		iid = decode_int (p, &p, end);
-		reader = g_hash_table_lookup (exe_reader_hash, GUINT_TO_POINTER (iid));
+		reader = (MdbExeReader *) g_hash_table_lookup (exe_reader_hash, GUINT_TO_POINTER (iid));
 
 		if (!reader) {
 			err = ERR_NO_SUCH_EXE_READER;
@@ -1164,4 +1118,28 @@ mdb_server_main_loop_iteration (void)
 	buffer_free (&buf);
 
 	return TRUE;
+}
+
+MdbExeReader *
+MdbServer::GetExeReader (const char *filename)
+{
+	MdbExeReader *reader;
+
+	reader = (MdbExeReader *) g_hash_table_lookup (exe_file_hash, filename);
+	if (reader)
+		return reader;
+
+	reader = mdb_server_create_exe_reader (filename);
+	g_hash_table_insert (exe_file_hash, g_strdup (filename), reader);
+
+	if (!main_reader)
+		main_reader = reader;
+
+	return reader;
+}
+
+MdbDisassembler *
+MdbServer::GetDisassembler (MdbInferior *inferior)
+{
+	return main_reader->GetDisassembler (inferior);
 }

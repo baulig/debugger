@@ -18,17 +18,14 @@ endif
 lib_LTLIBRARIES = $(server_libraries)
 
 extra_sources = \
-	i386-arch.c			\
-	i386-arch.h			\
+	i386-arch.cpp			\
+	x86_64-arch.cpp			\
+	x86-arch.cpp			\
 	x86-arch.h			\
-	x86_64-arch.h			\
-	x86_64-arch.c			\
-	x86-linux-ptrace.c		\
-	x86-linux-ptrace.h		\
-	x86-ptrace.c			\
-	x86-ptrace.h			\
-	mdb-server-linux.c		\
-	mdb-server-window.c
+	arm-arch.cpp			\
+	arm-arch.h			\
+	mdb-server-linux.cpp		\
+	mdb-server-window.cpp
 
 if PLATFORM_POWERPC_DARWIN
 platform_sources =
@@ -45,52 +42,49 @@ platform_libs =
 endif
 if PLATFORM_X86_WINDOWS
 platform_sources = \
-	x86-arch.c \
-	martin-windows.c
+	x86-arch.cpp \
+	x86-arch.h \
+	windows-inferior.cpp
 platform_server = \
-	mdb-server-bfd.c \
-	mdb-server-windows.c
+	bfd-reader.cpp \
+	mdb-server-windows.cpp
 platform_libs = \
 	-lmswsock -lws2_32 -lpsapi -lkernel32
 endif
 if PLATFORM_X86_LINUX
 platform_sources = \
-	x86-arch.c \
-	x86-ptrace.c \
-	thread-db.c \
-	thread-db.h
+	x86-arch.cpp \
+	x86-arch.h \
+	ptrace-inferior.cpp
 platform_server = \
-	mdb-server-bfd.c \
-	mdb-server-linux.c
+	bfd-reader.cpp \
+	mdb-server-linux.cpp
 platform_libs = \
-	-lpthread \
-	-lthread_db
+	-lpthread
 endif
 if PLATFORM_ARM_LINUX
 platform_sources = \
-	arm-arch.c \
-	arm-ptrace.c
+	arm-arch.cpp \
+	arm-arch.h \
+	ptrace-inferior.cpp
 platform_server = \
-	mdb-server-bfd.c \
-	mdb-server-linux.c
+	bfd-reader.cpp \
+	mdb-server-linux.cpp
 mdb_server_ldflags = -entry=main
 else
 mdb_server_ldflags =
 endif
 
 server_sources = \
-	server.h		\
-	library.c		\
 	$(platform_sources)	\
 	debugger-mutex.c	\
 	debugger-mutex.h	\
-	breakpoints.c		\
+	breakpoints.cpp		\
 	breakpoints.h		\
-	libgtop-glue.c		\
-	libgtop-glue.h		\
-	linux-proc-service.h	\
-	bfdglue.c		\
-	bfdglue.h
+	mdb-inferior.cpp	\
+	mdb-inferior.h		\
+	mdb-arch.cpp		\
+	mdb-arch.h
 
 server_cppflags = \
 	-I$(top_srcdir)/sysdeps/bfd \
@@ -107,17 +101,17 @@ libmonodebuggerserver_la_LIBADD = \
 	@SERVER_DEPENDENCIES_LIBS@ $(eglib_libs) $(platform_libs) \
 	../../sysdeps/bfd/libbfd.la
 
-mdb_server_CPPFLAGS = $(server_cppflags) -DMDB_SERVER
+mdb_server_CPPFLAGS = $(server_cppflags) -DMDB_SERVER -fno-rtti -fno-exceptions
 EXTRA_mdb_server_SOURCES = $(extra_sources)
 
 mdb_server_SOURCES = \
-	mdb-server.c \
+	mdb-server.cpp \
 	mdb-server.h \
 	$(server_sources) \
 	$(platform_server)
 
 mdb_server_LDFLAGS = \
-	-export-dynamic -static -no-undefined $(mdb_server_ldflags)
+	-static -no-undefined $(mdb_server_ldflags)
 
 mdb_server_LDADD = \
 	@SERVER_DEPENDENCIES_LIBS@ $(eglib_static_libs) $(platform_libs) \

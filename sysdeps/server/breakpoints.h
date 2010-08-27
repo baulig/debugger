@@ -3,14 +3,6 @@
 
 #include <glib.h>
 
-G_BEGIN_DECLS
-
-typedef struct {
-	GPtrArray *breakpoints;
-	GHashTable *breakpoint_hash;
-	GHashTable *breakpoint_by_addr;
-} BreakpointManager;
-
 typedef enum {
 	HARDWARE_BREAKPOINT_NONE = 0,
 	HARDWARE_BREAKPOINT_EXECUTE,
@@ -18,60 +10,86 @@ typedef enum {
 	HARDWARE_BREAKPOINT_WRITE
 } HardwareBreakpointType;
 
-typedef struct {
+class BreakpointInfo
+{
+public:
+	BreakpointInfo (gsize address)
+	{
+		refcount = 1;
+		address = address;
+		is_hardware_bpt = FALSE;
+		id = ++next_id;
+		dr_index = -1;
+	}
+
+	BreakpointInfo (gsize address, int dr_idx)
+	{
+		refcount = 1;
+		address = address;
+		is_hardware_bpt = TRUE;
+		id = ++next_id;
+		dr_index = dr_idx;
+	}
+
+	void Ref ()
+	{
+		++refcount;
+	}
+
+	bool Unref ()
+	{
+		return --refcount > 0;
+	}
+
+public:
 	HardwareBreakpointType type;
 	int id;
-	int refcount;
-	int enabled;
-	int is_hardware_bpt;
+	bool enabled;
+	bool is_hardware_bpt;
 	int dr_index;
 	char saved_insn;
 	int runtime_table_slot;
-	guint64 address;
-} BreakpointInfo;
+	gsize address;
 
-void
-mono_debugger_breakpoint_manager_init                (void);
+private:
+	int refcount;
+	static int next_id;
 
-BreakpointManager *
-mono_debugger_breakpoint_manager_new                 (void);
+	friend class BreakpointManager;
+	friend class MdbArch;
+};
 
-BreakpointManager *
-mono_debugger_breakpoint_manager_clone               (BreakpointManager *old);
+class BreakpointManager
+{
+public:
+	BreakpointManager (void);
+	~BreakpointManager (void);
 
-void
-mono_debugger_breakpoint_manager_free                (BreakpointManager *bpm);
+	BreakpointManager *Clone (void);
 
-void
-mono_debugger_breakpoint_manager_lock                (void);
+	static void Initialize (void);
 
-void
-mono_debugger_breakpoint_manager_unlock              (void);
+	static void Lock (void);
+	static void Unlock (void);
 
-int
-mono_debugger_breakpoint_manager_get_next_id         (void);
+	void Insert (BreakpointInfo *breakpoint);
 
-void
-mono_debugger_breakpoint_manager_insert              (BreakpointManager *bpm, BreakpointInfo *breakpoint);
+	BreakpointInfo *Lookup (guint64 address);
 
-BreakpointInfo *
-mono_debugger_breakpoint_manager_lookup              (BreakpointManager *bpm, guint64 address);
+	BreakpointInfo *LookupById (guint32 id);
 
-BreakpointInfo *
-mono_debugger_breakpoint_manager_lookup_by_id        (BreakpointManager *bpm, guint32 id);
+	GPtrArray *GetBreakpoints (void);
 
-GPtrArray *
-mono_debugger_breakpoint_manager_get_breakpoints     (BreakpointManager *bpm);
+	void Remove (BreakpointInfo *breakpoint);
 
-void
-mono_debugger_breakpoint_manager_remove              (BreakpointManager *bpm, BreakpointInfo *breakpoint);
+	BreakpointInfo *CreateBreakpoint (guint64 address);
 
-int
-mono_debugger_breakpoint_info_get_id                 (BreakpointInfo *info);
+	BreakpointInfo *CreateBreakpoint (guint64 address, int dr_idx);
 
-gboolean
-mono_debugger_breakpoint_info_get_is_enabled         (BreakpointInfo *info);
-
-G_END_DECLS
+private:
+	GPtrArray *breakpoints;
+	GHashTable *breakpoint_hash;
+	GHashTable *breakpoint_by_addr;
+};
 
 #endif
