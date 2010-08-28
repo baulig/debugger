@@ -47,13 +47,15 @@ public:
 
 	virtual ErrorCode Resume (void) = 0;
 
-	ErrorCode InsertBreakpoint (guint64 address, guint32 *out_idx);
+	ErrorCode InsertBreakpoint (guint64 address, BreakpointInfo **out_breakpoint);
 
-	ErrorCode EnableBreakpoint (guint32 idx);
+	BreakpointInfo *LookupBreakpointById (guint32 idx);
 
-	ErrorCode DisableBreakpoint (guint32 idx);
+	ErrorCode EnableBreakpoint (BreakpointInfo *breakpoint);
+
+	ErrorCode DisableBreakpoint (BreakpointInfo *breakpoint);
 	
-	ErrorCode RemoveBreakpoint (guint32 idx);
+	ErrorCode RemoveBreakpoint (BreakpointInfo *breakpoint);
 
 	virtual ErrorCode GetRegisterCount (guint32 *out_count) = 0;
 

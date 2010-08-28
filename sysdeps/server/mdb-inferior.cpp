@@ -9,45 +9,41 @@ MdbInferior::GetFrame (StackFrame *out_frame)
 }
 
 ErrorCode
-MdbInferior::InsertBreakpoint (guint64 address, guint32 *out_idx)
+MdbInferior::InsertBreakpoint (guint64 address, BreakpointInfo **out_breakpoint)
 {
-	BreakpointInfo *breakpoint;
 	ErrorCode result;
 
-	breakpoint = bpm->Lookup (address);
-	if (breakpoint) {
-		breakpoint->Ref ();
-		goto done;
+	*out_breakpoint = bpm->Lookup (address);
+	if (*out_breakpoint) {
+		(*out_breakpoint)->Ref ();
+		return ERR_NONE;
 	}
 
-	breakpoint = new BreakpointInfo ((gsize) address);
+	*out_breakpoint = new BreakpointInfo (bpm, (gsize) address);
 
-	result = arch->EnableBreakpoint (breakpoint);
+	result = arch->EnableBreakpoint (*out_breakpoint);
 	if (result) {
-		delete breakpoint;
+		delete *out_breakpoint;
+		*out_breakpoint = NULL;
 		return result;
 	}
 
-	breakpoint->enabled = true;
-	bpm->Insert (breakpoint);
+	(*out_breakpoint)->enabled = true;
+	bpm->Insert (*out_breakpoint);
 
- done:
-	*out_idx = breakpoint->id;
 	return ERR_NONE;
 }
 
-ErrorCode
-MdbInferior::RemoveBreakpoint (guint32 idx)
+BreakpointInfo *
+MdbInferior::LookupBreakpointById (guint32 idx)
 {
-	BreakpointManager *bpm;
-	BreakpointInfo *breakpoint;
-	ErrorCode result;
+	return arch->LookupBreakpoint (idx, NULL);
+}
 
-	breakpoint = arch->LookupBreakpoint (idx, &bpm);
-	if (!breakpoint) {
-		result = ERR_NO_SUCH_BREAKPOINT;
-		goto out;
-	}
+ErrorCode
+MdbInferior::RemoveBreakpoint (BreakpointInfo *breakpoint)
+{
+	ErrorCode result;
 
 	if (breakpoint->Unref ()) {
 		result = ERR_NONE;
@@ -59,21 +55,16 @@ MdbInferior::RemoveBreakpoint (guint32 idx)
 		goto out;
 
 	breakpoint->enabled = false;
-	bpm->Remove (breakpoint);
+	breakpoint->bpm->Remove (breakpoint);
 
  out:
 	return result;
 }
 
 ErrorCode
-MdbInferior::EnableBreakpoint (guint32 idx)
+MdbInferior::EnableBreakpoint (BreakpointInfo *breakpoint)
 {
-	BreakpointInfo *breakpoint;
 	ErrorCode result;
-
-	breakpoint = arch->LookupBreakpoint (idx, NULL);
-	if (!breakpoint)
-		return ERR_NO_SUCH_BREAKPOINT;
 
 	result = arch->EnableBreakpoint (breakpoint);
 	if (!result)
@@ -82,14 +73,9 @@ MdbInferior::EnableBreakpoint (guint32 idx)
 }
 
 ErrorCode
-MdbInferior::DisableBreakpoint (guint32 idx)
+MdbInferior::DisableBreakpoint (BreakpointInfo *breakpoint)
 {
-	BreakpointInfo *breakpoint;
 	ErrorCode result;
-
-	breakpoint = arch->LookupBreakpoint (idx, NULL);
-	if (!breakpoint)
-		return ERR_NO_SUCH_BREAKPOINT;
 
 	result = arch->DisableBreakpoint (breakpoint);
 	if (!result)

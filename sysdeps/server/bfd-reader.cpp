@@ -56,7 +56,7 @@ private:
 
 	gsize dynamic_info;
 	bool has_dynlink_info;
-	guint32 dynlink_bpt;
+	BreakpointInfo *dynlink_bpt;
 };
 
 #define DISASM_BUFSIZE 1024
@@ -90,6 +90,7 @@ BfdReader::BfdReader (const char *filename)
 
 	dynamic_info = 0;
 	has_dynlink_info = false;
+	dynlink_bpt = NULL;
 
 	bfd_handle = bfd_openr (filename, NULL);
 	if (!bfd_handle)

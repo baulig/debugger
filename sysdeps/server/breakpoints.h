@@ -10,11 +10,14 @@ typedef enum {
 	HARDWARE_BREAKPOINT_WRITE
 } HardwareBreakpointType;
 
+class BreakpointManager;
+
 class BreakpointInfo
 {
 public:
-	BreakpointInfo (gsize address)
+	BreakpointInfo (BreakpointManager *bpm, gsize address)
 	{
+		this->bpm = bpm;
 		this->refcount = 1;
 		this->address = address;
 		this->is_hardware_bpt = false;
@@ -25,8 +28,9 @@ public:
 		this->enabled = false;
 	}
 
-	BreakpointInfo (gsize address, int dr_idx)
+	BreakpointInfo (BreakpointManager *bpm, gsize address, int dr_idx)
 	{
+		this->bpm = bpm;
 		this->refcount = 1;
 		this->address = address;
 		this->is_hardware_bpt = true;
@@ -49,6 +53,7 @@ public:
 
 public:
 	HardwareBreakpointType type;
+	BreakpointManager *bpm;
 	int id;
 	bool enabled;
 	bool is_hardware_bpt;

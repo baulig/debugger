@@ -703,30 +703,51 @@ inferior_commands (int command, int id, MdbInferior *inferior, guint8 *p, guint8
 
 	case CMD_INFERIOR_INSERT_BREAKPOINT: {
 		guint64 address;
-		guint32 breakpoint;
+		BreakpointInfo *breakpoint;
 
 		address = decode_long (p, &p, end);
 
 		result = inferior->InsertBreakpoint (address, &breakpoint);
 		if (result == ERR_NONE)
-			buffer_add_int (buf, breakpoint);
+			buffer_add_int (buf, breakpoint->id);
 		break;
 	}
 
 	case CMD_INFERIOR_ENABLE_BREAKPOINT: {
-		guint32 breakpoint = decode_int (p, &p, end);
+		BreakpointInfo *breakpoint;
+		guint32 idx;
+
+		idx = decode_int (p, &p, end);
+		breakpoint = inferior->LookupBreakpointById (idx);
+		if (!breakpoint)
+			return ERR_NO_SUCH_BREAKPOINT;
+
 		result = inferior->EnableBreakpoint (breakpoint);
 		break;
 	}
 
 	case CMD_INFERIOR_DISABLE_BREAKPOINT: {
-		guint32 breakpoint = decode_int (p, &p, end);
+		BreakpointInfo *breakpoint;
+		guint32 idx;
+
+		idx = decode_int (p, &p, end);
+		breakpoint = inferior->LookupBreakpointById (idx);
+		if (!breakpoint)
+			return ERR_NO_SUCH_BREAKPOINT;
+
 		result = inferior->DisableBreakpoint (breakpoint);
 		break;
 	}
 
 	case CMD_INFERIOR_REMOVE_BREAKPOINT: {
-		guint32 breakpoint = decode_int (p, &p, end);
+		BreakpointInfo *breakpoint;
+		guint32 idx;
+
+		idx = decode_int (p, &p, end);
+		breakpoint = inferior->LookupBreakpointById (idx);
+		if (!breakpoint)
+			return ERR_NO_SUCH_BREAKPOINT;
+
 		result = inferior->RemoveBreakpoint (breakpoint);
 		break;
 	}
