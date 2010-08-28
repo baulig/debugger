@@ -4,13 +4,14 @@
 #include <mdb-inferior.h>
 #include <mdb-exe-reader.h>
 
-class MdbProcess
+class MdbProcess : public ServerObject
 {
 public:
 	virtual bool Initialize (void) = 0;
 
 protected:
 	MdbProcess (MdbInferior *inferior)
+		: ServerObject (SERVER_OBJECT_KIND_PROCESS)
 	{
 		this->inferior = inferior;
 		this->main_reader = NULL;

@@ -112,13 +112,7 @@ typedef enum {
 volatile static int packet_id = 0;
 static int conn_fd = 0;
 
-static int next_unique_id = 0;
-static GHashTable *inferior_hash = NULL;
 static GHashTable *inferior_by_pid = NULL;
-static GHashTable *bpm_hash = NULL;
-static GHashTable *exe_reader_hash = NULL;
-
-static DebuggerMutex *main_mutex;
 
 /*
  * recv_length:
@@ -352,13 +346,18 @@ MdbServer::GetInferiorByPid (int pid)
 }
 
 void
-MdbServer::ProcessChildEvent (ServerEvent *e)
+MdbServer::SendEvent (ServerEvent *e)
 {
 	Buffer buf;
 
 	buffer_init (&buf, 128 + e->opt_data_size);
 	buffer_add_byte (&buf, EVENT_KIND_TARGET_EVENT);
-	buffer_add_int (&buf, e->sender_iid);
+	if (e->sender) {
+		buffer_add_byte (&buf, e->sender->GetObjectKind ());
+		buffer_add_int (&buf, e->sender->GetID ());
+	} else {
+		buffer_add_byte (&buf, 0);
+	}
 	buffer_add_byte (&buf, e->type);
 	buffer_add_long (&buf, e->arg);
 	buffer_add_long (&buf, e->data1);
@@ -367,9 +366,9 @@ MdbServer::ProcessChildEvent (ServerEvent *e)
 	if (e->opt_data)
 		buffer_add_data (&buf, (guint8 *) e->opt_data, e->opt_data_size);
 
-	debugger_mutex_lock (main_mutex);
+	ServerObject::Lock ();
 	send_packet (CMD_SET_EVENT, CMD_COMPOSITE, &buf);
-	debugger_mutex_unlock (main_mutex);
+	ServerObject::Unlock ();
 
 	buffer_free (&buf);
 }
@@ -383,12 +382,9 @@ main (int argc, char *argv[])
 	socklen_t cli_len;
 	char buf[128];
 
-	inferior_hash = g_hash_table_new (NULL, NULL);
 	inferior_by_pid = g_hash_table_new (NULL, NULL);
-	bpm_hash = g_hash_table_new (NULL, NULL);
-	exe_reader_hash = g_hash_table_new (NULL, NULL);
 
-	main_mutex = debugger_mutex_new ();
+	ServerObject::Initialize ();
 
 	if (!MdbServer::Initialize ()) {
 		g_warning (G_STRLOC ": Failed to initialize OS backend.");
@@ -532,7 +528,7 @@ server_commands (MdbServer *server, int command, int id, guint8 *p, guint8 *end,
 
 		bpm_iid = decode_int (p, &p, end);
 
-		bpm = (BreakpointManager *) g_hash_table_lookup (bpm_hash, GUINT_TO_POINTER (bpm_iid));
+		bpm = (BreakpointManager *) ServerObject::GetObjectByID (bpm_iid, SERVER_OBJECT_KIND_BREAKPOINT_MANAGER);
 
 		g_message (G_STRLOC ": create inferior: %d - %p", bpm_iid, bpm);
 
@@ -540,8 +536,6 @@ server_commands (MdbServer *server, int command, int id, guint8 *p, guint8 *end,
 			return ERR_NO_SUCH_BPM;
 
 		inferior = mdb_inferior_new (server, bpm);
-
-		g_hash_table_insert (inferior_hash, GUINT_TO_POINTER (inferior->GetID ()), inferior);
 
 		buffer_add_int (buf, inferior->GetID ());
 		break;
@@ -551,13 +545,9 @@ server_commands (MdbServer *server, int command, int id, guint8 *p, guint8 *end,
 		BreakpointManager *bpm;
 		int iid;
 
-		iid = ++next_unique_id;
 		bpm = new BreakpointManager ();
-		g_hash_table_insert (bpm_hash, GUINT_TO_POINTER (iid), bpm);
 
-		g_message (G_STRLOC ": new bpm: %d - %p", iid, bpm);
-
-		buffer_add_int (buf, iid);
+		buffer_add_int (buf, bpm->GetID ());
 		break;
 	}
 
@@ -567,18 +557,12 @@ server_commands (MdbServer *server, int command, int id, guint8 *p, guint8 *end,
 		int iid;
 
 		filename = decode_string (p, &p, end);
-		g_message (G_STRLOC ": create exe reader - %s", filename);
 
 		reader = server->GetExeReader (filename);
 		if (!reader)
 			return ERR_CANNOT_OPEN_EXE;
 
-		iid = ++next_unique_id;
-		g_hash_table_insert (exe_reader_hash, GUINT_TO_POINTER (iid), reader);
-
-		g_message (G_STRLOC ": exe reader: %s - %d - %p", filename, iid, reader);
-
-		buffer_add_int (buf, iid);
+		buffer_add_int (buf, reader->GetID ());
 		break;
 	}
 
@@ -1053,7 +1037,7 @@ MdbServer::MainLoopIteration (void)
 		int iid;
 
 		iid = decode_int (p, &p, end);
-		inferior = (MdbInferior *) g_hash_table_lookup (inferior_hash, GUINT_TO_POINTER (iid));
+		inferior = (MdbInferior *) ServerObject::GetObjectByID (iid, SERVER_OBJECT_KIND_INFERIOR);
 
 		if (!inferior) {
 			err = ERR_NO_SUCH_INFERIOR;
@@ -1090,7 +1074,7 @@ MdbServer::MainLoopIteration (void)
 		int iid;
 
 		iid = decode_int (p, &p, end);
-		bpm = (BreakpointManager *) g_hash_table_lookup (bpm_hash, GUINT_TO_POINTER (iid));
+		bpm = (BreakpointManager *) ServerObject::GetObjectByID (iid, SERVER_OBJECT_KIND_BREAKPOINT_MANAGER);
 
 		if (!bpm) {
 			err = ERR_NO_SUCH_BPM;
@@ -1106,7 +1090,7 @@ MdbServer::MainLoopIteration (void)
 		int iid;
 
 		iid = decode_int (p, &p, end);
-		reader = (MdbExeReader *) g_hash_table_lookup (exe_reader_hash, GUINT_TO_POINTER (iid));
+		reader = (MdbExeReader *) ServerObject::GetObjectByID (iid, SERVER_OBJECT_KIND_EXE_READER);
 
 		if (!reader) {
 			err = ERR_NO_SUCH_EXE_READER;
@@ -1127,9 +1111,9 @@ MdbServer::MainLoopIteration (void)
 #endif
 
 	if (!no_reply) {
-		debugger_mutex_lock (main_mutex);
+		ServerObject::Lock ();
 		send_reply_packet (id, err, &buf);
-		debugger_mutex_unlock (main_mutex);
+		ServerObject::Unlock ();
 	}
 
 	g_free (data);

@@ -28,8 +28,6 @@
 #error "Unknown Architecture."
 #endif
 
-int MdbInferior::next_iid = 0;
-
 class PTraceProcess : public MdbProcess
 {
 public:
@@ -702,7 +700,7 @@ PTraceInferior::HandleLinuxWaitEvent (int status)
 
 		if (stopsig == SIGSTOP) {
 			e = g_new0 (ServerEvent, 1);
-			e->sender_iid = iid;
+			e->sender = this;
 			e->type = SERVER_EVENT_CHILD_INTERRUPTED;
 			return e;
 		}
@@ -710,14 +708,14 @@ PTraceInferior::HandleLinuxWaitEvent (int status)
 		return arch->ChildStopped (stopsig);
 	} else if (WIFEXITED (status)) {
 		e = g_new0 (ServerEvent, 1);
-		e->sender_iid = iid;
+		e->sender = this;
 
 		e->type = SERVER_EVENT_CHILD_EXITED;
 		e->arg = WEXITSTATUS (status);
 		return e;
 	} else if (WIFSIGNALED (status)) {
 		e = g_new0 (ServerEvent, 1);
-		e->sender_iid = iid;
+		e->sender = this;
 
 		if ((WTERMSIG (status) == SIGTRAP) || (WTERMSIG (status) == SIGKILL)) {
 			e->type = SERVER_EVENT_CHILD_EXITED;
@@ -733,7 +731,7 @@ PTraceInferior::HandleLinuxWaitEvent (int status)
 	g_warning (G_STRLOC ": Got unknown waitpid() result: %x", status);
 
 	e = g_new0 (ServerEvent, 1);
-	e->sender_iid = iid;
+	e->sender = this;
 
 	e->type = SERVER_EVENT_UNKNOWN_ERROR;
 	e->arg = status;

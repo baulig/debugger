@@ -182,7 +182,7 @@ X86Arch::ChildStopped (int stopsig)
 		return NULL;
 
 	e = g_new0 (ServerEvent, 1);
-	e->sender_iid = inferior->GetID ();
+	e->sender = inferior;
 	e->type = SERVER_EVENT_CHILD_STOPPED;
 
 	/*

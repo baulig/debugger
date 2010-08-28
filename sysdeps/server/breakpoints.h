@@ -2,6 +2,7 @@
 #define __MONO_DEBUGGER_BREAKPOINTS_H__
 
 #include <glib.h>
+#include <server-object.h>
 
 typedef enum {
 	HARDWARE_BREAKPOINT_NONE = 0,
@@ -81,7 +82,7 @@ private:
 	friend class MdbArch;
 };
 
-class BreakpointManager
+class BreakpointManager : public ServerObject
 {
 public:
 	BreakpointManager (void);

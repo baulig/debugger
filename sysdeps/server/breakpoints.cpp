@@ -27,6 +27,7 @@ BreakpointManager::Initialize (void)
 }
 
 BreakpointManager::BreakpointManager (void)
+	: ServerObject (SERVER_OBJECT_KIND_BREAKPOINT_MANAGER)
 {
 	breakpoints = g_ptr_array_new ();
 	breakpoint_hash = g_hash_table_new (NULL, NULL);

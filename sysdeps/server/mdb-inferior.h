@@ -10,10 +10,9 @@ typedef struct _InferiorRegs InferiorRegs;
 class MdbArch;
 class MdbDisassembler;
 
-class MdbInferior
+class MdbInferior : public ServerObject
 {
 public:
-	int GetID (void) { return iid; }
 	MdbServer *GetServer (void) { return server; }
 	BreakpointManager *GetBreakpointManager (void) { return bpm; }
 	MdbArch *GetArch (void) { return arch; }
@@ -105,8 +104,8 @@ public:
 
 protected:
 	MdbInferior (MdbServer *server, BreakpointManager *bpm)
+		: ServerObject (SERVER_OBJECT_KIND_INFERIOR)
 	{
-		this->iid = ++next_iid;
 		this->server = server;
 		this->process = NULL;
 		this->bpm = bpm;
@@ -117,9 +116,6 @@ protected:
 
 		arch = mdb_arch_new (this);
 	}
-
-	int iid;
-	static int next_iid;
 
 #if defined(__linux__) || defined(__FreeBSD__)
 	int last_signal;

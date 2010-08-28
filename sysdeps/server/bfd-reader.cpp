@@ -11,8 +11,6 @@
 static bool dynlink_breakpoint_handler (MdbInferior *inferior, BreakpointInfo *breakpoint);
 #endif
 
-int MdbExeReader::next_iid = 0;
-
 class BfdReader : public MdbExeReader {
 public:
 	guint64 GetStartAddress (void);
@@ -429,8 +427,8 @@ BfdReader::DynlinkHandler (MdbInferior *inferior)
 				ServerEvent *e = g_new0 (ServerEvent, 1);
 
 				e->type = SERVER_EVENT_DLL_LOADED;
-				e->sender_iid = reader->GetID ();
-				server->ProcessChildEvent (e);
+				e->sender = reader;
+				server->SendEvent (e);
 				g_free (e);
 			}
 		}

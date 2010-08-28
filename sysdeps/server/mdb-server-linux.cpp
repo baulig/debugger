@@ -83,7 +83,7 @@ MdbServer::MainLoop (void)
 
 			e = HandleLinuxWaitEvent ();
 			if (e) {
-				ProcessChildEvent (e);
+				SendEvent (e);
 				g_free (e);
 			}
 		}

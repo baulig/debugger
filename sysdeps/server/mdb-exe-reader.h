@@ -5,25 +5,19 @@
 
 class MdbDisassembler;
 
-class MdbExeReader {
+class MdbExeReader : public ServerObject {
 protected:
 	const char *filename;
-	MdbExeReader (const char *filename)
+	MdbExeReader (const char *filename) : ServerObject (SERVER_OBJECT_KIND_EXE_READER)
 	{
 		this->filename = filename;
-		this->iid = ++next_iid;
 	}
-
-	int iid;
-	static int next_iid;
 
 public:
 	const char *GetFileName (void)
 	{
 		return filename;
 	}
-
-	int GetID (void) { return iid; }
 
 	virtual guint64 GetStartAddress (void) = 0;
 	virtual guint64 LookupSymbol (const char *name) = 0;

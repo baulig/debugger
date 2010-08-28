@@ -79,6 +79,8 @@ server_sources = \
 	$(platform_sources)	\
 	debugger-mutex.c	\
 	debugger-mutex.h	\
+	server-object.cpp	\
+	server-object.h		\
 	breakpoints.cpp		\
 	breakpoints.h		\
 	mdb-inferior.cpp	\

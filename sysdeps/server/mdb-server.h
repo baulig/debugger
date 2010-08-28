@@ -4,6 +4,8 @@
 #include <config.h>
 #include <glib.h>
 
+#include <server-object.h>
+
 typedef enum {
 	ERR_NONE = 0,
 
@@ -86,8 +88,7 @@ typedef enum {
 
 typedef struct {
 	ServerEventType type;
-	guint32 sender_iid;
-	guint32 opt_arg_iid;
+	ServerObject *sender;
 	guint64 arg;
 	guint64 data1;
 	guint64 data2;
@@ -130,7 +131,7 @@ public:
 
 	MdbDisassembler *GetDisassembler (MdbInferior *inferior);
 
-	void ProcessChildEvent (ServerEvent *e);
+	void SendEvent (ServerEvent *e);
 
 protected:
 	MdbExeReader *main_reader;
