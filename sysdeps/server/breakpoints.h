@@ -15,20 +15,26 @@ class BreakpointInfo
 public:
 	BreakpointInfo (gsize address)
 	{
-		refcount = 1;
-		address = address;
-		is_hardware_bpt = FALSE;
-		id = ++next_id;
-		dr_index = -1;
+		this->refcount = 1;
+		this->address = address;
+		this->is_hardware_bpt = false;
+		this->id = ++next_id;
+		this->dr_index = -1;
+		this->type = HARDWARE_BREAKPOINT_NONE;
+		this->runtime_table_slot = -1;
+		this->enabled = false;
 	}
 
 	BreakpointInfo (gsize address, int dr_idx)
 	{
-		refcount = 1;
-		address = address;
-		is_hardware_bpt = TRUE;
-		id = ++next_id;
-		dr_index = dr_idx;
+		this->refcount = 1;
+		this->address = address;
+		this->is_hardware_bpt = true;
+		this->id = ++next_id;
+		this->dr_index = dr_idx;
+		this->type = HARDWARE_BREAKPOINT_NONE;
+		this->runtime_table_slot = -1;
+		this->enabled = false;
 	}
 
 	void Ref ()
