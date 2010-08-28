@@ -11,6 +11,10 @@ typedef enum {
 } HardwareBreakpointType;
 
 class BreakpointManager;
+class BreakpointInfo;
+class MdbInferior;
+
+typedef bool (BreakpointHandler) (MdbInferior *inferior, BreakpointInfo *breakpoint);
 
 class BreakpointInfo
 {
@@ -26,6 +30,8 @@ public:
 		this->type = HARDWARE_BREAKPOINT_NONE;
 		this->runtime_table_slot = -1;
 		this->enabled = false;
+		this->handler = NULL;
+		this->user_data = NULL;
 	}
 
 	BreakpointInfo (BreakpointManager *bpm, gsize address, int dr_idx)
@@ -39,6 +45,8 @@ public:
 		this->type = HARDWARE_BREAKPOINT_NONE;
 		this->runtime_table_slot = -1;
 		this->enabled = false;
+		this->handler = NULL;
+		this->user_data = NULL;
 	}
 
 	void Ref ()
@@ -61,6 +69,9 @@ public:
 	char saved_insn;
 	int runtime_table_slot;
 	gsize address;
+
+	BreakpointHandler *handler;
+	gpointer user_data;
 
 private:
 	int refcount;

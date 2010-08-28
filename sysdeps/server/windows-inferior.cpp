@@ -392,7 +392,7 @@ WindowsInferior::HandleDebugEvent (DEBUG_EVENT *de)
 			char buf [1024];
 			DWORD exc_code;
 
-			if (ReadMemory (GPOINTER_TO_UINT (de->u.LoadDll.lpImageName), 4, &exc_code))
+			if (ReadMemory ((gsize) de->u.LoadDll.lpImageName, 4, &exc_code))
 				break;
 
 			if (!exc_code)

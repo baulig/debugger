@@ -92,3 +92,23 @@ MdbInferior::DisassembleInstruction (guint64 address, guint32 *out_insn_size)
 
 	return disassembler->DisassembleInstruction (address, out_insn_size);
 }
+
+gchar *
+MdbInferior::ReadString (guint64 address)
+{
+	char buffer [BUFSIZ + 1];
+	int pos = 0;
+
+	while (pos < BUFSIZ) {
+		gsize word;
+
+		if (PeekWord (address + pos, &word))
+			return NULL;
+
+		buffer [pos++] = (char) word;
+		if ((word & 0x00FF) == 0)
+			break;
+	}
+	buffer [pos] = (char) 0;
+	return g_strdup (buffer);
+}

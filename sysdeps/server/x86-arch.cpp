@@ -172,6 +172,7 @@ X86Arch::ChildStopped (int stopsig)
 {
 	CodeBufferData *cbuffer = NULL;
 	CallbackData *cdata;
+	BreakpointInfo *breakpoint;
 	bool is_callback;
 	ServerEvent *e;
 	gsize code;
@@ -335,10 +336,19 @@ X86Arch::ChildStopped (int stopsig)
 		}
 	}
 
-	if (CheckBreakpoint ((gsize) INFERIOR_REG_RIP (current_regs) - 1, &e->arg)) {
+	breakpoint = inferior->GetBreakpointManager()->Lookup (INFERIOR_REG_RIP (current_regs) - 1);
+	if (breakpoint && breakpoint->enabled) {
+		if (breakpoint->handler && breakpoint->handler (inferior, breakpoint)) {
+			if (!inferior->Resume ()) {
+				g_free (e);
+				return NULL;
+			}
+		}
+
 		INFERIOR_REG_RIP (current_regs)--;
 		SetRegisters ();
 		e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
+		e->arg = breakpoint->id;
 		return e;
 	}
 

@@ -3,10 +3,15 @@
 #include <string.h>
 #include <bfd.h>
 #include <dis-asm.h>
+
 #if defined(__linux__) || defined(__FreeBSD__)
 #include <link.h>
 #include <elf.h>
+
+static bool dynlink_breakpoint_handler (MdbInferior *inferior, BreakpointInfo *breakpoint);
 #endif
+
+int MdbExeReader::next_iid = 0;
 
 class BfdReader : public MdbExeReader {
 public:
@@ -51,6 +56,11 @@ private:
 	BfdReader (const char *filename);
 	asection *FindSection (const char *name);
 	~BfdReader (void);
+
+#if defined(__linux__) || defined(__FreeBSD__)
+	void DynlinkHandler (MdbInferior *inferior);
+	friend bool dynlink_breakpoint_handler (MdbInferior *inferior, BreakpointInfo *breakpoint);
+#endif
 
 	friend MdbExeReader *mdb_server_create_exe_reader (const char *filename);
 
@@ -382,6 +392,62 @@ BfdDisassembler::DisassembleInstruction (guint64 address, guint32 *out_insn_size
 	return g_strdup (this->disasm_buffer);
 }
 
+#if defined(__linux__) || defined(__FreeBSD__)
+
+void
+BfdReader::DynlinkHandler (MdbInferior *inferior)
+{
+	MdbServer *server = inferior->GetServer ();
+	struct r_debug rdebug;
+	gsize map_addr;
+
+	if (inferior->ReadMemory (dynamic_info, sizeof (rdebug), &rdebug))
+		return;
+
+	if (rdebug.r_state != 0) // RT_CONSISTENT
+		return;
+
+	map_addr = (gsize) rdebug.r_map;
+	while (map_addr) {
+		struct link_map map;
+		gchar *file;
+
+		if (inferior->ReadMemory (map_addr, sizeof (link_map), &map))
+			return;
+
+		map_addr = (gsize) map.l_next;
+
+		if (!map.l_name)
+			continue;
+
+		file = inferior->ReadString ((gsize) map.l_name);
+		if (file && *file) {
+			MdbExeReader *reader;
+
+			reader = server->GetExeReader (file);
+			if (reader) {
+				ServerEvent *e = g_new0 (ServerEvent, 1);
+
+				e->type = SERVER_EVENT_DLL_LOADED;
+				e->sender_iid = reader->GetID ();
+				server->ProcessChildEvent (e);
+				g_free (e);
+			}
+		}
+		g_free (file);
+	}
+}
+
+static bool
+dynlink_breakpoint_handler (MdbInferior *inferior, BreakpointInfo *breakpoint)
+{
+	BfdReader *reader = (BfdReader *) breakpoint->user_data;
+	reader->DynlinkHandler (inferior);
+	return true;
+}
+
+#endif
+
 void
 BfdReader::ReadDynamicInfo (MdbInferior *inferior)
 {
@@ -391,16 +457,12 @@ BfdReader::ReadDynamicInfo (MdbInferior *inferior)
 	struct r_debug rdebug;
 	int size;
 
-	g_message (G_STRLOC ": ReadDynamicInfo()");
-
 	section = FindSection (".dynamic");
 	if (!section)
 		return;
 
 	size = bfd_get_section_size (section);
 	contents = (guint8 *) g_malloc0 (size);
-
-	g_message (G_STRLOC ": %Lx - %d", section->vma, size);
 
 	if (inferior->ReadMemory (section->vma, size, contents)) {
 		g_free (contents);
@@ -433,24 +495,20 @@ BfdReader::ReadDynamicInfo (MdbInferior *inferior)
 
 	g_free (contents);
 
-	g_message (G_STRLOC ": dynamic info: %Lx", dynamic_info);
-
 	if (!dynamic_info)
 		return;
 
 	if (inferior->ReadMemory (dynamic_info, sizeof (rdebug), &rdebug))
 		return;
 
-	g_message (G_STRLOC);
-
 	if (rdebug.r_version != 1)
 		return;
-
-	g_message (G_STRLOC ": %Lx", rdebug.r_brk);
 
 	if (inferior->InsertBreakpoint (rdebug.r_brk, &dynlink_bpt))
 		return;
 
+	dynlink_bpt->handler = dynlink_breakpoint_handler;
+	dynlink_bpt->user_data = this;
 	has_dynlink_info = true;
 #endif
 }

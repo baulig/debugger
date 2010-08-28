@@ -11,13 +11,19 @@ protected:
 	MdbExeReader (const char *filename)
 	{
 		this->filename = filename;
+		this->iid = ++next_iid;
 	}
+
+	int iid;
+	static int next_iid;
 
 public:
 	const char *GetFileName (void)
 	{
 		return filename;
 	}
+
+	int GetID (void) { return iid; }
 
 	virtual guint64 GetStartAddress (void) = 0;
 	virtual guint64 LookupSymbol (const char *name) = 0;

@@ -77,6 +77,8 @@ public:
 		return WriteMemory (address, sizeof (gsize), &word);
 	}
 
+	gchar *ReadString (guint64 address);
+
 	virtual ErrorCode GetPendingSignal (guint32 *out_signo) = 0;
 
 	virtual ErrorCode SetSignal (guint32 signo, gboolean send_it) = 0;

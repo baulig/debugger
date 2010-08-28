@@ -35,8 +35,6 @@ protected:
 
 	MdbInferior *inferior;
 	BreakpointManager *hw_bpm;
-
-	gboolean CheckBreakpoint (guint64 address, guint64 *retval);
 };
 
 extern MdbArch *mdb_arch_new (MdbInferior *inferior);
