@@ -77,7 +77,7 @@ namespace Mono.Debugger.Server
 			WRITE_MEMORY = 15,
 			GET_PENDING_SIGNAL = 16,
 			SET_SIGNAL = 17,
-			GET_DYNAMIC_INFO = 18,
+			INIT_AT_ENTRYPOINT = 18,
 			DISASSEMBLE_INSN
 		}
 
@@ -694,9 +694,9 @@ namespace Mono.Debugger.Server
 			return reader.ReadData (size);
 		}
 
-		public long BfdGetDynamicInfo (int inferior_iid, int bfd_iid)
+		public void InitializeAtEntryPoint (int inferior_iid)
 		{
-			return SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_DYNAMIC_INFO, new PacketWriter ().WriteInt (inferior_iid).WriteInt (bfd_iid)).ReadLong ();
+			SendReceive (CommandSet.INFERIOR, (int)CmdInferior.INIT_AT_ENTRYPOINT, new PacketWriter ().WriteInt (inferior_iid));
 		}
 
 		public DebuggerServer.SignalInfo GetSignalInfo (int iid)

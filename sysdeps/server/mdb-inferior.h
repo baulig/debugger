@@ -2,6 +2,7 @@
 #define __MDB_INFERIOR_H__
 
 #include <mdb-server.h>
+#include <mdb-process.h>
 #include <breakpoints.h>
 
 typedef struct _InferiorRegs InferiorRegs;
@@ -16,6 +17,7 @@ public:
 	MdbServer *GetServer (void) { return server; }
 	BreakpointManager *GetBreakpointManager (void) { return bpm; }
 	MdbArch *GetArch (void) { return arch; }
+	MdbProcess *GetProcess (void) { return process; }
 
 	static void Initialize (void);
 
@@ -101,8 +103,9 @@ protected:
 	MdbInferior (MdbServer *server, BreakpointManager *bpm)
 	{
 		this->iid = ++next_iid;
-		this->bpm = bpm;
 		this->server = server;
+		this->process = NULL;
+		this->bpm = bpm;
 
 		last_signal = 0;
 
@@ -121,6 +124,7 @@ protected:
 	BreakpointManager *bpm;
 
 	MdbServer *server;
+	MdbProcess *process;
 	MdbArch *arch;
 
 	MdbDisassembler *disassembler;

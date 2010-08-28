@@ -87,7 +87,7 @@ typedef enum {
 	CMD_INFERIOR_WRITE_MEMORY = 15,
 	CMD_INFERIOR_GET_PENDING_SIGNAL = 16,
 	CMD_INFERIOR_SET_SIGNAL = 17,
-	CMD_INFERIOR_GET_DYNAMIC_INFO = 18,
+	CMD_INFERIOR_INIT_AT_ENTRYPOINT = 18,
 	CMD_INFERIOR_DISASSEMBLE_INSN = 19
 } CmdInferior;
 
@@ -802,8 +802,9 @@ inferior_commands (int command, int id, MdbInferior *inferior, guint8 *p, guint8
 		break;
 	}
 
-	case CMD_INFERIOR_GET_DYNAMIC_INFO:
-		return ERR_NOT_IMPLEMENTED;
+	case CMD_INFERIOR_INIT_AT_ENTRYPOINT:
+		inferior->GetProcess ()->Initialize ();
+		break;
 
 	case CMD_INFERIOR_DISASSEMBLE_INSN: {
 		guint64 address;

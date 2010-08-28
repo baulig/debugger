@@ -366,10 +366,10 @@ namespace Mono.Debugger.Server
 			throw new NotImplementedException ();
 		}
 
-		internal long ReadDynamicInfo (Inferior inferior, int bfd_iid)
+		internal override void InitializeAtEntryPoint (Inferior inferior)
 		{
 			var handle = (RemoteInferior) inferior.InferiorHandle;
-			return connection.BfdGetDynamicInfo (handle.IID, bfd_iid);
+			connection.InitializeAtEntryPoint (handle.IID);
 		}
 
 		public string DisassembleInsn (Inferior inferior, long address, out int insn_size)

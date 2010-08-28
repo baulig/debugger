@@ -2990,7 +2990,8 @@ namespace Mono.Debugger.Backend
 				return EventResult.Running;
 			}
 
-			sse.Process.OperatingSystem.UpdateSharedLibraries (inferior);
+			sse.ThreadManager.DebuggerServer.InitializeAtEntryPoint (inferior);
+
 			sse.Process.InitializeThreads (inferior, !sse.Process.IsAttached);
 
 			if (sse.Process.IsAttached)

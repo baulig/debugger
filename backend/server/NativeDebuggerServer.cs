@@ -805,6 +805,9 @@ namespace Mono.Debugger.Server
 			handle.Handle = IntPtr.Zero;
 		}
 
+		internal override void InitializeAtEntryPoint (Inferior inferior)
+		{ }
+
 		protected override void DoDispose ()
 		{
 		}

@@ -1,4 +1,5 @@
 #include <mdb-inferior.h>
+#include <mdb-process.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -29,12 +30,28 @@
 
 int MdbInferior::next_iid = 0;
 
+class PTraceProcess : public MdbProcess
+{
+public:
+	PTraceProcess (MdbInferior *inferior, int pid) : MdbProcess (inferior)
+	{
+		this->pid = pid;
+	}
+
+	bool Initialize ();
+
+private:
+	int pid;
+};
+
 class PTraceInferior : public MdbInferior
 {
 public:
 	PTraceInferior (MdbServer *server, BreakpointManager *bpm)
 		: MdbInferior (server, bpm)
-	{ }
+	{
+		pid = -1;
+	}
 
 	//
 	// MdbInferior
@@ -215,7 +232,12 @@ PTraceInferior::Spawn (const gchar *working_directory, const gchar **argv, const
 	if (!WaitForNewThread ())
 		return ERR_INTERNAL_ERROR;
 
-	return SetupInferior ();
+	result = SetupInferior ();
+	if (result)
+		return result;
+
+	process = new PTraceProcess (this, pid);
+	return ERR_NONE;
 }
 
 ErrorCode
@@ -716,4 +738,28 @@ PTraceInferior::HandleLinuxWaitEvent (int status)
 	e->type = SERVER_EVENT_UNKNOWN_ERROR;
 	e->arg = status;
 	return e;
+}
+
+bool
+PTraceProcess::Initialize ()
+{
+	gchar *exe_filename = g_strdup_printf ("/proc/%d/exe", pid);
+	char buffer [BUFSIZ+1];
+	gsize len;
+
+	len = readlink (exe_filename, buffer, BUFSIZ);
+	if (len < 0) {
+		g_free (exe_filename);
+		return false;
+	}
+
+	buffer [len] = 0;
+
+	main_reader = inferior->GetServer ()->GetExeReader (buffer);
+	if (!main_reader)
+		return false;
+
+	main_reader->ReadDynamicInfo (inferior);
+
+	return true;
 }

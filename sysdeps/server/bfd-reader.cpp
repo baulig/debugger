@@ -3,6 +3,10 @@
 #include <string.h>
 #include <bfd.h>
 #include <dis-asm.h>
+#if defined(__linux__) || defined(__FreeBSD__)
+#include <link.h>
+#include <elf.h>
+#endif
 
 class BfdReader : public MdbExeReader {
 public:
@@ -13,6 +17,8 @@ public:
 	guint64 GetSectionAddress (const char *name);
 	gpointer GetSectionContents (const char *name, guint32 *out_size);
 	const char *LookupSymbol (guint64 address);
+
+	void ReadDynamicInfo (MdbInferior *inferior);
 
 	MdbDisassembler *GetDisassembler (MdbInferior *inferior);
 
@@ -47,6 +53,10 @@ private:
 	~BfdReader (void);
 
 	friend MdbExeReader *mdb_server_create_exe_reader (const char *filename);
+
+	gsize dynamic_info;
+	bool has_dynlink_info;
+	guint32 dynlink_bpt;
 };
 
 #define DISASM_BUFSIZE 1024
@@ -74,22 +84,29 @@ private:
 BfdReader::BfdReader (const char *filename)
 	: MdbExeReader (filename)
 {
-	this->bfd_handle = bfd_openr (filename, NULL);
-	if (!this->bfd_handle)
+	symtab_size = 0;
+	num_symbols = 0;
+	symtab = NULL;
+
+	dynamic_info = 0;
+	has_dynlink_info = false;
+
+	bfd_handle = bfd_openr (filename, NULL);
+	if (!bfd_handle)
 		return;
 
-	if (!bfd_check_format (this->bfd_handle, bfd_object) && !bfd_check_format (this->bfd_handle, bfd_archive)) {
+	if (!bfd_check_format (bfd_handle, bfd_object) && !bfd_check_format (bfd_handle, bfd_archive)) {
 		g_warning (G_STRLOC ": Invalid bfd format: %s", filename);
-		bfd_close (this->bfd_handle);
-		this->bfd_handle = NULL;
+		bfd_close (bfd_handle);
+		bfd_handle = NULL;
 		return;
 	}
 
-	this->symtab_size = bfd_get_symtab_upper_bound (this->bfd_handle);
+	symtab_size = bfd_get_symtab_upper_bound (bfd_handle);
 
-	if (this->symtab_size) {
-		this->symtab = (asymbol **) g_malloc0 (this->symtab_size);
-		this->num_symbols = bfd_canonicalize_symtab (this->bfd_handle, this->symtab);
+	if (symtab_size) {
+		symtab = (asymbol **) g_malloc0 (symtab_size);
+		num_symbols = bfd_canonicalize_symtab (bfd_handle, symtab);
 	}
 }
 
@@ -364,3 +381,75 @@ BfdDisassembler::DisassembleInstruction (guint64 address, guint32 *out_insn_size
 	return g_strdup (this->disasm_buffer);
 }
 
+void
+BfdReader::ReadDynamicInfo (MdbInferior *inferior)
+{
+#if defined(__linux__) || defined(__FreeBSD__)
+	asection *section;
+	guint8 *contents, *ptr;
+	struct r_debug rdebug;
+	int size;
+
+	g_message (G_STRLOC ": ReadDynamicInfo()");
+
+	section = FindSection (".dynamic");
+	if (!section)
+		return;
+
+	size = bfd_get_section_size (section);
+	contents = (guint8 *) g_malloc0 (size);
+
+	g_message (G_STRLOC ": %Lx - %d", section->vma, size);
+
+	if (inferior->ReadMemory (section->vma, size, contents)) {
+		g_free (contents);
+		return;
+	}
+
+#if defined(__i386__)
+	for (ptr = contents; ptr < contents + size; ptr += sizeof (Elf32_Dyn)) {
+		Elf32_Dyn *dyn = (Elf32_Dyn *) ptr;
+
+		if (dyn->d_tag == DT_NULL)
+			break;
+		else if (dyn->d_tag == DT_DEBUG) {
+			dynamic_info = dyn->d_un.d_ptr;
+			break;
+		}
+	}
+#elif defined(__x86_64__)
+	for (ptr = contents; ptr < contents + size; ptr += sizeof (Elf64_Dyn)) {
+		Elf64_Dyn *dyn = (Elf64_Dyn *) ptr;
+
+		if (dyn->d_tag == DT_NULL)
+			break;
+		else if (dyn->d_tag == DT_DEBUG) {
+			dynamic_info = dyn->d_un.d_ptr;
+			break;
+		}
+	}
+#endif
+
+	g_free (contents);
+
+	g_message (G_STRLOC ": dynamic info: %Lx", dynamic_info);
+
+	if (!dynamic_info)
+		return;
+
+	if (inferior->ReadMemory (dynamic_info, sizeof (rdebug), &rdebug))
+		return;
+
+	g_message (G_STRLOC);
+
+	if (rdebug.r_version != 1)
+		return;
+
+	g_message (G_STRLOC ": %Lx", rdebug.r_brk);
+
+	if (inferior->InsertBreakpoint (rdebug.r_brk, &dynlink_bpt))
+		return;
+
+	has_dynlink_info = true;
+#endif
+}

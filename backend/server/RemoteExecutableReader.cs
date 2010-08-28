@@ -170,8 +170,7 @@ namespace Mono.Debugger.Server
 
 		internal override TargetAddress ReadDynamicInfo (Inferior inferior)
 		{
-			var addr = server.ReadDynamicInfo (inferior, iid);
-			return create_address (addr);
+			throw new InvalidOperationException ();
 		}
 
 		public override void ReadDebuggingInfo ()

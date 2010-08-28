@@ -28,6 +28,8 @@ public:
 	virtual const char *LookupSymbol (guint64 address) = 0;
 
 	virtual MdbDisassembler *GetDisassembler (MdbInferior *inferior) = 0;
+
+	virtual void ReadDynamicInfo (MdbInferior *inferior) = 0;
 };
 
 class MdbDisassembler

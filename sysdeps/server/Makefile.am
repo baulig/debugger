@@ -84,7 +84,8 @@ server_sources = \
 	mdb-inferior.cpp	\
 	mdb-inferior.h		\
 	mdb-arch.cpp		\
-	mdb-arch.h
+	mdb-arch.h		\
+	mdb-process.h
 
 server_cppflags = \
 	-I$(top_srcdir)/sysdeps/bfd \

@@ -308,6 +308,8 @@ namespace Mono.Debugger.Server
 
 		public abstract void FinalizeMonoRuntime (MonoRuntimeHandle runtime);
 
+		internal abstract void InitializeAtEntryPoint (Inferior inferior);
+
 		//
 		// IDisposable
 		//
