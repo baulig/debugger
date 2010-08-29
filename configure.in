@@ -439,6 +439,7 @@ backend/arch/Makefile
 backend/mono/Makefile
 backend/os/Makefile
 backend/server/Makefile
+backend/mdb-server/Makefile
 symbolwriter/Makefile
 languages/Makefile
 languages/mono/Makefile

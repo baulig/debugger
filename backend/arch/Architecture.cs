@@ -1,5 +1,6 @@
 using System;
 using Mono.Debugger.Server;
+using Mono.Debugger.MdbServer;
 using Mono.Debugger.Backend;
 using Mono.Debugger.Architectures;
 

@@ -15,8 +15,9 @@ using System.Runtime.Remoting.Messaging;
 
 using Mono.Debugger.Languages;
 using Mono.Debugger.Backend;
+using Mono.Debugger.Server;
 
-namespace Mono.Debugger.Server
+namespace Mono.Debugger.MdbServer
 {
 	internal class RemoteThreadManager : ThreadManager
 	{

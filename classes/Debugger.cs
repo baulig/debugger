@@ -13,6 +13,7 @@ using System.Runtime.Remoting;
 
 using Mono.Debugger.Backend;
 using Mono.Debugger.Server;
+using Mono.Debugger.MdbServer;
 using Mono.Debugger.Languages;
 using Mono.Debugger.Languages.Mono;
 

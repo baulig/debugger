@@ -73,6 +73,7 @@ DEBUGGER_SRCLIST = \
 	$(top_srcdir)/backend/os/*.cs			\
 	$(top_srcdir)/backend/mono/*.cs			\
 	$(top_srcdir)/backend/server/*.cs		\
+	$(top_srcdir)/backend/mdb-server/*.cs		\
 	$(top_srcdir)/backend/*.cs			\
 	$(top_srcdir)/languages/*.cs			\
 	$(top_srcdir)/languages/mono/*.cs		\

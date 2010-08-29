@@ -468,6 +468,7 @@ Connection::SendEvent (ServerEvent *e)
 		buf->AddInt (e->sender->GetID ());
 	} else {
 		buf->AddByte (0);
+		buf->AddInt (0);
 	}
 	buf->AddByte (e->type);
 	buf->AddLong (e->arg);

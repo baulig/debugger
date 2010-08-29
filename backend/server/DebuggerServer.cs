@@ -13,7 +13,7 @@ namespace Mono.Debugger.Server
 {
 	internal abstract class DebuggerServer : DebuggerMarshalByRefObject, IDisposable
 	{
-		internal abstract class InferiorHandle
+		internal interface InferiorHandle
 		{ }
 
 		public abstract ThreadManager ThreadManager {

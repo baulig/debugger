@@ -63,7 +63,7 @@ class MdbInferior;
 class MdbExeReader;
 class MdbDisassembler;
 
-class MdbServer
+class MdbServer : public ServerObject
 {
 public:
 	static gboolean Initialize (void);
@@ -94,7 +94,7 @@ protected:
 private:
 	Connection *connection;
 
-	MdbServer (Connection *connection)
+	MdbServer (Connection *connection) : ServerObject (SERVER_OBJECT_KIND_SERVER)
 	{
 		this->connection = connection;
 		exe_file_hash = g_hash_table_new (NULL, NULL);

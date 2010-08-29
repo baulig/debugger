@@ -10,29 +10,29 @@ using System.Collections.Specialized;
 using System.Runtime.InteropServices;
 
 using Mono.Debugger.Backend;
+using Mono.Debugger.Server;
 
-namespace Mono.Debugger.Server
+namespace Mono.Debugger.MdbServer
 {
 	internal class RemoteDebuggerServer : DebuggerServer
 	{
 		Connection connection;
+		MdbServer server;
 		RemoteThreadManager manager;
 		ServerCapabilities capabilities;
 		ServerType server_type;
 		ArchTypeEnum arch_type;
 
-		Dictionary<int,SingleSteppingEngine> sse_hash = new Dictionary<int,SingleSteppingEngine> ();
-
 		public RemoteDebuggerServer (Debugger debugger, IPEndPoint endpoint)
 		{
 			manager = new RemoteThreadManager (debugger, this);
 
-			connection = new Connection (handle_event);
-			connection.Connect (endpoint);
+			connection = new Connection ();
+			server = connection.Connect (endpoint);
 
-			server_type = connection.GetServerType ();
-			capabilities = connection.GetCapabilities ();
-			arch_type = connection.GetArchType ();
+			server_type = server.GetServerType ();
+			capabilities = server.GetCapabilities ();
+			arch_type = server.GetArchType ();
 		}
 
 		public override ServerType Type {
@@ -47,6 +47,7 @@ namespace Mono.Debugger.Server
 			get { return arch_type; }
 		}
 
+#if FIXME
 		void handle_event (Connection.EventInfo e)
 		{
 			SingleSteppingEngine sse = null;
@@ -68,19 +69,14 @@ namespace Mono.Debugger.Server
 				throw new InternalError ();
 			}
 		}
+#endif
 
 		internal Connection Connection {
 			get { return connection; }
 		}
 
-		class RemoteInferior : InferiorHandle
-		{
-			public readonly int IID;
-
-			public RemoteInferior (int iid)
-			{
-				this.IID = iid;
-			}
+		internal MdbServer Server {
+			get { return server; }
 		}
 
 		public override ThreadManager ThreadManager {
@@ -96,10 +92,7 @@ namespace Mono.Debugger.Server
 							       BreakpointManager breakpoint_manager)
 		{
 			var bpm = (RemoteBreakpointManager) breakpoint_manager;
-			int iid = connection.CreateInferior (bpm.IID);
-			sse_hash.Add (iid, sse);
-			Console.WriteLine ("CREATE INFERIOR: {0}", iid);
-			return new RemoteInferior (iid);
+			return server.CreateInferior (bpm.MdbBreakpointManager);
 		}
 
 		public override ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,
@@ -112,7 +105,7 @@ namespace Mono.Debugger.Server
 
 		public override void InitializeProcess (InferiorHandle inferior)
 		{
-			connection.InitializeProcess (((RemoteInferior) inferior).IID);
+			((MdbInferior) inferior).InitializeProcess ();
 		}
 
 		public override TargetError InitializeThread (InferiorHandle inferior, int child_pid, bool wait)
@@ -123,7 +116,7 @@ namespace Mono.Debugger.Server
 		public override int Spawn (InferiorHandle inferior, string working_dir, string[] argv, string[] envp,
 					   bool redirect_fds, ChildOutputHandler output_handler)
 		{
-			return connection.Spawn (((RemoteInferior) inferior).IID, working_dir, argv);
+			return ((MdbInferior) inferior).Spawn (working_dir, argv);
 		}
 
 		public override TargetError Attach (InferiorHandle inferior, int child_pid)
@@ -133,7 +126,7 @@ namespace Mono.Debugger.Server
 
 		public override ServerStackFrame GetFrame (InferiorHandle inferior)
 		{
-			return connection.GetFrame (((RemoteInferior) inferior).IID);
+			return ((MdbInferior) inferior).GetFrame ();
 		}
 
 		public override TargetError CurrentInsnIsBpt (InferiorHandle inferior, out int is_breakpoint)
@@ -143,17 +136,17 @@ namespace Mono.Debugger.Server
 
 		public override void Step (InferiorHandle inferior)
 		{
-			connection.Step (((RemoteInferior) inferior).IID);
+			((MdbInferior) inferior).Step ();
 		}
 
 		public override void Continue (InferiorHandle inferior)
 		{
-			connection.Continue (((RemoteInferior) inferior).IID);
+			((MdbInferior) inferior).Continue ();
 		}
 
 		public override void Resume (InferiorHandle inferior)
 		{
-			connection.Resume (((RemoteInferior) inferior).IID);
+			((MdbInferior) inferior).Resume ();
 		}
 
 		public override TargetError Detach (InferiorHandle inferior)
@@ -163,25 +156,25 @@ namespace Mono.Debugger.Server
 
 		public override TargetError Finalize (InferiorHandle inferior)
 		{
-			connection.Close ();
+			((MdbInferior) inferior).Dispose ();
 			connection = null;
 			return TargetError.None;
 		}
 
 		public override byte[] ReadMemory (InferiorHandle inferior, long address, int size)
 		{
-			return connection.ReadMemory (((RemoteInferior) inferior).IID, address, size);
+			return ((MdbInferior) inferior).ReadMemory (address, size);
 		}
 
 		public override void WriteMemory (InferiorHandle inferior, long start, byte[] buffer)
 		{
-			connection.WriteMemory (((RemoteInferior) inferior).IID, start, buffer);
+			((MdbInferior) inferior).WriteMemory (start, buffer);
 		}
 
 		public override TargetInfo GetTargetInfo ()
 		{
 			check_disposed ();
-			return connection.GetTargetInfo ();
+			return server.GetTargetInfo ();
 		}
 
 		public override TargetError CallMethod (InferiorHandle inferior, long method_address, long arg1, long arg2,
@@ -231,7 +224,7 @@ namespace Mono.Debugger.Server
 
 		public override int InsertBreakpoint (InferiorHandle inferior, long address)
 		{
-			return connection.InsertBreakpoint (((RemoteInferior) inferior).IID, address);
+			return ((MdbInferior) inferior).InsertBreakpoint (address);
 		}
 
 		public override TargetError InsertHardwareBreakpoint (InferiorHandle inferior, HardwareBreakpointType type,
@@ -244,22 +237,22 @@ namespace Mono.Debugger.Server
 
 		public override void RemoveBreakpoint (InferiorHandle inferior, int breakpoint)
 		{
-			connection.RemoveBreakpoint (((RemoteInferior) inferior).IID, breakpoint);
+			((MdbInferior) inferior).RemoveBreakpoint (breakpoint);
 		}
 
 		public override void EnableBreakpoint (InferiorHandle inferior, int breakpoint)
 		{
-			connection.EnableBreakpoint (((RemoteInferior) inferior).IID, breakpoint);
+			((MdbInferior) inferior).EnableBreakpoint (breakpoint);
 		}
 
 		public override void DisableBreakpoint (InferiorHandle inferior, int breakpoint)
 		{
-			connection.DisableBreakpoint (((RemoteInferior) inferior).IID, breakpoint);
+			((MdbInferior) inferior).DisableBreakpoint (breakpoint);
 		}
 
 		public override long[] GetRegisters (InferiorHandle inferior)
 		{
-			return connection.GetRegisters (((RemoteInferior) inferior).IID);
+			return ((MdbInferior) inferior).GetRegisters ();
 		}
 
 		public override TargetError SetRegisters (InferiorHandle inferior, long[] registers)
@@ -279,12 +272,12 @@ namespace Mono.Debugger.Server
 
 		public override void SetSignal (InferiorHandle inferior, int signal, bool send_it)
 		{
-			connection.SetSignal (((RemoteInferior) inferior).IID, signal, send_it);
+			((MdbInferior) inferior).SetSignal (signal, send_it);
 		}
 
 		public override int GetPendingSignal (InferiorHandle inferior)
 		{
-			return connection.GetPendingSignal (((RemoteInferior) inferior).IID);
+			return ((MdbInferior) inferior).GetPendingSignal ();
 		}
 
 		public override TargetError Kill (InferiorHandle inferior)
@@ -300,7 +293,7 @@ namespace Mono.Debugger.Server
 
 		public override SignalInfo GetSignalInfo (InferiorHandle inferior)
 		{
-			return connection.GetSignalInfo (((RemoteInferior) inferior).IID);
+			return ((MdbInferior) inferior).GetSignalInfo ();
 		}
 
 		public override TargetError GetThreads (InferiorHandle inferior, out int[] threads)
@@ -311,7 +304,7 @@ namespace Mono.Debugger.Server
 		public override string GetApplication (InferiorHandle inferior, out string cwd,
 						       out string[] cmdline_args)
 		{
-			return connection.GetApplication (((RemoteInferior) inferior).IID, out cwd, out cmdline_args);
+			return ((MdbInferior) inferior).GetApplication (out cwd, out cmdline_args);
 		}
 
 		public override TargetError DetachAfterFork (InferiorHandle inferior)
@@ -368,14 +361,14 @@ namespace Mono.Debugger.Server
 
 		internal override void InitializeAtEntryPoint (Inferior inferior)
 		{
-			var handle = (RemoteInferior) inferior.InferiorHandle;
-			connection.InitializeAtEntryPoint (handle.IID);
+			var handle = (MdbInferior) inferior.InferiorHandle;
+			handle.InitializeAtEntryPoint ();
 		}
 
 		public string DisassembleInsn (Inferior inferior, long address, out int insn_size)
 		{
-			var handle = (RemoteInferior) inferior.InferiorHandle;
-			return connection.DisassembleInsn (handle.IID, address, out insn_size);
+			var handle = (MdbInferior) inferior.InferiorHandle;
+			return handle.DisassembleInsn (address, out insn_size);
 		}
 
 		public Disassembler GetDisassembler ()
@@ -414,4 +407,3 @@ namespace Mono.Debugger.Server
 		}
 	}
 }
-

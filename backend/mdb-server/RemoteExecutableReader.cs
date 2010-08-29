@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 using Mono.Debugger.Backend;
 using Mono.Debugger.Languages;
 
-namespace Mono.Debugger.Server
+namespace Mono.Debugger.MdbServer
 {
 	internal class RemoteExecutableReader : ExecutableReader
 	{
@@ -20,7 +20,8 @@ namespace Mono.Debugger.Server
 		string target_name;
 		Module module;
 		string file;
-		int iid;
+
+		MdbExeReader reader;
 
 		DebuggingFileReader debug_info;
 		RemoteSymbolFile symfile;
@@ -43,8 +44,8 @@ namespace Mono.Debugger.Server
 			this.server = server;
 			this.file = file;
 
-			iid = server.Connection.CreateExeReader (file);
-			target_name = server.Connection.BfdGetTargetName (iid);
+			reader = server.Server.CreateExeReader (file);
+			target_name = reader.BfdGetTargetName ();
 
 			if (DwarfReader.IsSupported (this))
 				dwarf_supported = true;
@@ -128,7 +129,7 @@ namespace Mono.Debugger.Server
 		public override TargetAddress LookupSymbol (string name)
 		{
 			Console.WriteLine ("LOOKUP SYMBOL: {0}", name);
-			var addr = server.Connection.BfdLookupSymbol (iid, name);
+			var addr = reader.BfdLookupSymbol (name);
 			Console.WriteLine ("LOOKUP SYMBOL #1: {0:x}", addr);
 			return create_address (addr);
 		}
@@ -136,7 +137,7 @@ namespace Mono.Debugger.Server
 		public override TargetAddress LookupLocalSymbol (string name)
 		{
 			Console.WriteLine ("LOOKUP LOCAL SYMBOL: {0}", name);
-			var addr = server.Connection.BfdLookupSymbol (iid, name);
+			var addr = reader.BfdLookupSymbol (name);
 			Console.WriteLine ("LOOKUP LOCAL SYMBOL #1: {0:x}", addr);
 			return create_address (addr);
 		}
@@ -144,25 +145,25 @@ namespace Mono.Debugger.Server
 		public override bool HasSection (string name)
 		{
 			Console.WriteLine ("HAS SECTION: {0}", name);
-			return server.Connection.BfdHasSection (iid, name);
+			return reader.BfdHasSection (name);
 		}
 
 		public override TargetAddress GetSectionAddress (string name)
 		{
 			Console.WriteLine ("GET SECTION ADDRESS: {0}", name);
-			var addr = server.Connection.BfdGetSectionAddress (iid, name);
+			var addr = reader.BfdGetSectionAddress (name);
 			return create_address (addr);
 		}
 
 		public override byte[] GetSectionContents (string name)
 		{
 			Console.WriteLine ("GET SECTION READER: {0}", name);
-			return server.Connection.BfdGetSectionContents (iid, name);
+			return reader.BfdGetSectionContents (name);
 		}
 
 		public override TargetAddress EntryPoint {
 			get {
-				var addr = server.Connection.BfdGetStartAddress (iid);
+				var addr = reader.BfdGetStartAddress ();
 				Console.WriteLine ("ENTRY POINT: {0:x}", addr);
 				return create_address (addr);
 			}
