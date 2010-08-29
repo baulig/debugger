@@ -9,6 +9,7 @@ typedef struct _InferiorRegs InferiorRegs;
 
 class MdbArch;
 class MdbDisassembler;
+class MdbProcess;
 
 class MdbInferior : public ServerObject
 {
@@ -101,6 +102,8 @@ public:
 
 	virtual ServerEvent *HandleLinuxWaitEvent (int status) = 0;
 #endif
+
+	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
 protected:
 	MdbInferior (MdbServer *server, BreakpointManager *bpm)

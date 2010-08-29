@@ -77,6 +77,8 @@ public:
 	MdbInferior *GetInferiorByPid (int pid);
 	void AddInferior (MdbInferior *inferior, int pid);
 
+	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
+
 protected:
 	MdbExeReader *main_reader;
 	GHashTable *exe_file_hash;

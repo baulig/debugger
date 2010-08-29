@@ -115,3 +115,50 @@ BreakpointManager::Remove (BreakpointInfo *breakpoint)
 	g_ptr_array_remove_fast (breakpoints, breakpoint);
 	delete breakpoint;
 }
+
+ErrorCode
+BreakpointManager::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
+{
+	switch (command) {
+	case CMD_BPM_LOOKUP_BY_ADDR: {
+		guint64 address;
+		BreakpointInfo *info;
+
+		address = in->DecodeLong ();
+
+		info = Lookup (address);
+
+		if (info) {
+			out->AddInt (info->id);
+			out->AddByte (info->enabled ? 1 : 0);
+		} else {
+			out->AddInt (0);
+			out->AddByte (0);
+		}
+		break;
+	}
+
+	case CMD_BPM_LOOKUP_BY_ID: {
+		BreakpointInfo *info;
+		guint32 idx;
+
+		idx = in->DecodeInt ();
+
+		info = LookupById (idx);
+
+		if (!info) {
+			out->AddByte (0);
+			break;
+		}
+
+		out->AddByte (1);
+		out->AddByte (info->enabled ? 1 : 0);
+		break;
+	}
+
+	default:
+		return ERR_NOT_IMPLEMENTED;
+	}
+
+	return ERR_NONE;
+}

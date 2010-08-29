@@ -187,3 +187,89 @@ MdbServer::GetDisassembler (MdbInferior *inferior)
 {
 	return main_reader->GetDisassembler (inferior);
 }
+
+ErrorCode
+MdbServer::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
+{
+	switch (command) {
+	case CMD_SERVER_GET_TARGET_INFO: {
+		guint32 int_size, long_size, addr_size, is_bigendian;
+		ErrorCode result;
+
+		result = MdbInferior::GetTargetInfo (&int_size, &long_size, &addr_size, &is_bigendian);
+		if (result)
+			return result;
+
+		out->AddInt (int_size);
+		out->AddInt (long_size);
+		out->AddInt (addr_size);
+		out->AddByte (is_bigendian != 0);
+		break;
+	}
+
+	case CMD_SERVER_GET_SERVER_TYPE: {
+		out->AddInt (MdbInferior::GetServerType ());
+		break;
+	}
+
+	case CMD_SERVER_GET_ARCH_TYPE: {
+		out->AddInt (MdbInferior::GetArchType ());
+		break;
+	}
+
+	case CMD_SERVER_GET_CAPABILITIES: {
+		out->AddInt (MdbInferior::GetCapabilities ());
+		break;
+	}
+
+	case CMD_SERVER_CREATE_INFERIOR: {
+		MdbInferior *inferior;
+		BreakpointManager *bpm;
+		int bpm_iid;
+
+		bpm_iid = in->DecodeID ();
+
+		bpm = (BreakpointManager *) ServerObject::GetObjectByID (bpm_iid, SERVER_OBJECT_KIND_BREAKPOINT_MANAGER);
+
+		g_message (G_STRLOC ": create inferior: %d - %p", bpm_iid, bpm);
+
+		if (!bpm)
+			return ERR_NO_SUCH_BPM;
+
+		inferior = mdb_inferior_new (this, bpm);
+
+		out->AddInt (inferior->GetID ());
+		break;
+	}
+
+	case CMD_SERVER_CREATE_BPM: {
+		BreakpointManager *bpm;
+		int iid;
+
+		bpm = new BreakpointManager ();
+
+		out->AddInt (bpm->GetID ());
+		break;
+	}
+
+	case CMD_SERVER_CREATE_EXE_READER: {
+		MdbExeReader *reader;
+		gchar *filename;
+		int iid;
+
+		filename = in->DecodeString ();
+
+		reader = GetExeReader (filename);
+		if (!reader)
+			return ERR_CANNOT_OPEN_EXE;
+
+		out->AddInt (reader->GetID ());
+		break;
+	}
+
+	default:
+		return ERR_NOT_IMPLEMENTED;
+	}
+
+	return ERR_NONE;
+}

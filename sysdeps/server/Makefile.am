@@ -85,10 +85,13 @@ server_sources = \
 	connection.h		\
 	breakpoints.cpp		\
 	breakpoints.h		\
+	mdb-exe-reader.cpp	\
+	mdb-exe-reader.h	\
 	mdb-inferior.cpp	\
 	mdb-inferior.h		\
 	mdb-arch.cpp		\
 	mdb-arch.h		\
+	mdb-process.cpp		\
 	mdb-process.h
 
 server_cppflags = \

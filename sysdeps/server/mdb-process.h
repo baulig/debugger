@@ -9,6 +9,8 @@ class MdbProcess : public ServerObject
 public:
 	virtual bool Initialize (void) = 0;
 
+	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
+
 protected:
 	MdbProcess (MdbInferior *inferior)
 		: ServerObject (SERVER_OBJECT_KIND_PROCESS)

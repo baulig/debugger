@@ -30,6 +30,8 @@ public:
 	virtual MdbDisassembler *GetDisassembler (MdbInferior *inferior) = 0;
 
 	virtual void ReadDynamicInfo (MdbInferior *inferior) = 0;
+
+	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 };
 
 class MdbDisassembler

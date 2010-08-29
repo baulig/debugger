@@ -109,6 +109,8 @@ public:
 
 	BreakpointInfo *CreateBreakpoint (guint64 address, int dr_idx);
 
+	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
+
 private:
 	GPtrArray *breakpoints;
 	GHashTable *breakpoint_hash;

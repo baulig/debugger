@@ -18,65 +18,7 @@ static const char *handshake_msg = "9da91832-87f3-4cde-a92f-6384fec6536e";
 #define MAJOR_VERSION 1
 #define MINOR_VERSION
 
-typedef enum {
-	CMD_SET_SERVER = 1,
-	CMD_SET_INFERIOR = 2,
-	CMD_SET_EVENT = 3,
-	CMD_SET_BPM = 4,
-	CMD_SET_EXE_READER = 5
-} CommandSet;
-
-typedef enum {
-	CMD_SERVER_GET_TARGET_INFO = 1,
-	CMD_SERVER_GET_SERVER_TYPE = 2,
-	CMD_SERVER_GET_ARCH_TYPE = 3,
-	CMD_SERVER_GET_CAPABILITIES = 4,
-	CMD_SERVER_CREATE_INFERIOR = 5,
-	CMD_SERVER_CREATE_BPM = 6,
-	CMD_SERVER_CREATE_EXE_READER = 7
-} CmdServer;
-
-typedef enum {
-	CMD_INFERIOR_SPAWN = 1,
-	CMD_INFERIOR_INIT_PROCESS = 2,
-	CMD_INFERIOR_GET_SIGNAL_INFO = 3,
-	CMD_INFERIOR_GET_APPLICATION = 4,
-	CMD_INFERIOR_GET_FRAME = 5,
-	CMD_INFERIOR_INSERT_BREAKPOINT = 6,
-	CMD_INFERIOR_ENABLE_BREAKPOINT = 7,
-	CMD_INFERIOR_DISABLE_BREAKPOINT = 8,
-	CMD_INFERIOR_REMOVE_BREAKPOINT = 9,
-	CMD_INFERIOR_STEP = 10,
-	CMD_INFERIOR_CONTINUE = 11,
-	CMD_INFERIOR_RESUME = 12,
-	CMD_INFERIOR_GET_REGISTERS = 13,
-	CMD_INFERIOR_READ_MEMORY = 14,
-	CMD_INFERIOR_WRITE_MEMORY = 15,
-	CMD_INFERIOR_GET_PENDING_SIGNAL = 16,
-	CMD_INFERIOR_SET_SIGNAL = 17,
-	CMD_INFERIOR_INIT_AT_ENTRYPOINT = 18,
-	CMD_INFERIOR_DISASSEMBLE_INSN = 19
-} CmdInferior;
-
-typedef enum {
-	CMD_BPM_LOOKUP_BY_ADDR = 1,
-	CMD_BPM_LOOKUP_BY_ID = 2,
-} CmdBpm;
-
-typedef enum {
-	CMD_EXE_READER_GET_START_ADDRESS = 1,
-	CMD_EXE_READER_LOOKUP_SYMBOL = 2,
-	CMD_EXE_READER_GET_TARGET_NAME = 3,
-	CMD_EXE_READER_HAS_SECTION = 4,
-	CMD_EXE_READER_GET_SECTION_ADDRESS = 5,
-	CMD_EXE_READER_GET_SECTION_CONTENTS = 6
-} CmdExeReader;
-
-typedef enum {
-	CMD_COMPOSITE = 100
-} CmdComposite;
-
-volatile static int packet_id = 0;
+volatile int Connection::packet_id = 0;
 
 /*
  * recv_length:
@@ -98,7 +40,7 @@ recv_length (int fd, void *buf, int len, int flags)
 }
 
 bool
-Connection::TransportSend (guint8 *data, int len)
+Connection::TransportSend (const guint8 *data, int len)
 {
 	int res;
 
@@ -172,7 +114,7 @@ Buffer::AddID (int id)
 }
 
 void
-Buffer::AddData (guint8 *data, int len)
+Buffer::AddData (const guint8 *data, int len)
 {
 	MakeRoom (len);
 	memcpy (p, data, len);
@@ -204,7 +146,7 @@ Buffer::GetDataSize (void)
 	return p - buf;
 }
 
-guint8 *
+const guint8 *
 Buffer::GetData (void)
 {
 	return buf;
@@ -243,12 +185,6 @@ int
 Buffer::DecodeID (void)
 {
 	return DecodeInt ();
-}
-
-int
-Buffer::AdvanceOffset (int offset)
-{
-	p += offset;
 }
 
 gchar*
@@ -384,11 +320,15 @@ Connection::HandleIncomingRequest (MdbServer *server)
 #endif
 
 	if (len - HEADER_LENGTH > 0) {
-		in = new Buffer (len - HEADER_LENGTH);
+		int size = len - HEADER_LENGTH;
+		guint8 *data = (guint8 *) g_malloc (size);
 
-		res = recv_length (conn_fd, in->GetData (), len - HEADER_LENGTH, 0);
-		if (res != len - HEADER_LENGTH)
+		res = recv_length (conn_fd, data, size, 0);
+		if (res != size)
 			return false;
+
+		in = new Buffer (data, size);
+		g_free (data);
 	}
 
 	buf = new Buffer (128);
@@ -399,7 +339,7 @@ Connection::HandleIncomingRequest (MdbServer *server)
 	/* Process the request */
 	switch (command_set) {
 	case CMD_SET_SERVER:
-		err = ServerCommands (server, command, id, in, buf);
+		err = server->ProcessCommand (command, id, in, buf);
 		break;
 
 	case CMD_SET_INFERIOR: {
@@ -424,9 +364,8 @@ Connection::HandleIncomingRequest (MdbServer *server)
 		inferior_data->command = command;
 		inferior_data->id = id;
 		inferior_data->inferior = inferior;
-		inferior_data->p = p;
-		inferior_data->end = end;
-		inferior_data->buf = &buf;
+		inferior_data->in = in;
+		inferior_data->out = buf;
 
 		delegate.func = inferior_command_proxy;
 		delegate.user_data = inferior_data;
@@ -438,7 +377,7 @@ Connection::HandleIncomingRequest (MdbServer *server)
 
 		break;
 #else
-		err = InferiorCommands (inferior, command, id, in, buf);
+		err = inferior->ProcessCommand (command, id, in, buf);
 #endif
 		break;
 	}
@@ -455,7 +394,7 @@ Connection::HandleIncomingRequest (MdbServer *server)
 			break;
 		}
 
-		err = BreakpointManagerCommands (bpm, command, id, in, buf);
+		err = bpm->ProcessCommand (command, id, in, buf);
 		break;
 	}
 
@@ -471,7 +410,7 @@ Connection::HandleIncomingRequest (MdbServer *server)
 			break;
 		}
 
-		err = ExeReaderCommands (reader, command, id, in, buf);
+		err = reader->ProcessCommand (command, id, in, buf);
 		break;
 	}
 
@@ -496,482 +435,14 @@ Connection::HandleIncomingRequest (MdbServer *server)
 	return false;
 }
 
-ErrorCode
-Connection::ServerCommands (MdbServer *server, int command, int id, Buffer *in, Buffer *buf)
-{
-	switch (command) {
-	case CMD_SERVER_GET_TARGET_INFO: {
-		guint32 int_size, long_size, addr_size, is_bigendian;
-		ErrorCode result;
-
-		result = MdbInferior::GetTargetInfo (&int_size, &long_size, &addr_size, &is_bigendian);
-		if (result)
-			return result;
-
-		buf->AddInt (int_size);
-		buf->AddInt (long_size);
-		buf->AddInt (addr_size);
-		buf->AddByte (is_bigendian != 0);
-		break;
-	}
-
-	case CMD_SERVER_GET_SERVER_TYPE: {
-		buf->AddInt (MdbInferior::GetServerType ());
-		break;
-	}
-
-	case CMD_SERVER_GET_ARCH_TYPE: {
-		buf->AddInt (MdbInferior::GetArchType ());
-		break;
-	}
-
-	case CMD_SERVER_GET_CAPABILITIES: {
-		buf->AddInt (MdbInferior::GetCapabilities ());
-		break;
-	}
-
-	case CMD_SERVER_CREATE_INFERIOR: {
-		MdbInferior *inferior;
-		BreakpointManager *bpm;
-		int bpm_iid;
-
-		bpm_iid = in->DecodeID ();
-
-		bpm = (BreakpointManager *) ServerObject::GetObjectByID (bpm_iid, SERVER_OBJECT_KIND_BREAKPOINT_MANAGER);
-
-		g_message (G_STRLOC ": create inferior: %d - %p", bpm_iid, bpm);
-
-		if (!bpm)
-			return ERR_NO_SUCH_BPM;
-
-		inferior = mdb_inferior_new (server, bpm);
-
-		buf->AddInt (inferior->GetID ());
-		break;
-	}
-
-	case CMD_SERVER_CREATE_BPM: {
-		BreakpointManager *bpm;
-		int iid;
-
-		bpm = new BreakpointManager ();
-
-		buf->AddInt (bpm->GetID ());
-		break;
-	}
-
-	case CMD_SERVER_CREATE_EXE_READER: {
-		MdbExeReader *reader;
-		gchar *filename;
-		int iid;
-
-		filename = in->DecodeString ();
-
-		reader = server->GetExeReader (filename);
-		if (!reader)
-			return ERR_CANNOT_OPEN_EXE;
-
-		buf->AddInt (reader->GetID ());
-		break;
-	}
-
-	default:
-		return ERR_NOT_IMPLEMENTED;
-	}
-
-	return ERR_NONE;
-}
-
-ErrorCode
-Connection::InferiorCommands (MdbInferior *inferior, int command, int id, Buffer *in, Buffer *buf)
-{
-	ErrorCode result = ERR_NONE;
-
-	switch (command) {
-	case CMD_INFERIOR_SPAWN: {
-		char *cwd, **argv, *error;
-		int argc, i, child_pid;
-
-		cwd = in->DecodeString ();
-		argc = in->DecodeInt ();
-
-		argv = g_new0 (char *, argc + 1);
-		for (i = 0; i < argc; i++)
-			argv [i] = in->DecodeString ();
-		argv [argc] = NULL;
-
-		if (!*cwd) {
-			g_free (cwd);
-			cwd = g_get_current_dir ();
-		}
-
-		result = inferior->Spawn (cwd, (const gchar **) argv, NULL, &child_pid, &error);
-		if (result)
-			return result;
-
-		inferior->GetServer ()->AddInferior (inferior, child_pid);
-
-		buf->AddInt (child_pid);
-
-		g_free (cwd);
-		for (i = 0; i < argc; i++)
-			g_free (argv [i]);
-		g_free (argv);
-		break;
-	}
-
-	case CMD_INFERIOR_INIT_PROCESS:
-		result = inferior->InitializeProcess ();
-		break;
-
-	case CMD_INFERIOR_GET_SIGNAL_INFO: {
-		SignalInfo *sinfo;
-
-		result = inferior->GetSignalInfo (&sinfo);
-		if (result)
-			return result;
-
-		buf->AddInt (sinfo->sigkill);
-		buf->AddInt (sinfo->sigstop);
-		buf->AddInt (sinfo->sigint);
-		buf->AddInt (sinfo->sigchld);
-		buf->AddInt (sinfo->sigfpe);
-		buf->AddInt (sinfo->sigquit);
-		buf->AddInt (sinfo->sigabrt);
-		buf->AddInt (sinfo->sigsegv);
-		buf->AddInt (sinfo->sigill);
-		buf->AddInt (sinfo->sigbus);
-		buf->AddInt (sinfo->sigwinch);
-		buf->AddInt (sinfo->kernel_sigrtmin);
-
-		g_free (sinfo);
-		break;
-	}
-
-	case CMD_INFERIOR_GET_APPLICATION: {
-		gchar *exe_file = NULL, *cwd = NULL, **cmdline_args = NULL;
-		guint32 nargs, i;
-
-		result = inferior->GetApplication (&exe_file, &cwd, &nargs, &cmdline_args);
-		if (result)
-			return result;
-
-		buf->AddString (exe_file);
-		buf->AddString (cwd);
-
-		buf->AddInt (nargs);
-		for (i = 0; i < nargs; i++)
-			buf->AddString (cmdline_args [i]);
-
-		g_free (exe_file);
-		g_free (cwd);
-		g_free (cmdline_args);
-		break;
-	}
-
-	case CMD_INFERIOR_GET_FRAME: {
-		StackFrame frame;
-
-		result = inferior->GetFrame (&frame);
-		if (result)
-			return result;
-
-		buf->AddLong (frame.address);
-		buf->AddLong (frame.stack_pointer);
-		buf->AddLong (frame.frame_address);
-		break;
-	}
-
-	case CMD_INFERIOR_STEP:
-		result = inferior->Step ();
-		break;
-
-	case CMD_INFERIOR_CONTINUE:
-		result = inferior->Continue ();
-		break;
-
-	case CMD_INFERIOR_RESUME:
-		result = inferior->Resume ();
-		break;
-
-	case CMD_INFERIOR_INSERT_BREAKPOINT: {
-		guint64 address;
-		BreakpointInfo *breakpoint;
-
-		address = in->DecodeLong ();
-
-		result = inferior->InsertBreakpoint (address, &breakpoint);
-		if (result == ERR_NONE)
-			buf->AddInt (breakpoint->id);
-		break;
-	}
-
-	case CMD_INFERIOR_ENABLE_BREAKPOINT: {
-		BreakpointInfo *breakpoint;
-		guint32 idx;
-
-		idx = in->DecodeInt ();
-		breakpoint = inferior->LookupBreakpointById (idx);
-		if (!breakpoint)
-			return ERR_NO_SUCH_BREAKPOINT;
-
-		result = inferior->EnableBreakpoint (breakpoint);
-		break;
-	}
-
-	case CMD_INFERIOR_DISABLE_BREAKPOINT: {
-		BreakpointInfo *breakpoint;
-		guint32 idx;
-
-		idx = in->DecodeInt ();
-		breakpoint = inferior->LookupBreakpointById (idx);
-		if (!breakpoint)
-			return ERR_NO_SUCH_BREAKPOINT;
-
-		result = inferior->DisableBreakpoint (breakpoint);
-		break;
-	}
-
-	case CMD_INFERIOR_REMOVE_BREAKPOINT: {
-		BreakpointInfo *breakpoint;
-		guint32 idx;
-
-		idx = in->DecodeInt ();
-		breakpoint = inferior->LookupBreakpointById (idx);
-		if (!breakpoint)
-			return ERR_NO_SUCH_BREAKPOINT;
-
-		result = inferior->RemoveBreakpoint (breakpoint);
-		break;
-	}
-
-	case CMD_INFERIOR_GET_REGISTERS: {
-		guint32 count, i;
-		guint64 *regs;
-
-		result = inferior->GetRegisterCount (&count);
-		if (result)
-			return result;
-
-		regs = g_new0 (guint64, count);
-
-		result = inferior->GetRegisters (regs);
-		if (result) {
-			g_free (regs);
-			return result;
-		}
-
-		buf->AddInt (count);
-		for (i = 0; i < count; i++)
-			buf->AddLong (regs [i]);
-
-		g_free (regs);
-		break;
-	}
-
-	case CMD_INFERIOR_READ_MEMORY: {
-		guint64 address;
-		guint32 size;
-
-		address = in->DecodeLong ();
-		size = in->DecodeInt ();
-
-		buf->MakeRoom (size);
-
-		result = inferior->ReadMemory (address, size, buf->GetData ());
-		if (result == ERR_NONE)
-			buf->AdvanceOffset (size);
-
-		break;
-	}
-
-	case CMD_INFERIOR_WRITE_MEMORY: {
-		guint64 address;
-		guint32 size;
-
-		address = in->DecodeLong ();
-		size = in->DecodeInt ();
-
-		result = inferior->WriteMemory (address, size, in->GetData ());
-		break;
-	}
-
-	case CMD_INFERIOR_GET_PENDING_SIGNAL: {
-		guint32 sig;
-
-		result = inferior->GetPendingSignal (&sig);
-		if (result == ERR_NONE)
-			buf->AddInt (sig);
-
-		break;
-	}
-
-	case CMD_INFERIOR_SET_SIGNAL: {
-		guint32 sig, send_it;
-
-		sig = in->DecodeInt ();
-		send_it = in->DecodeByte ();
-
-		result = inferior->SetSignal (sig, send_it);
-		break;
-	}
-
-	case CMD_INFERIOR_INIT_AT_ENTRYPOINT:
-		inferior->GetProcess ()->Initialize ();
-		break;
-
-	case CMD_INFERIOR_DISASSEMBLE_INSN: {
-		guint64 address;
-		guint32 insn_size;
-		gchar *insn;
-
-		address = in->DecodeLong ();
-
-		insn = inferior->DisassembleInstruction (address, &insn_size);
-		buf->AddInt (insn_size);
-		buf->AddString (insn);
-		g_free (insn);
-		break;
-	}
-
-	default:
-		return ERR_NOT_IMPLEMENTED;
-	}
-
-	return result;
-}
-
-ErrorCode
-Connection::BreakpointManagerCommands (BreakpointManager *bpm, int command, int id, Buffer *in, Buffer *buf)
-{
-	switch (command) {
-	case CMD_BPM_LOOKUP_BY_ADDR: {
-		guint64 address;
-		BreakpointInfo *info;
-
-		address = in->DecodeLong ();
-
-		info = bpm->Lookup (address);
-
-		if (info) {
-			buf->AddInt (info->id);
-			buf->AddByte (info->enabled ? 1 : 0);
-		} else {
-			buf->AddInt (0);
-			buf->AddByte (0);
-		}
-		break;
-	}
-
-	case CMD_BPM_LOOKUP_BY_ID: {
-		BreakpointInfo *info;
-		guint32 idx;
-
-		idx = in->DecodeInt ();
-
-		info = bpm->LookupById (idx);
-
-		if (!info) {
-			buf->AddByte (0);
-			break;
-		}
-
-		buf->AddByte (1);
-		buf->AddByte (info->enabled ? 1 : 0);
-		break;
-	}
-
-	default:
-		return ERR_NOT_IMPLEMENTED;
-	}
-
-	return ERR_NONE;
-}
-
-ErrorCode
-Connection::ExeReaderCommands (MdbExeReader *reader, int command, int id, Buffer *in, Buffer *buf)
-{
-	switch (command) {
-	case CMD_EXE_READER_GET_START_ADDRESS: {
-		guint64 address;
-
-		address = reader->GetStartAddress ();
-		buf->AddLong (address);
-		break;
-	}
-
-	case CMD_EXE_READER_LOOKUP_SYMBOL: {
-		guint64 address;
-		gchar *name;
-
-		name = in->DecodeString ();
-		address = reader->LookupSymbol (name);
-		buf->AddLong (address);
-		g_free (name);
-		break;
-	}
-
-	case CMD_EXE_READER_GET_TARGET_NAME:
-		buf->AddString (reader->GetTargetName ());
-		break;
-
-	case CMD_EXE_READER_HAS_SECTION: {
-		gchar *section_name;
-		gboolean has_section;
-
-		section_name = in->DecodeString ();
-		has_section = reader->HasSection (section_name);
-		buf->AddByte (has_section ? 1 : 0);
-		g_free (section_name);
-		break;
-	}
-
-	case CMD_EXE_READER_GET_SECTION_ADDRESS: {
-		gchar *section_name;
-		guint64 address;
-
-		section_name = in->DecodeString ();
-		address = reader->GetSectionAddress (section_name);
-		buf->AddLong (address);
-		g_free (section_name);
-		break;
-	}
-
-	case CMD_EXE_READER_GET_SECTION_CONTENTS: {
-		gchar *section_name;
-		gpointer contents;
-		guint32 size;
-
-		section_name = in->DecodeString ();
-
-		contents = reader->GetSectionContents (section_name, &size);
-		buf->AddInt (size);
-
-		if (contents) {
-			buf->AddData ((guint8 *) contents, size);
-			g_free (contents);
-		}
-
-		g_free (section_name);
-		break;
-	}
-
-	default:
-		return ERR_NOT_IMPLEMENTED;
-	}
-
-	return ERR_NONE;
-}
-
 #if WINDOWS
 
 typedef struct {
 	int command;
 	int id;
 	MdbInferior *inferior;
-	guint8 *p;
-	guint8 *end;
-	Buffer *buf;
+	Buffer *in;
+	Buffer *out;
 	ErrorCode ret;
 } InferiorData;
 
@@ -980,7 +451,7 @@ inferior_command_proxy (gpointer user_data)
 {
 	InferiorData *data = (InferiorData *) user_data;
 
-	data->ret = inferior_commands (data->command, data->id, data->inferior, data->p, data->end, data->buf);
+	data->ret = inferior->ProcessCommand (data->command, data->id, data->in, data->out);
 }
 
 #endif

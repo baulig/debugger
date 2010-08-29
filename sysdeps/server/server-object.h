@@ -1,8 +1,7 @@
 #ifndef __SERVER_OBJECT_H__
 #define __SERVER_OBJECT_H__
 
-#include <config.h>
-#include <glib.h>
+#include <connection.h>
 #include <debugger-mutex.h>
 
 enum ServerObjectKind {
@@ -28,6 +27,8 @@ public:
 	static ServerObject *GetObjectByID (int id);
 
 	static ServerObject *GetObjectByID (int id, ServerObjectKind kind);
+
+	virtual ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out) = 0;
 
 protected:
 	ServerObject (ServerObjectKind kind);
