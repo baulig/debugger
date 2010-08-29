@@ -5,34 +5,7 @@
 #include <glib.h>
 
 #include <server-object.h>
-
-typedef enum {
-	ERR_NONE = 0,
-
-	ERR_UNKNOWN_ERROR,
-	ERR_INTERNAL_ERROR,
-	ERR_NO_TARGET,
-	ERR_ALREADY_HAVE_TARGET,
-	ERR_CANNOT_START_TARGET,
-	ERR_NOT_STOPPED,
-	ERR_ALREADY_STOPPED,
-	ERR_RECURSIVE_CALL,
-	ERR_NO_SUCH_BREAKPOINT,
-	ERR_NO_SUCH_REGISTER,
-	ERR_DR_OCCUPIED,
-	ERR_MEMORY_ACCESS,
-	ERR_NOT_IMPLEMENTED = 0x1002,
-	ERR_IO_ERROR,
-	ERR_NO_CALLBACK_FRAME,
-	ERR_PERMISSION_DENIED,
-
-	ERR_TARGET_ERROR_MASK = 0x0fff,
-
-	ERR_NO_SUCH_INFERIOR = 0x1001,
-	ERR_NO_SUCH_BPM = 0x1002,
-	ERR_NO_SUCH_EXE_READER = 0x1003,
-	ERR_CANNOT_OPEN_EXE = 0x1004,
-} ErrorCode;
+#include <connection.h>
 
 typedef enum {
 	SERVER_CAPABILITIES_NONE		= 0,
@@ -63,38 +36,6 @@ typedef struct {
 	void (* func) (gpointer user_data);
 	gpointer user_data;
 } InferiorDelegate;
-
-typedef enum {
-	SERVER_EVENT_NONE,
-	SERVER_EVENT_UNKNOWN_ERROR = 1,
-	SERVER_EVENT_CHILD_EXITED = 2,
-	SERVER_EVENT_CHILD_STOPPED,
-	SERVER_EVENT_CHILD_SIGNALED,
-	SERVER_EVENT_CHILD_CALLBACK,
-	SERVER_EVENT_CHILD_CALLBACK_COMPLETED,
-	SERVER_EVENT_CHILD_HIT_BREAKPOINT,
-	SERVER_EVENT_CHILD_MEMORY_CHANGED,
-	SERVER_EVENT_CHILD_CREATED_THREAD,
-	SERVER_EVENT_CHILD_FORKED,
-	SERVER_EVENT_CHILD_EXECD,
-	SERVER_EVENT_CHILD_CALLED_EXIT,
-	SERVER_EVENT_CHILD_NOTIFICATION,
-	SERVER_EVENT_CHILD_INTERRUPTED,
-	SERVER_EVENT_RUNTIME_INVOKE_DONE,
-	SERVER_EVENT_INTERNAL_ERROR,
-
-	SERVER_EVENT_DLL_LOADED = 0x41
-} ServerEventType;
-
-typedef struct {
-	ServerEventType type;
-	ServerObject *sender;
-	guint64 arg;
-	guint64 data1;
-	guint64 data2;
-	guint32 opt_data_size;
-	gpointer opt_data;
-} ServerEvent;
 
 typedef struct {
 	guint64 address;
@@ -133,26 +74,27 @@ public:
 
 	void SendEvent (ServerEvent *e);
 
+	MdbInferior *GetInferiorByPid (int pid);
+	void AddInferior (MdbInferior *inferior, int pid);
+
 protected:
 	MdbExeReader *main_reader;
 	GHashTable *exe_file_hash;
 
-	void MainLoop (void);
+	void MainLoop (int conn_fd);
 	gboolean MainLoopIteration (void);
 	gboolean InferiorCommand (InferiorDelegate *delegate);
-
-	MdbInferior *GetInferiorByPid (int pid);
 
 #if defined(__linux__)
 	ServerEvent *HandleLinuxWaitEvent (void);
 #endif
 
 private:
-	int conn_fd;
+	Connection *connection;
 
-	MdbServer (int conn_fd)
+	MdbServer (Connection *connection)
 	{
-		this->conn_fd = conn_fd;
+		this->connection = connection;
 		exe_file_hash = g_hash_table_new (NULL, NULL);
 		main_reader = NULL;
 	}

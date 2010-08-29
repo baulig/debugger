@@ -81,6 +81,8 @@ server_sources = \
 	debugger-mutex.h	\
 	server-object.cpp	\
 	server-object.h		\
+	connection.cpp		\
+	connection.h		\
 	breakpoints.cpp		\
 	breakpoints.h		\
 	mdb-inferior.cpp	\

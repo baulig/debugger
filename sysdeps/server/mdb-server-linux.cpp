@@ -54,7 +54,7 @@ MdbServer::Initialize (void)
 }
 
 void
-MdbServer::MainLoop (void)
+MdbServer::MainLoop (int conn_fd)
 {
 	while (TRUE) {
 		fd_set readfds;
