@@ -113,7 +113,9 @@ protected:
 		this->process = NULL;
 		this->bpm = bpm;
 
+#if defined(__linux__) || defined(__FreeBSD__)
 		last_signal = 0;
+#endif
 
 		disassembler = NULL;
 

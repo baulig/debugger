@@ -4,7 +4,13 @@
 #include <bfd.h>
 #include <dis-asm.h>
 
-#if defined(__linux__) || defined(__FreeBSD__)
+#if (defined(__linux__) || defined(__FreeBSD__)) && (defined(__x86_64__) || defined(__i386__))
+#define LINUX_DYNLINK_SUPPORT 1
+#else
+#undef LINUX_DYNLINK_SUPPORT
+#endif
+
+#ifdef LINUX_DYNLINK_SUPPORT
 #include <link.h>
 #include <elf.h>
 
@@ -55,7 +61,7 @@ private:
 	asection *FindSection (const char *name);
 	~BfdReader (void);
 
-#if defined(__linux__) || defined(__FreeBSD__)
+#ifdef LINUX_DYNLINK_SUPPORT
 	void DynlinkHandler (MdbInferior *inferior);
 	friend bool dynlink_breakpoint_handler (MdbInferior *inferior, BreakpointInfo *breakpoint);
 #endif
@@ -390,7 +396,7 @@ BfdDisassembler::DisassembleInstruction (guint64 address, guint32 *out_insn_size
 	return g_strdup (this->disasm_buffer);
 }
 
-#if defined(__linux__) || defined(__FreeBSD__)
+#ifdef LINUX_DYNLINK_SUPPORT
 
 void
 BfdReader::DynlinkHandler (MdbInferior *inferior)
@@ -449,7 +455,7 @@ dynlink_breakpoint_handler (MdbInferior *inferior, BreakpointInfo *breakpoint)
 void
 BfdReader::ReadDynamicInfo (MdbInferior *inferior)
 {
-#if defined(__linux__) || defined(__FreeBSD__)
+#ifdef LINK_DYNLINK_SUPPORT
 	asection *section;
 	guint8 *contents, *ptr;
 	struct r_debug rdebug;

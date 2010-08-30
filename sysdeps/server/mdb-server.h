@@ -73,6 +73,10 @@ public:
 	MdbInferior *GetInferiorByPid (int pid);
 	void AddInferior (MdbInferior *inferior, int pid);
 
+#if WINDOWS
+	bool InferiorCommand (InferiorDelegate *delegate);
+#endif
+
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
 protected:
@@ -81,7 +85,6 @@ protected:
 
 	void MainLoop (int conn_fd);
 	gboolean MainLoopIteration (void);
-	gboolean InferiorCommand (InferiorDelegate *delegate);
 
 #if defined(__linux__)
 	ServerEvent *HandleLinuxWaitEvent (void);

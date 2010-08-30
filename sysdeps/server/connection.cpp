@@ -288,6 +288,27 @@ Connection::Setup (void)
 	return true;
 }
 
+#if WINDOWS
+
+typedef struct {
+	int command;
+	int id;
+	MdbInferior *inferior;
+	Buffer *in;
+	Buffer *out;
+	ErrorCode ret;
+} InferiorData;
+
+static void
+inferior_command_proxy (gpointer user_data)
+{
+	InferiorData *data = (InferiorData *) user_data;
+
+	data->ret = data->inferior->ProcessCommand (data->command, data->id, data->in, data->out);
+}
+
+#endif
+
 bool
 Connection::HandleIncomingRequest (MdbServer *server)
 {
@@ -372,7 +393,7 @@ Connection::HandleIncomingRequest (MdbServer *server)
 		delegate.func = inferior_command_proxy;
 		delegate.user_data = inferior_data;
 
-		if (!InferiorCommand (&delegate))
+		if (!server->InferiorCommand (&delegate))
 			err = ERR_NOT_STOPPED;
 		else
 			err = inferior_data->ret;
@@ -437,27 +458,6 @@ Connection::HandleIncomingRequest (MdbServer *server)
 
 	return true;
 }
-
-#if WINDOWS
-
-typedef struct {
-	int command;
-	int id;
-	MdbInferior *inferior;
-	Buffer *in;
-	Buffer *out;
-	ErrorCode ret;
-} InferiorData;
-
-static void
-inferior_command_proxy (gpointer user_data)
-{
-	InferiorData *data = (InferiorData *) user_data;
-
-	data->ret = inferior->ProcessCommand (data->command, data->id, data->in, data->out);
-}
-
-#endif
 
 void
 Connection::SendEvent (ServerEvent *e)

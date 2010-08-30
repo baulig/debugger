@@ -19,8 +19,6 @@ typedef struct
 	gchar *exe_path;
 } ProcessHandle;
 
-int MdbInferior::next_iid = 0;
-
 class WindowsInferior : public MdbInferior
 {
 public:
@@ -164,7 +162,7 @@ MdbInferior::Initialize (void)
 	g_assert (debug_thread);
 }
 
-gboolean
+bool
 MdbServer::InferiorCommand (InferiorDelegate *delegate)
 {
 	if (WaitForSingleObject (command_mutex, 0) != 0) {
@@ -358,7 +356,7 @@ WindowsInferior::HandleDebugEvent (DEBUG_EVENT *de)
 
 			e = arch->ChildStopped (0);
 			if (e)
-				server->ProcessChildEvent (e);
+				server->SendEvent (e);
 			else
 				g_warning (G_STRLOC ": mdb_arch_child_stopped() returned NULL.");
 
@@ -420,10 +418,10 @@ WindowsInferior::HandleDebugEvent (DEBUG_EVENT *de)
 	case EXIT_PROCESS_DEBUG_EVENT: {
 		ServerEvent *e = g_new0 (ServerEvent, 1);
 
-		e->sender_iid = iid;
+		e->sender = this;
 		e->arg = de->u.ExitProcess.dwExitCode;
-		e->type = SERVER_EVENT_CHILD_EXITED;
-		server->ProcessChildEvent (e);
+		e->type = SERVER_EVENT_EXITED;
+		server->SendEvent (e);
 		g_free (e);
 		break;
 	}
