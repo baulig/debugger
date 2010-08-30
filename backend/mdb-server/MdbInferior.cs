@@ -9,15 +9,16 @@ namespace Mono.Debugger.MdbServer
 	internal class MdbInferior : ServerObject, IInferior
 	{
 		SingleSteppingEngine sse;
+		int pid;
 
-		public MdbInferior (Connection connection, SingleSteppingEngine sse, int id)
+		public MdbInferior (Connection connection, SingleSteppingEngine sse, int pid, int id)
 			: base (connection, id, ServerObjectKind.Inferior)
 		{
 			this.sse = sse;
+			this.pid = pid;
 		}
 
 		enum CmdInferior {
-			SPAWN = 1,
 			INITIALIZE_PROCESS = 2,
 			GET_SIGNAL_INFO = 3,
 			GET_APPLICATION = 4,
@@ -38,26 +39,8 @@ namespace Mono.Debugger.MdbServer
 			DISASSEMBLE_INSN
 		}
 
-		public int Spawn (string cwd, string[] argv, string[] envp)
-		{
-			var writer = new Connection.PacketWriter ();
-			writer.WriteInt (ID);
-			writer.WriteString (cwd ?? "");
-
-			int argc = argv.Length;
-			if (argv [argc-1] == null)
-				argc--;
-			writer.WriteInt (argc);
-			for (int i = 0; i < argc; i++)
-				writer.WriteString (argv [i] ?? "dummy");
-			int pid = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.SPAWN, writer).ReadInt ();
-			Console.WriteLine ("CHILD PID: {0}", pid);
-			return pid;
-		}
-
-		public void Attach (int pid)
-		{
-			throw new NotImplementedException ();
+		public int PID {
+			get { return pid; }
 		}
 
 		public void InitializeProcess ()
@@ -309,7 +292,11 @@ namespace Mono.Debugger.MdbServer
 		internal override void HandleEvent (ServerEvent e)
 		{
 			Console.WriteLine ("INFERIOR EVENT: {0}", e);
-			sse.ProcessEvent (e);
+			try {
+				sse.ProcessEvent (e);
+			} catch (Exception ex) {
+				Console.WriteLine ("INFERIOR EVENT EX: {0}", ex);
+			}
 		}
 	}
 }

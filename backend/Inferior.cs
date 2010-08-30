@@ -28,7 +28,9 @@ namespace Mono.Debugger.Backend
 		protected readonly AddressDomain address_domain;
 		protected readonly bool native;
 
-		DebuggerServer server;
+		protected readonly DebuggerServer server;
+		protected readonly SingleSteppingEngine sse;
+
 		IInferior inferior;
 
 		int child_pid;
@@ -88,17 +90,28 @@ namespace Mono.Debugger.Backend
 			this.address_domain = address_domain;
 
 			server = thread_manager.DebuggerServer;
-			inferior = server.CreateInferior (sse, this, bpm.ServerHandle);
 		}
 
-		public static Inferior CreateInferior (ThreadManager thread_manager, Process process,
-						       SingleSteppingEngine sse, ProcessStart start)
+		protected Inferior (SingleSteppingEngine sse, ProcessStart start)
 		{
-			return new Inferior (
-				thread_manager, process, sse, start, process.BreakpointManager, null,
-				thread_manager.AddressDomain);
+			this.sse = sse;
+			this.thread_manager = sse.ThreadManager;
+			this.process = sse.Process;
+			this.start = start;
+			this.native = start.IsNative;
+			this.breakpoint_manager = sse.Process.BreakpointManager;
+			this.address_domain = sse.ThreadManager.AddressDomain;
+			this.server = sse.ThreadManager.DebuggerServer;
 		}
 
+		public static Inferior Spawn (SingleSteppingEngine sse, ProcessStart start)
+		{
+			var inferior = new Inferior (sse, start);
+			inferior.Run ();
+			return inferior;
+		}
+
+#if FIXME
 		public Inferior CreateThread (SingleSteppingEngine sse, int pid, bool do_attach)
 		{
 			Inferior inferior = new Inferior (
@@ -122,6 +135,7 @@ namespace Mono.Debugger.Backend
 
 			return inferior;
 		}
+#endif
 
 		public void CallMethod (TargetAddress method, long data1, long data2,
 					long callback_arg)
@@ -298,7 +312,7 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		public int Run ()
+		protected void Run ()
 		{
 			if (has_target)
 				throw new TargetException (TargetError.AlreadyHaveTarget);
@@ -312,7 +326,7 @@ namespace Mono.Debugger.Backend
 			string[] env = new string[start.Environment.Length + 1];
 			Array.Copy(start.Environment, env, start.Environment.Length);
 
-			child_pid = inferior.Spawn (start.WorkingDirectory, args, env);
+			inferior = server.Spawn (sse, start.WorkingDirectory, args, env);
 
 			initialized = true;
 
@@ -321,8 +335,6 @@ namespace Mono.Debugger.Backend
 			SetupInferior ();
 
 			change_target_state (TargetState.Stopped, 0);
-
-			return child_pid;
 		}
 
 		public void InitializeThread (int pid)
@@ -363,15 +375,15 @@ namespace Mono.Debugger.Backend
 			change_target_state (TargetState.Stopped, 0);
 		}
 
-		public void Attach (int pid)
+		protected void Attach ()
 		{
 			if (has_target || initialized)
 				throw new TargetException (TargetError.AlreadyHaveTarget);
 
 			has_target = true;
 
-			inferior.Attach (pid);
-			this.child_pid = pid;
+			inferior = server.Attach (sse, start.PID);
+			this.child_pid = start.PID;
 
 			string exe_file, cwd;
 			string[] cmdline_args;

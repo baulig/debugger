@@ -85,6 +85,7 @@ namespace Mono.Debugger.Backend
 				return true;
 			}
 
+#if FIXME
 			if (cevent.Type == ServerEventType.ThreadCreated) {
 				int pid = (int) cevent.Argument;
 				inferior.Process.ThreadCreated (inferior, pid, false, true);
@@ -106,6 +107,7 @@ namespace Mono.Debugger.Backend
 				resume_target = false;
 				return true;
 			}
+#endif
 
 			if (cevent.Type == ServerEventType.Stopped) {
 				if (inferior.HasSignals) {

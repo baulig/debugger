@@ -30,7 +30,9 @@ namespace Mono.Debugger.Server
 
 	internal interface IDebuggerServer : IServerObject
 	{
-		TargetInfo GetTargetInfo ();
+		TargetInfo TargetInfo {
+			get;
+		}
 
 		ServerType ServerType {
 			get;
@@ -44,9 +46,13 @@ namespace Mono.Debugger.Server
 			get;
 		}
 
-		IInferior CreateInferior (SingleSteppingEngine sse, IBreakpointManager bpm);
+		IBreakpointManager BreakpointManager {
+			get;
+		}
 
-		IBreakpointManager CreateBreakpointManager ();
+		IInferior Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp);
+
+		IInferior Attach (SingleSteppingEngine sse, int pid);
 
 		IExecutableReader CreateExeReader (string filename);
 	}

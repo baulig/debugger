@@ -378,8 +378,6 @@ namespace Mono.Debugger.MdbServer
 
 		protected Connection (IPEndPoint endpoint)
 		{
-			server = new MdbServer (this);
-
 			socket = new Socket (AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 			socket.Connect (endpoint);
 
@@ -404,6 +402,8 @@ namespace Mono.Debugger.MdbServer
 
 			receiver_thread = new ST.Thread (new ST.ThreadStart (receiver_thread_main));
 			receiver_thread.Start ();
+
+			server = new MdbServer (this);
 		}
 
 		public void Close ()

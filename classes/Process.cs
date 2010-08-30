@@ -213,7 +213,7 @@ namespace Mono.Debugger
 
 			is_attached = start.PID != 0;
 
-			breakpoint_manager = new BreakpointManager (manager.DebuggerServer.CreateBreakpointManager ());
+			breakpoint_manager = new BreakpointManager (manager.DebuggerServer.BreakpointManager);
 
 			exception_handlers = new Dictionary<int,ExceptionCatchPoint> ();
 
@@ -333,6 +333,7 @@ namespace Mono.Debugger
 			get { return operation_host; }
 		}
 
+#if FIXME
 		internal void ThreadCreated (Inferior inferior, int pid, bool do_attach, bool resume_thread)
 		{
 			SingleSteppingEngine new_thread = new SingleSteppingEngine (manager, this, pid, do_attach);
@@ -457,6 +458,7 @@ namespace Mono.Debugger
 			CommandResult result = engine.OnExecd (new_thread);
 			new_thread.StartExecedChild (result);
 		}
+#endif
 
 		internal CommandResult StartApplication ()
 		{

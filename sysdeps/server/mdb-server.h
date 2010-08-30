@@ -5,6 +5,7 @@
 #include <glib.h>
 
 #include <server-object.h>
+#include <breakpoints.h>
 #include <connection.h>
 
 typedef enum {
@@ -71,17 +72,23 @@ public:
 	void SendEvent (ServerEvent *e);
 
 	MdbInferior *GetInferiorByPid (int pid);
-	void AddInferior (MdbInferior *inferior, int pid);
 
 #if WINDOWS
 	bool InferiorCommand (InferiorDelegate *delegate);
 #endif
+
+	ErrorCode Spawn (const gchar *working_directory,
+			 const gchar **argv, const gchar **envp,
+			 MdbInferior **out_inferior, int *out_child_pid,
+			 gchar **out_error);
 
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
 protected:
 	MdbExeReader *main_reader;
 	GHashTable *exe_file_hash;
+
+	BreakpointManager *bpm;
 
 	void MainLoop (int conn_fd);
 	gboolean MainLoopIteration (void);
@@ -98,6 +105,8 @@ private:
 		this->connection = connection;
 		exe_file_hash = g_hash_table_new (NULL, NULL);
 		main_reader = NULL;
+
+		bpm = new BreakpointManager ();
 	}
 
 	friend int main (int argc, char *argv []);

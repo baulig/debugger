@@ -119,38 +119,6 @@ MdbInferior::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 	ErrorCode result = ERR_NONE;
 
 	switch (command) {
-	case CMD_INFERIOR_SPAWN: {
-		char *cwd, **argv, *error;
-		int argc, i, child_pid;
-
-		cwd = in->DecodeString ();
-		argc = in->DecodeInt ();
-
-		argv = g_new0 (char *, argc + 1);
-		for (i = 0; i < argc; i++)
-			argv [i] = in->DecodeString ();
-		argv [argc] = NULL;
-
-		if (!*cwd) {
-			g_free (cwd);
-			cwd = g_get_current_dir ();
-		}
-
-		result = Spawn (cwd, (const gchar **) argv, NULL, &child_pid, &error);
-		if (result)
-			return result;
-
-		server->AddInferior (this, child_pid);
-
-		out->AddInt (child_pid);
-
-		g_free (cwd);
-		for (i = 0; i < argc; i++)
-			g_free (argv [i]);
-		g_free (argv);
-		break;
-	}
-
 	case CMD_INFERIOR_INIT_PROCESS:
 		result = InitializeProcess ();
 		break;

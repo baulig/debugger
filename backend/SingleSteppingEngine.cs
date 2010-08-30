@@ -92,18 +92,21 @@ namespace Mono.Debugger.Backend
 					     ProcessStart start)
 			: this (manager, process)
 		{
-			inferior = Inferior.CreateInferior (manager, process, this, start);
+			inferior = Inferior.Spawn (this, start);
 
+#if FIXME
 			if (start.PID != 0) {
 				this.pid = start.PID;
 				inferior.Attach (pid);
 			} else {
 				pid = inferior.Run ();
 			}
+#endif
 
 			manager.AddEngine (this);
 		}
 
+#if FIXME
 		public SingleSteppingEngine (ThreadManager manager, Process process,
 					     int pid, bool do_attach)
 			: this (manager, process)
@@ -126,6 +129,7 @@ namespace Mono.Debugger.Backend
 			engine_stopped = true;
 			manager.AddEngine (this);
 		}
+#endif
 
 		public CommandResult StartApplication (CommandResult result)
 		{

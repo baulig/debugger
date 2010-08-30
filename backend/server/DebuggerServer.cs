@@ -23,10 +23,6 @@ namespace Mono.Debugger.Server
 
 			Debugger = debugger;
 			ThreadManager = new ThreadManager (debugger, this);
-
-			Type = server.ServerType;
-			Capabilities = server.Capabilities;
-			ArchType = server.ArchType;
 		}
 
 		public static DebuggerServer Connect (Debugger debugger, IPEndPoint endpoint)
@@ -45,26 +41,29 @@ namespace Mono.Debugger.Server
 		}
 
 		public ServerType Type {
-			get; private set;
+			get { return server.ServerType; }
 		}
 
 		public ServerCapabilities Capabilities {
-			get; private set;
+			get { return server.Capabilities; }
 		}
 
 		public ArchType ArchType {
-			get; private set;
+			get { return server.ArchType; }
 		}
 
-		public IBreakpointManager CreateBreakpointManager ()
-		{
-			return server.CreateBreakpointManager ();
+		public IBreakpointManager BreakpointManager {
+			get { return server.BreakpointManager; }
 		}
 
-		public IInferior CreateInferior (SingleSteppingEngine sse, Inferior inferior,
-						 IBreakpointManager breakpoint_manager)
+		public IInferior Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp)
 		{
-			return server.CreateInferior (sse, breakpoint_manager);
+			return server.Spawn (sse, cwd, argv, envp);
+		}
+
+		public IInferior Attach (SingleSteppingEngine sse, int pid)
+		{
+			return server.Attach (sse, pid);
 		}
 
 		public ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,
@@ -78,7 +77,7 @@ namespace Mono.Debugger.Server
 
 		public TargetInfo GetTargetInfo ()
 		{
-			return server.GetTargetInfo ();
+			return server.TargetInfo;
 		}
 
 		public MonoRuntimeHandle InitializeMonoRuntime (

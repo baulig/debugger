@@ -54,12 +54,6 @@ MdbServer::GetInferiorByPid (int pid)
 }
 
 void
-MdbServer::AddInferior (MdbInferior *inferior, int pid)
-{
-	g_hash_table_insert (inferior_by_pid, GUINT_TO_POINTER (pid), inferior);
-}
-
-void
 MdbServer::SendEvent (ServerEvent *e)
 {
 	connection->SendEvent (e);
@@ -189,6 +183,27 @@ MdbServer::GetDisassembler (MdbInferior *inferior)
 }
 
 ErrorCode
+MdbServer::Spawn (const gchar *working_directory, const gchar **argv, const gchar **envp,
+		  MdbInferior **out_inferior, int *out_child_pid, gchar **out_error)
+{
+	MdbInferior *inferior;
+	ErrorCode result;
+
+	inferior = mdb_inferior_new (this, bpm);
+	result = inferior->Spawn (working_directory, argv, envp, out_child_pid, out_error);
+	if (result) {
+		*out_inferior = NULL;
+		delete inferior;
+		return result;
+	}
+
+	g_hash_table_insert (inferior_by_pid, GUINT_TO_POINTER (*out_child_pid), inferior);
+
+	*out_inferior = inferior;
+	return ERR_NONE;
+}
+
+ErrorCode
 MdbServer::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 {
 	switch (command) {
@@ -222,26 +237,6 @@ MdbServer::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		break;
 	}
 
-	case CMD_SERVER_CREATE_INFERIOR: {
-		MdbInferior *inferior;
-		BreakpointManager *bpm;
-		int bpm_iid;
-
-		bpm_iid = in->DecodeID ();
-
-		bpm = (BreakpointManager *) ServerObject::GetObjectByID (bpm_iid, SERVER_OBJECT_KIND_BREAKPOINT_MANAGER);
-
-		g_message (G_STRLOC ": create inferior: %d - %p", bpm_iid, bpm);
-
-		if (!bpm)
-			return ERR_NO_SUCH_BPM;
-
-		inferior = mdb_inferior_new (this, bpm);
-
-		out->AddInt (inferior->GetID ());
-		break;
-	}
-
 	case CMD_SERVER_CREATE_BPM: {
 		BreakpointManager *bpm;
 		int iid;
@@ -265,6 +260,44 @@ MdbServer::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 
 		out->AddInt (reader->GetID ());
 		break;
+	}
+
+	case CMD_SERVER_GET_BPM:
+		out->AddInt (bpm->GetID ());
+		break;
+
+	case CMD_SERVER_SPAWN: {
+		char *cwd, **argv, *error;
+		int argc, i, child_pid;
+		MdbInferior *inferior;
+		ErrorCode result;
+
+		cwd = in->DecodeString ();
+		argc = in->DecodeInt ();
+
+		argv = g_new0 (char *, argc + 1);
+		for (i = 0; i < argc; i++)
+			argv [i] = in->DecodeString ();
+		argv [argc] = NULL;
+
+		if (!*cwd) {
+			g_free (cwd);
+			cwd = g_get_current_dir ();
+		}
+
+		result = Spawn (cwd, (const gchar **) argv, NULL, &inferior, &child_pid, &error);
+		if (result)
+			return result;
+
+		out->AddInt (inferior->GetID ());
+		out->AddInt (child_pid);
+
+		g_free (cwd);
+		for (i = 0; i < argc; i++)
+			g_free (argv [i]);
+		g_free (argv);
+		break;
+
 	}
 
 	default:

@@ -281,8 +281,6 @@ Connection::Setup (void)
 
 #ifdef TRANSPORT_DEBUG
 	g_message (G_STRLOC ": handshake ok");
-#else
-	g_message (G_STRLOC ": waiting for incoming connections");
 #endif
 
 	return true;

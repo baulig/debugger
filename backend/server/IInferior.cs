@@ -80,9 +80,9 @@ namespace Mono.Debugger.Server
 
 	internal interface IInferior : IServerObject, IDisposable
 	{
-		int Spawn (string cwd, string[] argv, string[] envp);
-
-		void Attach (int pid);
+		int PID {
+			get;
+		}
 
 		void InitializeProcess ();
 
