@@ -27,7 +27,7 @@ namespace Mono.Debugger.Server
 		HasSignals = 4
 	}
 
-	internal interface IDebuggerServer
+	internal interface IDebuggerServer : IServerObject
 	{
 		TargetInfo GetTargetInfo ();
 

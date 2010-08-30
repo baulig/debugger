@@ -1,18 +1,11 @@
 using System;
 using System.Collections.Generic;
 
+using Mono.Debugger.Server;
+
 namespace Mono.Debugger.MdbServer
 {
-	internal enum ServerObjectKind {
-		Unknown = 0,
-		Server,
-		Inferior,
-		Process,
-		ExeReader,
-		BreakpointManager
-	};
-
-	internal abstract class ServerObject : IDisposable
+	internal abstract class ServerObject : IServerObject, IDisposable
 	{
 		public Connection Connection {
 			get; private set;

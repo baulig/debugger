@@ -78,14 +78,14 @@ namespace Mono.Debugger.Backend
 		}
 
 		internal bool HandleChildEvent (SingleSteppingEngine engine, Inferior inferior,
-						ref DebuggerServer.ChildEvent cevent, out bool resume_target)
+						ref ServerEvent cevent, out bool resume_target)
 		{
-			if (cevent.Type == DebuggerServer.ChildEventType.NONE) {
+			if (cevent.Type == ServerEventType.None) {
 				resume_target = true;
 				return true;
 			}
 
-			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_CREATED_THREAD) {
+			if (cevent.Type == ServerEventType.ThreadCreated) {
 				int pid = (int) cevent.Argument;
 				inferior.Process.ThreadCreated (inferior, pid, false, true);
 				GetPendingSigstopForNewThread (pid);
@@ -93,13 +93,13 @@ namespace Mono.Debugger.Backend
 				return true;
 			}
 
-			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_FORKED) {
+			if (cevent.Type == ServerEventType.Forked) {
 				inferior.Process.ChildForked (inferior, (int) cevent.Argument);
 				resume_target = true;
 				return true;
 			}
 
-			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_EXECD) {
+			if (cevent.Type == ServerEventType.Execd) {
 				thread_hash.Remove (engine.PID);
 				engine_hash.Remove (engine.ID);
 				inferior.Process.ChildExecd (engine, inferior);
@@ -107,11 +107,10 @@ namespace Mono.Debugger.Backend
 				return true;
 			}
 
-			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) {
+			if (cevent.Type == ServerEventType.Stopped) {
 				if (inferior.HasSignals) {
 					if (cevent.Argument == inferior.SIGCHLD) {
-						cevent = new DebuggerServer.ChildEvent (
-							DebuggerServer.ChildEventType.CHILD_STOPPED, 0, 0, 0);
+						cevent = new ServerEvent (ServerEventType.Stopped, inferior.InferiorHandle, 0, 0, 0);
 						resume_target = true;
 						return true;
 					} else if (inferior.Has_SIGWINCH && (cevent.Argument == inferior.SIGWINCH)) {
@@ -136,8 +135,8 @@ namespace Mono.Debugger.Backend
 				retval = inferior.Process.MonoManager.HandleChildEvent (
 					engine, inferior, ref cevent, out resume_target);
 
-			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_EXITED) ||
-			    (cevent.Type == DebuggerServer.ChildEventType.CHILD_SIGNALED)) {
+			if ((cevent.Type == ServerEventType.Exited) ||
+			    (cevent.Type == ServerEventType.Signaled)) {
 				thread_hash.Remove (engine.PID);
 				engine_hash.Remove (engine.ID);
 				engine.OnThreadExited (cevent);
@@ -184,7 +183,7 @@ namespace Mono.Debugger.Backend
 			return process;
 		}
 
-		internal void AddPendingEvent (SingleSteppingEngine engine, DebuggerServer.ChildEvent cevent)
+		internal void AddPendingEvent (SingleSteppingEngine engine, ServerEvent cevent)
 		{
 			throw new InvalidOperationException ();
 		}

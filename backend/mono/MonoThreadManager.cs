@@ -297,9 +297,9 @@ namespace Mono.Debugger.Backend.Mono
 		}
 
 		internal bool HandleChildEvent (SingleSteppingEngine engine, Inferior inferior,
-						ref DebuggerServer.ChildEvent cevent, out bool resume_target)
+						ref ServerEvent cevent, out bool resume_target)
 		{
-			if (cevent.Type == DebuggerServer.ChildEventType.CHILD_NOTIFICATION) {
+			if (cevent.Type == ServerEventType.Notification) {
 				NotificationType type = (NotificationType) cevent.Argument;
 
 				Report.Debug (DebugFlags.EventLoop,
@@ -402,22 +402,22 @@ namespace Mono.Debugger.Backend.Mono
 					break;
 
 				case NotificationType.UnhandledException:
-					cevent = new DebuggerServer.ChildEvent (
-						DebuggerServer.ChildEventType.UNHANDLED_EXCEPTION,
+					cevent = new ServerEvent (
+						ServerEventType.UnhandledException, inferior.InferiorHandle,
 						0, cevent.Data1, cevent.Data2);
 					resume_target = false;
 					return false;
 
 				case NotificationType.HandleException:
-					cevent = new DebuggerServer.ChildEvent (
-						DebuggerServer.ChildEventType.HANDLE_EXCEPTION,
+					cevent = new ServerEvent (
+						ServerEventType.HandleException, inferior.InferiorHandle,
 						0, cevent.Data1, cevent.Data2);
 					resume_target = false;
 					return false;
 
 				case NotificationType.ThrowException:
-					cevent = new DebuggerServer.ChildEvent (
-						DebuggerServer.ChildEventType.THROW_EXCEPTION,
+					cevent = new ServerEvent (
+						ServerEventType.ThrowException, inferior.InferiorHandle,
 						0, cevent.Data1, cevent.Data2);
 					resume_target = false;
 					return false;
@@ -457,13 +457,13 @@ namespace Mono.Debugger.Backend.Mono
 				return true;
 			}
 
-			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) &&
+			if ((cevent.Type == ServerEventType.Stopped) &&
 			    (cevent.Argument == thread_abort_signal)) {
 				resume_target = true;
 				return true;
 			}
 
-			if ((cevent.Type == DebuggerServer.ChildEventType.CHILD_STOPPED) && (cevent.Argument != 0) && !
+			if ((cevent.Type == ServerEventType.Stopped) && (cevent.Argument != 0) && !
 			    engine.Process.Session.Config.StopOnManagedSignals) {
 				if (inferior.IsManagedSignal ((int) cevent.Argument)) {
 					resume_target = true;

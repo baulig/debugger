@@ -392,10 +392,10 @@ namespace Mono.Debugger.Backend
 		}
 
 #if FIXME
-		public DebuggerServer.ChildEvent ProcessEvent (int status)
+		public ServerEvent ProcessEvent (int status)
 		{
 			long arg, data1, data2;
-			DebuggerServer.ChildEventType message;
+			ServerEventType message;
 
 			int opt_data_size;
 			byte[] opt_data;
@@ -404,29 +404,29 @@ namespace Mono.Debugger.Backend
 				status, out arg, out data1, out data2, out opt_data);
 
 			switch (message) {
-			case DebuggerServer.ChildEventType.CHILD_EXITED:
-			case DebuggerServer.ChildEventType.CHILD_SIGNALED:
+			case ServerEventType.Exited:
+			case ServerEventType.CHILD_SIGNALED:
 				change_target_state (TargetState.Exited);
 				break;
 
-			case DebuggerServer.ChildEventType.CHILD_CALLBACK:
-			case DebuggerServer.ChildEventType.CHILD_CALLBACK_COMPLETED:
-			case DebuggerServer.ChildEventType.RUNTIME_INVOKE_DONE:
-			case DebuggerServer.ChildEventType.CHILD_STOPPED:
-			case DebuggerServer.ChildEventType.CHILD_INTERRUPTED:
-			case DebuggerServer.ChildEventType.CHILD_HIT_BREAKPOINT:
-			case DebuggerServer.ChildEventType.CHILD_NOTIFICATION:
+			case ServerEventType.Callback:
+			case ServerEventType.Callback_COMPLETED:
+			case ServerEventType.RUNTIME_INVOKE_DONE:
+			case ServerEventType.Stopped:
+			case ServerEventType.Interrupted:
+			case ServerEventType.Breakpoint:
+			case ServerEventType.Notification:
 				change_target_state (TargetState.Stopped);
 				break;
 
-			case DebuggerServer.ChildEventType.CHILD_EXECD:
+			case ServerEventType.CHILD_EXECD:
 				break;
 			}
 
 			if (opt_data != null)
-				return new DebuggerServer.ChildEvent (message, arg, data1, data2, opt_data);
+				return new ServerEvent (message, arg, data1, data2, opt_data);
 
-			return new DebuggerServer.ChildEvent (message, arg, data1, data2);
+			return new ServerEvent (message, arg, data1, data2);
 		}
 #endif
 
@@ -781,7 +781,7 @@ namespace Mono.Debugger.Backend
 		//   Note that the target may have stopped abnormally in the meantime, in
 		//   this case we return the corresponding ChildEvent.
 		// </summary>
-		public bool Stop (out DebuggerServer.ChildEvent new_event)
+		public bool Stop (out ServerEvent new_event)
 		{
 #if FIXME
 			check_disposed ();

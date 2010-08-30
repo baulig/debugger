@@ -1,6 +1,6 @@
 namespace Mono.Debugger.Server
 {
-	internal interface IExecutableReader
+	internal interface IExecutableReader : IServerObject
 	{
 		long StartAddress {
 			get;

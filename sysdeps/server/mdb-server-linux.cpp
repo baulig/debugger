@@ -115,7 +115,7 @@ handle_extended_event (int pid, int status)
 			return e;
 		}
 
-		e->type = SERVER_EVENT_CHILD_CREATED_THREAD;
+		e->type = SERVER_EVENT_THREAD_CREATED;
 		e->arg = new_pid;
 		return e;
 	}
@@ -129,14 +129,14 @@ handle_extended_event (int pid, int status)
 			return e;
 		}
 
-		e->type = SERVER_EVENT_CHILD_FORKED;
+		e->type = SERVER_EVENT_FORKED;
 		e->arg = new_pid;
 		return e;
 	}
 
 	case PTRACE_EVENT_EXEC: {
 		e = g_new0 (ServerEvent, 1);
-		e->type = SERVER_EVENT_CHILD_EXECD;
+		e->type = SERVER_EVENT_EXECD;
 		return e;
 	}
 
@@ -149,7 +149,7 @@ handle_extended_event (int pid, int status)
 			return e;
 		}
 
-		e->type = SERVER_EVENT_CHILD_CALLED_EXIT;
+		e->type = SERVER_EVENT_CALLED_EXIT;
 		e->arg = exitcode;
 		return e;
 	}

@@ -76,68 +76,6 @@ namespace Mono.Debugger.Server
 			return reader;
 		}
 
-		internal enum ChildEventType {
-			NONE = 0,
-			UNKNOWN_ERROR = 1,
-			CHILD_EXITED,
-			CHILD_STOPPED,
-			CHILD_SIGNALED,
-			CHILD_CALLBACK,
-			CHILD_CALLBACK_COMPLETED,
-			CHILD_HIT_BREAKPOINT,
-			CHILD_MEMORY_CHANGED,
-			CHILD_CREATED_THREAD,
-			CHILD_FORKED,
-			CHILD_EXECD,
-			CHILD_CALLED_EXIT,
-			CHILD_NOTIFICATION,
-			CHILD_INTERRUPTED,
-			RUNTIME_INVOKE_DONE,
-			INTERNAL_ERROR,
-
-			DLL_LOADED		= 0x41,
-
-			UNHANDLED_EXCEPTION	= 0x4001,
-			THROW_EXCEPTION,
-			HANDLE_EXCEPTION
-		}
-
-		internal delegate void ChildEventHandler (ChildEventType message, int arg);
-
-		internal sealed class ChildEvent
-		{
-			public readonly ChildEventType Type;
-			public readonly long Argument;
-
-			public readonly long Data1;
-			public readonly long Data2;
-
-			public readonly byte[] CallbackData;
-
-			public ChildEvent (ChildEventType type, long arg, long data1, long data2)
-			{
-				this.Type = type;
-				this.Argument = arg;
-				this.Data1 = data1;
-				this.Data2 = data2;
-			}
-
-			public ChildEvent (ChildEventType type, long arg, long data1, long data2,
-					   byte[] callback_data)
-				: this (type, arg, data1, data2)
-			{
-				this.CallbackData = callback_data;
-			}
-
-			public override string ToString ()
-			{
-				return String.Format ("ChildEvent ({0}:{1}:{2:x}:{3:x})",
-						      Type, Argument, Data1, Data2);
-			}
-		}
-
-		internal delegate void ChildOutputHandler (bool is_stderr, string output);
-
 		public TargetInfo GetTargetInfo ()
 		{
 			return server.GetTargetInfo ();

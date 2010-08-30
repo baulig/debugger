@@ -183,7 +183,7 @@ X86Arch::ChildStopped (int stopsig)
 
 	e = g_new0 (ServerEvent, 1);
 	e->sender = inferior;
-	e->type = SERVER_EVENT_CHILD_STOPPED;
+	e->type = SERVER_EVENT_STOPPED;
 
 	/*
 	 * By default, when the NX-flag is set in the BIOS, we stop at the `cdata->call_address'
@@ -288,18 +288,18 @@ X86Arch::ChildStopped (int stopsig)
 		if (cdata->debug) {
 			e->data1 = 0;
 			g_free (cdata);
-			e->type = SERVER_EVENT_CHILD_CALLBACK_COMPLETED;
+			e->type = SERVER_EVENT_CALLBACK_COMPLETED;
 			return e;
 		}
 
 		g_free (cdata);
-		e->type = SERVER_EVENT_CHILD_CALLBACK;
+		e->type = SERVER_EVENT_CALLBACK;
 		return e;
 	}
 
 #if defined(__linux__) || defined(__FreeBSD__)
 	if (stopsig == SIGSTOP) {
-		e->type = SERVER_EVENT_CHILD_INTERRUPTED;
+		e->type = SERVER_EVENT_INTERRUPTED;
 		return e;
 	}
 
@@ -321,7 +321,7 @@ X86Arch::ChildStopped (int stopsig)
 		e->arg = data [0];
 		e->data1 = data [1];
 		e->data2 = data [2];
-		e->type = SERVER_EVENT_CHILD_NOTIFICATION;
+		e->type = SERVER_EVENT_NOTIFICATION;
 		return e;
 	}
 #endif
@@ -331,7 +331,7 @@ X86Arch::ChildStopped (int stopsig)
 			INFERIOR_REG_DR_STATUS (current_regs) = 0;
 			SetRegisters ();
 			e->arg = INFERIOR_DR_INDEX (current_regs, i);
-			e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
+			e->type = SERVER_EVENT_BREAKPOINT;
 			return e;
 		}
 	}
@@ -347,7 +347,7 @@ X86Arch::ChildStopped (int stopsig)
 
 		INFERIOR_REG_RIP (current_regs)--;
 		SetRegisters ();
-		e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
+		e->type = SERVER_EVENT_BREAKPOINT;
 		e->arg = breakpoint->id;
 		return e;
 	}
@@ -383,7 +383,7 @@ X86Arch::ChildStopped (int stopsig)
 
 	if ((code & 0xff) == 0xcc) {
 		e->arg = 0;
-		e->type = SERVER_EVENT_CHILD_HIT_BREAKPOINT;
+		e->type = SERVER_EVENT_BREAKPOINT;
 		return e;
 	}
 

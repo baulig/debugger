@@ -39,29 +39,6 @@ namespace Mono.Debugger.MdbServer
 		CANNOT_OPEN_EXE = 0x1004,
 	}
 
-	internal enum ServerEventType
-	{
-		NONE,
-		UNKNOWN_ERROR = 1,
-		CHILD_EXITED = 2,
-		CHILD_STOPPED,
-		CHILD_SIGNALED,
-		CHILD_CALLBACK,
-		CHILD_CALLBACK_COMPLETED,
-		CHILD_HIT_BREAKPOINT,
-		CHILD_MEMORY_CHANGED,
-		CHILD_CREATED_THREAD,
-		CHILD_FORKED,
-		CHILD_EXECD,
-		CHILD_CALLED_EXIT,
-		CHILD_NOTIFICATION,
-		CHILD_INTERRUPTED,
-		RUNTIME_INVOKE_DONE,
-		INTERNAL_ERROR,
-
-		DLL_LOADED = 0x41
-	}
-
 	internal enum CommandSet
 	{
 		SERVER = 1,
@@ -74,32 +51,6 @@ namespace Mono.Debugger.MdbServer
 	internal enum EventKind
 	{
 		TARGET_EVENT = 1
-	}
-
-	internal class ServerEvent
-	{
-		public EventKind EventKind {
-			get; set;
-		}
-
-		public ServerEventType EventType {
-			get; set;
-		}
-
-		public DebuggerServer.ChildEvent ChildEvent {
-			get; set;
-		}
-
-		public ServerEvent (EventKind kind, ServerEventType type)
-		{
-			EventKind = kind;
-			EventType = type;
-		}
-
-		public override string ToString ()
-		{
-			return String.Format ("ServerEvent ({0}:{1})", EventKind, EventType);
-		}
 	}
 
 	internal class Connection
@@ -529,18 +480,13 @@ namespace Mono.Debugger.MdbServer
 						if (opt_data_size > 0)
 							opt_data = r.ReadData (opt_data_size);
 
-						var ctype = (DebuggerServer.ChildEventType) type;
-
 						Console.WriteLine ("EVENT: {0} {1} {2:x} {3:x} {4:x} {5}",
 								   type, sender_iid, arg, data1, data2, opt_data_size);
 
-						DebuggerServer.ChildEvent ev;
 						if (opt_data != null)
-							ev = new DebuggerServer.ChildEvent (ctype, arg, data1, data2, opt_data);
+							e = new ServerEvent (type, sender, arg, data1, data2, opt_data);
 						else
-							ev = new DebuggerServer.ChildEvent (ctype, arg, data1, data2);
-
-						e = new ServerEvent (kind, type) { ChildEvent = ev };
+							e = new ServerEvent (type, sender, arg, data1, data2);
 					} else {
 						throw new InternalError ("Unknown event: {0}", kind);
 					}

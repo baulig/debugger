@@ -78,7 +78,7 @@ namespace Mono.Debugger.Server
 	internal abstract class MonoRuntimeHandle
 	{ }
 
-	internal interface IInferior : IDisposable
+	internal interface IInferior : IServerObject, IDisposable
 	{
 		int Spawn (string cwd, string[] argv, string[] envp);
 

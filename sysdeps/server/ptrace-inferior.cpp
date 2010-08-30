@@ -701,7 +701,7 @@ PTraceInferior::HandleLinuxWaitEvent (int status)
 		if (stopsig == SIGSTOP) {
 			e = g_new0 (ServerEvent, 1);
 			e->sender = this;
-			e->type = SERVER_EVENT_CHILD_INTERRUPTED;
+			e->type = SERVER_EVENT_INTERRUPTED;
 			return e;
 		}
 
@@ -710,7 +710,7 @@ PTraceInferior::HandleLinuxWaitEvent (int status)
 		e = g_new0 (ServerEvent, 1);
 		e->sender = this;
 
-		e->type = SERVER_EVENT_CHILD_EXITED;
+		e->type = SERVER_EVENT_EXITED;
 		e->arg = WEXITSTATUS (status);
 		return e;
 	} else if (WIFSIGNALED (status)) {
@@ -718,11 +718,11 @@ PTraceInferior::HandleLinuxWaitEvent (int status)
 		e->sender = this;
 
 		if ((WTERMSIG (status) == SIGTRAP) || (WTERMSIG (status) == SIGKILL)) {
-			e->type = SERVER_EVENT_CHILD_EXITED;
+			e->type = SERVER_EVENT_EXITED;
 			e->arg = 0;
 			return e;
 		} else {
-			e->type = SERVER_EVENT_CHILD_SIGNALED;
+			e->type = SERVER_EVENT_SIGNALED;
 			e->arg = WTERMSIG (status);
 			return e;
 		}
