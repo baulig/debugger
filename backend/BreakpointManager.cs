@@ -4,23 +4,16 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-using Mono.Debugger.Backend;
+using Mono.Debugger.Server;
 
-namespace Mono.Debugger.Server
+namespace Mono.Debugger.Backend
 {
 	internal class BreakpointManager : IDisposable
 	{
-		internal interface IServerBreakpointManager
-		{
-			int LookupBreakpointByAddr (long address, out bool enabled);
-
-			bool LookupBreakpointById (int id, out bool enabled);
-		}
-
-		IServerBreakpointManager bpm;
+		IBreakpointManager bpm;
 		Dictionary<int,BreakpointEntry> bpt_by_index;
 
-		public BreakpointManager (IServerBreakpointManager bpm)
+		public BreakpointManager (IBreakpointManager bpm)
 		{
 			this.bpm = bpm;
 			this.bpt_by_index = new Dictionary<int,BreakpointEntry> ();
@@ -34,7 +27,7 @@ namespace Mono.Debugger.Server
 			}
 		}
 
-		public IServerBreakpointManager ServerManager {
+		public IBreakpointManager ServerHandle {
 			get { return bpm; }
 		}
 

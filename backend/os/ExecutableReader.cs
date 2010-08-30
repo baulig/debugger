@@ -3,34 +3,17 @@ using System.Collections;
 using System.Collections.Generic;
 
 using Mono.Debugger;
-using Mono.Debugger.Backend;
+using Mono.Debugger.Server;
 using Mono.Debugger.Languages;
 using Mono.Debugger.Architectures;
 
-namespace Mono.Debugger.Server
+namespace Mono.Debugger.Backend
 {
 	internal class ExecutableReader : DebuggerMarshalByRefObject, IDisposable
 	{
-		internal interface IServerExeReader
-		{
-			long StartAddress {
-				get;
-			}
-
-			long LookupSymbol (string name);
-
-			string GetTargetName ();
-
-			bool HasSection (string name);
-
-			long GetSectionAddress (string name);
-
-			byte[] GetSectionContents (string name);
-		}
-
 		DebuggerServer server;
 
-		IServerExeReader reader;
+		IExecutableReader reader;
 
 		DebuggingFileReader debug_info;
 		ExeReaderSymbolFile symfile;
@@ -46,7 +29,7 @@ namespace Mono.Debugger.Server
 		TargetAddress base_address = TargetAddress.Null;
 
 		public ExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory_info,
-					 DebuggerServer server, IServerExeReader reader, string file)
+					 DebuggerServer server, IExecutableReader reader, string file)
 		{
 			this.OperatingSystem = os;
 			this.TargetMemoryInfo = memory_info;

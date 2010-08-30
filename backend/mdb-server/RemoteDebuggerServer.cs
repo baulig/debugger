@@ -92,7 +92,7 @@ namespace Mono.Debugger.MdbServer
 		public override InferiorHandle CreateInferior (SingleSteppingEngine sse, Inferior inferior,
 							       BreakpointManager breakpoint_manager)
 		{
-			var bpm = (MdbBreakpointManager) breakpoint_manager.ServerManager;
+			var bpm = (MdbBreakpointManager) breakpoint_manager.ServerHandle;
 			return server.CreateInferior (bpm);
 		}
 

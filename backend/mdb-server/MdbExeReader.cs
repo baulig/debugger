@@ -5,7 +5,7 @@ using Mono.Debugger.Server;
 
 namespace Mono.Debugger.MdbServer
 {
-	internal class MdbExeReader : ServerObject, ExecutableReader.IServerExeReader
+	internal class MdbExeReader : ServerObject, IExecutableReader
 	{
 		public MdbExeReader (Connection connection, int id)
 			: base (connection, id, ServerObjectKind.ExeReader)
