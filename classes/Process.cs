@@ -168,7 +168,7 @@ namespace Mono.Debugger
 
 		Process parent;
 
-#if !WINDOWS
+#if FIXME && !WINDOWS
 		ThreadDB thread_db;
 #endif
 
@@ -542,7 +542,7 @@ namespace Mono.Debugger
 
 		internal void InitializeThreads (Inferior inferior, bool resume_threads)
 		{
-#if !WINDOWS
+#if FIXME && !WINDOWS
 			if (thread_db != null)
 				return;
 
@@ -576,7 +576,7 @@ namespace Mono.Debugger
 
 		internal bool CheckForThreads (ArrayList check_threads)
 		{
-#if !WINDOWS
+#if FIXME && !WINDOWS
 			if(thread_db == null)
 				return false;
 			thread_db.GetThreadInfo (null, delegate (int lwp, long tid) {
@@ -621,7 +621,7 @@ namespace Mono.Debugger
 					return engine;
 			}
 
-#if !WINDOWS
+#if FIXME && !WINDOWS
 			if (thread_db == null) {
 				Report.Error ("Failed to initialize thread_db on {0}: {1}",
 					      start.CommandLine, start);
@@ -1127,7 +1127,7 @@ namespace Mono.Debugger
 				breakpoint_manager = null;
 			}
 
-#if !WINDOWS
+#if FIXME && !WINDOWS
 			if (thread_db != null) {
 				thread_db.Dispose ();
 				thread_db = null;

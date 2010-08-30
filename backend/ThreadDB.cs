@@ -1,5 +1,6 @@
-#if !WINDOWS
+#if FIXME && !WINDOWS
 using System;
+using Mono.Debugger.Server;
 using System.Runtime.InteropServices;
 
 namespace Mono.Debugger.Backend
