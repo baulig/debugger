@@ -447,7 +447,7 @@ namespace Mono.Debugger.Backend
 
 		protected void SetupInferior ()
 		{
-			if ((server.Capabilities & DebuggerServer.ServerCapabilities.HAS_SIGNALS) != 0) {
+			if ((server.Capabilities & ServerCapabilities.HasSignals) != 0) {
 				signal_info = inferior.GetSignalInfo ();
 				has_signals = true;
 			}

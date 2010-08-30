@@ -29,13 +29,13 @@ namespace Mono.Debugger.Backend
 				disassembler = new BfdDisassembler (process, info.TargetAddressSize == 8);
 
 			switch (process.ThreadManager.DebuggerServer.ArchType) {
-			case DebuggerServer.ArchTypeEnum.I386:
+			case ArchType.I386:
 				opcodes = new Opcodes_X86_64 (process);
 				break;
-			case DebuggerServer.ArchTypeEnum.X86_64:
+			case ArchType.X86_64:
 				opcodes = new Opcodes_I386 (process);
 				break;
-			case DebuggerServer.ArchTypeEnum.ARM:
+			case ArchType.ARM:
 				// opcodes = new Opcodes_ARM (process);
 				break;
 			default:

@@ -24,7 +24,7 @@ namespace Mono.Debugger.Server
 
 			Type = server.ServerType;
 			Capabilities = server.Capabilities;
-			ArchType = server.Architecture;
+			ArchType = server.ArchType;
 		}
 
 		public Debugger Debugger {
@@ -43,7 +43,7 @@ namespace Mono.Debugger.Server
 			get; private set;
 		}
 
-		public ArchTypeEnum ArchType {
+		public ArchType ArchType {
 			get; private set;
 		}
 
@@ -139,30 +139,6 @@ namespace Mono.Debugger.Server
 			EXECUTE,
 			READ,
 			WRITE
-		}
-
-		internal enum ServerType
-		{
-			UNKNOWN = 0,
-			LINUX_PTRACE = 1,
-			DARWIN = 2,
-			WINDOWS = 3
-		}
-
-		internal enum ArchTypeEnum
-		{
-			UNKNOWN = 0,
-			I386 = 1,
-			X86_64 = 2,
-			ARM = 3
-		}
-
-		internal enum ServerCapabilities
-		{
-			NONE = 0,
-			THREAD_EVENTS = 1,
-			CAN_DETACH_ANY = 2,
-			HAS_SIGNALS = 4
 		}
 
 		[StructLayout(LayoutKind.Sequential)]

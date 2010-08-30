@@ -192,13 +192,13 @@ namespace Mono.Debugger
 			target_info = manager.GetTargetInfo ();
 
 			switch (manager.DebuggerServer.ArchType) {
-			case DebuggerServer.ArchTypeEnum.I386:
+			case ArchType.I386:
 				architecture = new Architecture_I386 (this, target_info);
 				break;
-			case DebuggerServer.ArchTypeEnum.X86_64:
+			case ArchType.X86_64:
 				architecture = new Architecture_X86_64 (this, target_info);
 				break;
-			case DebuggerServer.ArchTypeEnum.ARM:
+			case ArchType.ARM:
 				architecture = new Architecture_Arm (this, target_info);
 				break;
 			default:

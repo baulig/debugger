@@ -24,16 +24,16 @@ namespace Mono.Debugger.MdbServer
 			return new TargetInfo (reader.ReadInt (), reader.ReadInt (), reader.ReadInt (), reader.ReadByte () != 0);
 		}
 
-		public DebuggerServer.ServerType ServerType {
-			get { return (DebuggerServer.ServerType) Connection.SendReceive (CommandSet.SERVER, (int)CmdServer.GET_SERVER_TYPE, null).ReadInt (); }
+		public ServerType ServerType {
+			get { return (ServerType) Connection.SendReceive (CommandSet.SERVER, (int)CmdServer.GET_SERVER_TYPE, null).ReadInt (); }
 		}
 
-		public DebuggerServer.ArchTypeEnum Architecture {
-			get { return (DebuggerServer.ArchTypeEnum) Connection.SendReceive (CommandSet.SERVER, (int)CmdServer.GET_ARCH_TYPE, null).ReadInt (); }
+		public ArchType ArchType {
+			get { return (ArchType) Connection.SendReceive (CommandSet.SERVER, (int)CmdServer.GET_ARCH_TYPE, null).ReadInt (); }
 		}
 
-		public DebuggerServer.ServerCapabilities Capabilities {
-			get { return (DebuggerServer.ServerCapabilities) Connection.SendReceive (CommandSet.SERVER, (int)CmdServer.GET_CAPABILITIES, null).ReadInt (); }
+		public ServerCapabilities Capabilities {
+			get { return (ServerCapabilities) Connection.SendReceive (CommandSet.SERVER, (int)CmdServer.GET_CAPABILITIES, null).ReadInt (); }
 		}
 
 		public MdbInferior CreateInferior (MdbBreakpointManager bpm)
