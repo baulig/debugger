@@ -40,6 +40,10 @@ namespace Mono.Debugger.Server
 			get; private set;
 		}
 
+		public IServerObject ArgumentObject {
+			get; private set;
+		}
+
 		public long Argument {
 			get; private set;
 		}
@@ -56,19 +60,15 @@ namespace Mono.Debugger.Server
 			get; private set;
 		}
 
-		public ServerEvent (ServerEventType type, IServerObject sender, long arg, long data1, long data2)
+		public ServerEvent (ServerEventType type, IServerObject sender, long arg, long data1, long data2,
+				    IServerObject arg_obj = null, byte[] callback_data = null)
 		{
 			this.Type = type;
 			this.Sender = sender;
 			this.Argument = arg;
 			this.Data1 = data1;
 			this.Data2 = data2;
-		}
-
-		public ServerEvent (ServerEventType type, IServerObject sender, long arg, long data1, long data2,
-				    byte[] callback_data)
-			: this (type, sender, arg, data1, data2)
-		{
+			this.ArgumentObject = arg_obj;
 			this.CallbackData = callback_data;
 		}
 

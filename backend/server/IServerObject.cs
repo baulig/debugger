@@ -1,7 +1,7 @@
 namespace Mono.Debugger.Server
 {
 	internal enum ServerObjectKind {
-		Unknown = 0,
+		None = 0,
 		Server,
 		Inferior,
 		Process,

@@ -48,15 +48,12 @@ namespace Mono.Debugger.MdbServer
 		EXE_READER = 5
 	}
 
-	internal enum EventKind
-	{
-		TARGET_EVENT = 1
-	}
-
 	internal class Connection
 	{
 		const string HANDSHAKE_STRING = "9da91832-87f3-4cde-a92f-6384fec6536e";
 		const int HEADER_LENGTH = 11;
+
+		MdbServer server;
 
 		Socket socket;
 		ST.Thread receiver_thread;
@@ -376,12 +373,13 @@ namespace Mono.Debugger.MdbServer
 		public static MdbServer Connect (IPEndPoint endpoint)
 		{
 			var connection = new Connection (endpoint);
-
-			return new MdbServer (connection);
+			return connection.server;
 		}
 
 		protected Connection (IPEndPoint endpoint)
 		{
+			server = new MdbServer (this);
+
 			socket = new Socket (AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 			socket.Connect (endpoint);
 
@@ -460,36 +458,29 @@ namespace Mono.Debugger.MdbServer
 				PacketReader r = new PacketReader (packet);
 
 				if (r.CommandSet == CommandSet.EVENT && r.Command == (int)CmdEvent.COMPOSITE) {
-					EventKind kind = (EventKind)r.ReadByte ();
-					var sender_kind = (ServerObjectKind) r.ReadByte ();
-					var sender_iid = r.ReadInt ();
-
 					ServerObject sender = null;
-					if (sender_kind != ServerObjectKind.Unknown)
-						sender = ServerObject.GetObjectByID (sender_iid);
+					ServerObject arg_object = null;
 
-					ServerEvent e;
+					var sender_kind = (ServerObjectKind) r.ReadByte ();
+					if (sender_kind != ServerObjectKind.None)
+						sender = ServerObject.GetObjectByID (r.ReadInt (), sender_kind);
+					else
+						sender = server;
 
-					if (kind == EventKind.TARGET_EVENT) {
-						var type = (ServerEventType) r.ReadByte ();
-						var arg = r.ReadLong ();
-						var data1 = r.ReadLong ();
-						var data2 = r.ReadLong ();
-						var opt_data_size = r.ReadInt ();
-						byte[] opt_data = null;
-						if (opt_data_size > 0)
-							opt_data = r.ReadData (opt_data_size);
+					var arg_obj_kind = (ServerObjectKind) r.ReadByte ();
+					if (arg_obj_kind != ServerObjectKind.None)
+						arg_object = ServerObject.GetObjectByID (r.ReadInt (), arg_obj_kind);
 
-						Console.WriteLine ("EVENT: {0} {1} {2:x} {3:x} {4:x} {5}",
-								   type, sender_iid, arg, data1, data2, opt_data_size);
+					var type = (ServerEventType) r.ReadByte ();
+					var arg = r.ReadLong ();
+					var data1 = r.ReadLong ();
+					var data2 = r.ReadLong ();
+					var opt_data_size = r.ReadInt ();
+					byte[] opt_data = null;
+					if (opt_data_size > 0)
+						opt_data = r.ReadData (opt_data_size);
 
-						if (opt_data != null)
-							e = new ServerEvent (type, sender, arg, data1, data2, opt_data);
-						else
-							e = new ServerEvent (type, sender, arg, data1, data2);
-					} else {
-						throw new InternalError ("Unknown event: {0}", kind);
-					}
+					var e = new ServerEvent (type, sender, arg, data1, data2, arg_object, opt_data);
 
 					ST.ThreadPool.QueueUserWorkItem (delegate {
 						sender.HandleEvent (e);

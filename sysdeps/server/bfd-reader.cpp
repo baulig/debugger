@@ -427,7 +427,7 @@ BfdReader::DynlinkHandler (MdbInferior *inferior)
 				ServerEvent *e = g_new0 (ServerEvent, 1);
 
 				e->type = SERVER_EVENT_DLL_LOADED;
-				e->sender = reader;
+				e->arg_object = reader;
 				server->SendEvent (e);
 				g_free (e);
 			}

@@ -1,14 +1,20 @@
 using System;
 using System.Runtime.InteropServices;
+
 using Mono.Debugger.Server;
+using Mono.Debugger.Backend;
 
 namespace Mono.Debugger.MdbServer
 {
 	internal class MdbInferior : ServerObject, IInferior
 	{
-		public MdbInferior (Connection connection, int id)
+		SingleSteppingEngine sse;
+
+		public MdbInferior (Connection connection, SingleSteppingEngine sse, int id)
 			: base (connection, id, ServerObjectKind.Inferior)
-		{ }
+		{
+			this.sse = sse;
+		}
 
 		enum CmdInferior {
 			SPAWN = 1,
@@ -131,6 +137,11 @@ namespace Mono.Debugger.MdbServer
 		public int InsertHardwareBreakpoint (HardwareBreakpointType type, bool fallback,
 						     long address, out int hw_index)
 		{
+			if ((type == HardwareBreakpointType.None) && fallback) {
+				hw_index = -1;
+				return InsertBreakpoint (address);
+			}
+
 			throw new NotImplementedException ();
 		}
 
@@ -297,7 +308,8 @@ namespace Mono.Debugger.MdbServer
 
 		internal override void HandleEvent (ServerEvent e)
 		{
-			throw new InternalError ("GOT UNEXPECTED EVENT: {0}", e);
+			Console.WriteLine ("INFERIOR EVENT: {0}", e);
+			sse.ProcessEvent (e);
 		}
 	}
 }

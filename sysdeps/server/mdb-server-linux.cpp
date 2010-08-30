@@ -89,7 +89,7 @@ MdbServer::MainLoop (int conn_fd)
 		}
 
 		if (FD_ISSET (conn_fd, &readfds)) {
-		  if (!MainLoopIteration ())
+			if (!MainLoopIteration ())
 				break;
 		}
 	}

@@ -1,4 +1,5 @@
 using System;
+using Mono.Debugger.Backend;
 
 namespace Mono.Debugger.Server
 {
@@ -43,7 +44,7 @@ namespace Mono.Debugger.Server
 			get;
 		}
 
-		IInferior CreateInferior (IBreakpointManager bpm);
+		IInferior CreateInferior (SingleSteppingEngine sse, IBreakpointManager bpm);
 
 		IBreakpointManager CreateBreakpointManager ();
 

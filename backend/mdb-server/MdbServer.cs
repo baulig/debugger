@@ -1,4 +1,6 @@
+using System;
 using Mono.Debugger.Server;
+using Mono.Debugger.Backend;
 
 namespace Mono.Debugger.MdbServer
 {
@@ -36,15 +38,15 @@ namespace Mono.Debugger.MdbServer
 			get { return (ServerCapabilities) Connection.SendReceive (CommandSet.SERVER, (int)CmdServer.GET_CAPABILITIES, null).ReadInt (); }
 		}
 
-		public MdbInferior CreateInferior (MdbBreakpointManager bpm)
+		public MdbInferior CreateInferior (SingleSteppingEngine sse, MdbBreakpointManager bpm)
 		{
 			int iid = Connection.SendReceive (CommandSet.SERVER, (int)CmdServer.CREATE_INFERIOR, new Connection.PacketWriter ().WriteInt (bpm.ID)).ReadInt ();
-			return new MdbInferior (Connection, iid);
+			return new MdbInferior (Connection, sse, iid);
 		}
 
-		IInferior IDebuggerServer.CreateInferior (IBreakpointManager bpm)
+		IInferior IDebuggerServer.CreateInferior (SingleSteppingEngine sse, IBreakpointManager bpm)
 		{
-			return CreateInferior ((MdbBreakpointManager) bpm);
+			return CreateInferior (sse, (MdbBreakpointManager) bpm);
 		}
 
 		public MdbBreakpointManager CreateBreakpointManager ()
@@ -71,7 +73,7 @@ namespace Mono.Debugger.MdbServer
 
 		internal override void HandleEvent (ServerEvent e)
 		{
-			throw new InternalError ("GOT UNEXPECTED EVENT: {0}", e);
+			Console.WriteLine ("SERVER EVENT: {0}", e);
 		}
 	}
 }

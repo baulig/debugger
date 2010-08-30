@@ -73,10 +73,10 @@ Buffer::MakeRoom (int size)
 {
 	if (end - p < size) {
 		int new_size = end - buf + size + 32;
-		guint8 *p = (guint8 *) g_realloc (buf, new_size);
-		size = p - buf;
-		buf = p;
-		p = p + size;
+		int offset = p - buf;
+
+		buf = (guint8 *) g_realloc (buf, new_size);
+		p = buf + offset;
 		end = buf + new_size;
 	}
 }
@@ -138,6 +138,7 @@ Buffer::AddString (const char *str)
 Buffer::~Buffer (void)
 {
 	g_free (buf);
+	buf = NULL;
 }
 
 int
@@ -314,6 +315,7 @@ Connection::HandleIncomingRequest (MdbServer *server)
 	g_assert (flags == 0);
 
 	delete in;
+	in = NULL;
 
 #ifdef TRANSPORT_DEBUG
 	g_message (G_STRLOC ": Received command %d/%d, id=%d.", command_set, command, id);
@@ -429,10 +431,11 @@ Connection::HandleIncomingRequest (MdbServer *server)
 		ServerObject::Unlock ();
 	}
 
-	delete in;
+	if (in)
+		delete in;
 	delete buf;
 
-	return false;
+	return true;
 }
 
 #if WINDOWS
@@ -462,13 +465,17 @@ Connection::SendEvent (ServerEvent *e)
 	Buffer *buf;
 
 	buf = new Buffer (128 + e->opt_data_size);
-	buf->AddByte (EVENT_KIND_TARGET_EVENT);
 	if (e->sender) {
 		buf->AddByte (e->sender->GetObjectKind ());
 		buf->AddInt (e->sender->GetID ());
 	} else {
 		buf->AddByte (0);
-		buf->AddInt (0);
+	}
+	if (e->arg_object) {
+		buf->AddByte (e->arg_object->GetObjectKind ());
+		buf->AddInt (e->arg_object->GetID ());
+	} else {
+		buf->AddByte (0);
 	}
 	buf->AddByte (e->type);
 	buf->AddLong (e->arg);

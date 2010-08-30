@@ -24,13 +24,19 @@ namespace Mono.Debugger.MdbServer
 		public static ServerObject GetObjectByID (int id)
 		{
 			lock (object_hash) {
-				return object_hash [id];
+				if (object_hash.ContainsKey (id))
+					return object_hash [id];
+
+				return null;
 			}
 		}
 
 		public static ServerObject GetObjectByID (int id, ServerObjectKind kind)
 		{
 			lock (object_hash) {
+				if (!object_hash.ContainsKey (id))
+					return null;
+
 				var obj = object_hash [id];
 				if (obj.Kind != kind)
 					throw new ArgumentException ();

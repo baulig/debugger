@@ -64,7 +64,7 @@ namespace Mono.Debugger.Server
 		public IInferior CreateInferior (SingleSteppingEngine sse, Inferior inferior,
 						 IBreakpointManager breakpoint_manager)
 		{
-			return server.CreateInferior (breakpoint_manager);
+			return server.CreateInferior (sse, breakpoint_manager);
 		}
 
 		public ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,

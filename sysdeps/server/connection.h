@@ -122,6 +122,7 @@ class BreakpointManager;
 typedef struct {
 	ServerEventType type;
 	ServerObject *sender;
+	ServerObject *arg_object;
 	guint64 arg;
 	guint64 data1;
 	guint64 data2;

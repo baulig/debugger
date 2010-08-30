@@ -28,10 +28,6 @@ typedef enum {
 	ARCH_TYPE_ARM				= 3
 } ArchType;
 
-typedef enum {
-	EVENT_KIND_TARGET_EVENT = 1
-} EventKind;
-
 typedef struct {
 	void (* func) (gpointer user_data);
 	gpointer user_data;
