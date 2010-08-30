@@ -67,13 +67,6 @@ namespace Mono.Debugger.Server
 			return reader;
 		}
 
-		internal struct ServerStackFrame
-		{
-			public long Address;
-			public long StackPointer;
-			public long FrameAddress;
-		}
-
 		internal enum ChildEventType {
 			NONE = 0,
 			UNKNOWN_ERROR = 1,
@@ -134,80 +127,12 @@ namespace Mono.Debugger.Server
 			}
 		}
 
-		internal enum HardwareBreakpointType {
-			NONE = 0,
-			EXECUTE,
-			READ,
-			WRITE
-		}
-
-		[StructLayout(LayoutKind.Sequential)]
-		internal struct SignalInfo
-		{
-			public int SIGKILL;
-			public int SIGSTOP;
-			public int SIGINT;
-			public int SIGCHLD;
-
-			public int SIGFPE;
-			public int SIGQUIT;
-			public int SIGABRT;
-			public int SIGSEGV;
-			public int SIGILL;
-			public int SIGBUS;
-			public int SIGWINCH;
-
-			public int Kernel_SIGRTMIN;
-			public int MonoThreadAbortSignal;
-
-			public override string ToString ()
-			{
-				return String.Format ("SignalInfo ({0}:{1}:{2}:{3}:{4} - {5})",
-						      SIGKILL, SIGSTOP, SIGINT, SIGCHLD, Kernel_SIGRTMIN,
-						      MonoThreadAbortSignal);
-			}
-		}
-
 		internal delegate void ChildOutputHandler (bool is_stderr, string output);
 
 		public TargetInfo GetTargetInfo ()
 		{
 			return server.GetTargetInfo ();
 		}
-
-		internal class CallbackFrame
-		{
-			public readonly long ID;
-			public readonly long CallAddress;
-			public readonly long StackPointer;
-			public readonly bool IsRuntimeInvokeFrame;
-			public readonly bool IsExactMatch;
-			public readonly long[] Registers;
-
-			public CallbackFrame (IntPtr data, int count_regs)
-			{
-				ID = Marshal.ReadInt64 (data);
-				CallAddress = Marshal.ReadInt64 (data, 8);
-				StackPointer = Marshal.ReadInt64 (data, 16);
-
-				int flags = Marshal.ReadInt32 (data, 24);
-				IsRuntimeInvokeFrame = (flags & 1) == 1;
-				IsExactMatch = (flags & 2) == 2;
-
-				Registers = new long [count_regs];
-				for (int i = 0; i < count_regs; i++)
-					Registers [i] = Marshal.ReadInt64 (data, 32 + 8 * i);
-			}
-
-			public override string ToString ()
-			{
-				return String.Format ("Inferior.CallbackFrame ({0}:{1:x}:{2:x}:{3})", ID,
-						      CallAddress, StackPointer, IsRuntimeInvokeFrame);
-			}
-		}
-
-		internal abstract class MonoRuntimeHandle
-		{ }
 
 		public MonoRuntimeHandle InitializeMonoRuntime (
 			int address_size, long notification_address,

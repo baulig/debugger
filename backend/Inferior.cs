@@ -40,7 +40,7 @@ namespace Mono.Debugger.Backend
 		Architecture arch;
 
 		bool has_signals;
-		DebuggerServer.SignalInfo signal_info;
+		SignalInfo signal_info;
 
 		public static bool IsRunningOnWindows {
 			get {
@@ -254,7 +254,7 @@ namespace Mono.Debugger.Backend
 		public int InsertHardwareBreakpoint (TargetAddress address, bool fallback, out int hw_index)
 		{
 			return inferior.InsertHardwareBreakpoint (
-				DebuggerServer.HardwareBreakpointType.NONE, fallback,
+				HardwareBreakpointType.None, fallback,
 				address.Address, out hw_index);
 		}
 
@@ -263,7 +263,7 @@ namespace Mono.Debugger.Backend
 			inferior.RemoveBreakpoint (breakpoint);
 		}
 
-		public int InsertHardwareWatchPoint (TargetAddress address, DebuggerServer.HardwareBreakpointType type,
+		public int InsertHardwareWatchPoint (TargetAddress address, HardwareBreakpointType type,
 						     out int hw_index)
 		{
 			return inferior.InsertHardwareBreakpoint (type, false, address.Address, out hw_index);
@@ -848,7 +848,7 @@ namespace Mono.Debugger.Backend
 
 		public TargetAddress CurrentFrame {
 			get {
-				DebuggerServer.ServerStackFrame frame = get_current_frame ();
+				ServerStackFrame frame = get_current_frame ();
 				return create_address (frame.Address);
 			}
 		}
@@ -930,9 +930,7 @@ namespace Mono.Debugger.Backend
 
 		internal CallbackFrame GetCallbackFrame (TargetAddress stack_pointer, bool exact_match)
 		{
-			DebuggerServer.CallbackFrame cframe = inferior.GetCallbackFrame (
-				stack_pointer.Address, exact_match);
-
+			var cframe = inferior.GetCallbackFrame (stack_pointer.Address, exact_match);
 			if (cframe == null)
 				return null;
 
@@ -948,7 +946,7 @@ namespace Mono.Debugger.Backend
 			public readonly bool IsExactMatch;
 			public readonly Registers Registers;
 
-			public CallbackFrame (Inferior inferior, DebuggerServer.CallbackFrame cframe)
+			public CallbackFrame (Inferior inferior, ServerCallbackFrame cframe)
 			{
 				ID = cframe.ID;
 				CallAddress = inferior.create_address (cframe.CallAddress);
@@ -967,7 +965,7 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		internal void SetRuntimeInfo (DebuggerServer.MonoRuntimeHandle runtime)
+		internal void SetRuntimeInfo (MonoRuntimeHandle runtime)
 		{
 			inferior.SetRuntimeInfo (runtime);
 		}
@@ -976,7 +974,7 @@ namespace Mono.Debugger.Backend
 		{
 			TargetAddress address, stack, frame;
 
-			internal StackFrame (TargetMemoryInfo info, DebuggerServer.ServerStackFrame frame)
+			internal StackFrame (TargetMemoryInfo info, ServerStackFrame frame)
 			{
 				this.address = Inferior.create_address (info, frame.Address);
 				this.stack = Inferior.create_address (info, frame.StackPointer);
@@ -1010,7 +1008,7 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		DebuggerServer.ServerStackFrame get_current_frame ()
+		ServerStackFrame get_current_frame ()
 		{
 			check_disposed ();
 			return inferior.GetFrame ();

@@ -74,11 +74,11 @@ namespace Mono.Debugger.MdbServer
 			throw new NotImplementedException ();
 		}
 
-		public DebuggerServer.SignalInfo GetSignalInfo ()
+		public SignalInfo GetSignalInfo ()
 		{
 			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_SIGNAL_INFO, new Connection.PacketWriter ().WriteInt (ID));
 
-			DebuggerServer.SignalInfo sinfo;
+			SignalInfo sinfo;
 
 			sinfo.SIGKILL = reader.ReadInt();
 			sinfo.SIGSTOP = reader.ReadInt();
@@ -112,10 +112,10 @@ namespace Mono.Debugger.MdbServer
 			return exe;
 		}
 
-		public DebuggerServer.ServerStackFrame GetFrame ()
+		public ServerStackFrame GetFrame ()
 		{
 			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_FRAME, new Connection.PacketWriter ().WriteInt (ID));
-			DebuggerServer.ServerStackFrame frame;
+			ServerStackFrame frame;
 			frame.Address = reader.ReadLong ();
 			frame.StackPointer = reader.ReadLong ();
 			frame.FrameAddress = reader.ReadLong ();
@@ -128,7 +128,7 @@ namespace Mono.Debugger.MdbServer
 						       new Connection.PacketWriter ().WriteInt (ID).WriteLong (address)).ReadInt ();
 		}
 
-		public int InsertHardwareBreakpoint (DebuggerServer.HardwareBreakpointType type, bool fallback,
+		public int InsertHardwareBreakpoint (HardwareBreakpointType type, bool fallback,
 						     long address, out int hw_index)
 		{
 			throw new NotImplementedException ();
@@ -260,12 +260,12 @@ namespace Mono.Debugger.MdbServer
 			throw new NotImplementedException ();
 		}
 
-		public DebuggerServer.CallbackFrame GetCallbackFrame (long stack_pointer, bool exact_match)
+		public ServerCallbackFrame GetCallbackFrame (long stack_pointer, bool exact_match)
 		{
 			throw new NotImplementedException ();
 		}
 
-		public void SetRuntimeInfo (DebuggerServer.MonoRuntimeHandle runtime)
+		public void SetRuntimeInfo (MonoRuntimeHandle runtime)
 		{
 			throw new NotImplementedException ();
 		}

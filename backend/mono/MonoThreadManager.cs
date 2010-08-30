@@ -105,7 +105,7 @@ namespace Mono.Debugger.Backend.Mono
 		}
 
 		AddressBreakpoint notification_bpt;
-		DebuggerServer.MonoRuntimeHandle mono_runtime_info;
+		MonoRuntimeHandle mono_runtime_info;
 		int debugger_version;
 		int thread_abort_signal;
 

@@ -97,14 +97,12 @@ namespace Mono.Debugger.Backend
 
 				case EventType.WatchRead:
 					index = inferior.InsertHardwareWatchPoint (
-						address, DebuggerServer.HardwareBreakpointType.READ,
-						out dr_index);
+						address, HardwareBreakpointType.Read, out dr_index);
 					break;
 
 				case EventType.WatchWrite:
 					index = inferior.InsertHardwareWatchPoint (
-						address, DebuggerServer.HardwareBreakpointType.WRITE,
-						out dr_index);
+						address, HardwareBreakpointType.Write, out dr_index);
 					break;
 
 				default:
