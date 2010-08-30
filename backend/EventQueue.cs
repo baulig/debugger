@@ -10,12 +10,6 @@ namespace Mono.Debugger.Backend
 		public readonly string Name;
 		public DebugFlags DebugFlags = DebugFlags.Mutex;
 
-		[DllImport("monodebuggerserver")]
-		static extern int mono_debugger_server_get_current_pid ();
-
-		[DllImport("monodebuggerserver")]
-		static extern long mono_debugger_server_get_current_thread ();
-
 		protected DebuggerWaitHandle (string name)
 		{
 			this.Name = name;
