@@ -4,7 +4,7 @@ using Mono.Debugger.Server;
 
 namespace Mono.Debugger.MdbServer
 {
-	internal class MdbBreakpointManager : ServerObject
+	internal class MdbBreakpointManager : ServerObject, BreakpointManager.IServerBreakpointManager
 	{
 		public MdbBreakpointManager (Connection connection, int id)
 			: base (connection, id, ServerObjectKind.BreakpointManager)

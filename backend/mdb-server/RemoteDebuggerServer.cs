@@ -85,14 +85,15 @@ namespace Mono.Debugger.MdbServer
 
 		public override BreakpointManager CreateBreakpointManager ()
 		{
-			return new RemoteBreakpointManager (this);
+			var bpm = server.CreateBreakpointManager ();
+			return new BreakpointManager (bpm);
 		}
 
 		public override InferiorHandle CreateInferior (SingleSteppingEngine sse, Inferior inferior,
 							       BreakpointManager breakpoint_manager)
 		{
-			var bpm = (RemoteBreakpointManager) breakpoint_manager;
-			return server.CreateInferior (bpm.MdbBreakpointManager);
+			var bpm = (MdbBreakpointManager) breakpoint_manager.ServerManager;
+			return server.CreateInferior (bpm);
 		}
 
 		public override ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,

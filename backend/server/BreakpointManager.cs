@@ -8,36 +8,58 @@ using Mono.Debugger.Backend;
 
 namespace Mono.Debugger.Server
 {
-	internal abstract class BreakpointManager : IDisposable
+	internal class BreakpointManager : IDisposable
 	{
-		protected Dictionary<int,BreakpointEntry> bpt_by_index;
-
-		protected BreakpointManager ()
+		internal interface IServerBreakpointManager
 		{
-			bpt_by_index = new Dictionary<int,BreakpointEntry> ();
+			int LookupBreakpointByAddr (long address, out bool enabled);
+
+			bool LookupBreakpointById (int id, out bool enabled);
+		}
+
+		IServerBreakpointManager bpm;
+		Dictionary<int,BreakpointEntry> bpt_by_index;
+
+		public BreakpointManager (IServerBreakpointManager bpm)
+		{
+			this.bpm = bpm;
+			this.bpt_by_index = new Dictionary<int,BreakpointEntry> ();
 		}
 
 		protected BreakpointManager (BreakpointManager old)
+			: this (old.bpm)
 		{
 			foreach (int index in old.bpt_by_index.Keys) {
 				bpt_by_index.Add (index, old.bpt_by_index [index]);
 			}
 		}
 
-		protected virtual void Lock ()
+		public IServerBreakpointManager ServerManager {
+			get { return bpm; }
+		}
+
+		protected void Lock ()
 		{
 			Monitor.Enter (this);
 		}
 
-		protected virtual void Unlock ()
+		protected void Unlock ()
 		{
 			Monitor.Exit (this);
 		}
 
-		public abstract BreakpointManager Clone ();
+		public BreakpointManager Clone ()
+		{
+			return new BreakpointManager (this);
+		}
 
-		public abstract BreakpointHandle LookupBreakpoint (TargetAddress address,
-								  out int index, out bool is_enabled);
+		public BreakpointHandle LookupBreakpoint (TargetAddress address, out int index, out bool is_enabled)
+		{
+			index = bpm.LookupBreakpointByAddr (address.Address, out is_enabled);
+			if (!bpt_by_index.ContainsKey (index))
+				return null;
+			return bpt_by_index [index].Handle;
+		}
 
 		public BreakpointHandle LookupBreakpoint (int index)
 		{
@@ -51,7 +73,13 @@ namespace Mono.Debugger.Server
 			}
 		}
 
-		public abstract bool IsBreakpointEnabled (int breakpoint);
+		public bool IsBreakpointEnabled (int breakpoint)
+		{
+			bool enabled;
+			if (!bpm.LookupBreakpointById (breakpoint, out enabled))
+				return false;
+			return enabled;
+		}
 
 		public int InsertBreakpoint (Inferior inferior, BreakpointHandle handle,
 					     TargetAddress address, int domain)
