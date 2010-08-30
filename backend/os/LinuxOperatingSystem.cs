@@ -86,12 +86,14 @@ namespace Mono.Debugger.Backend
 						    out TargetAddress trampoline, out bool is_start)
 		{
 			lock (this) {
+#if FIXME
 				foreach (ExecutableReader reader in reader_hash.Values) {
 					Bfd bfd = reader as Bfd;
 					if ((bfd != null) &&
 					    bfd.GetTrampoline (memory, address, out trampoline, out is_start))
 						return true;
 				}
+#endif
 
 				is_start = false;
 				trampoline = TargetAddress.Null;
@@ -114,130 +116,8 @@ namespace Mono.Debugger.Backend
 
 #region Dynamic Linking
 
-		bool has_dynlink_info;
-		TargetAddress first_link_map = TargetAddress.Null;
-		TargetAddress dynlink_breakpoint_addr = TargetAddress.Null;
-		TargetAddress rdebug_state_addr = TargetAddress.Null;
-
-		AddressBreakpoint dynlink_breakpoint;
-
 		protected override void DoUpdateSharedLibraries (Inferior inferior, ExecutableReader main_reader)
-		{
-			if (has_dynlink_info) {
-				if (!first_link_map.IsNull)
-					do_update_shlib_info (inferior);
-				return;
-			}
-
-			TargetAddress debug_base = main_reader.ReadDynamicInfo (inferior);
-			if (debug_base.IsNull)
-				return;
-
-			int size = 2 * inferior.TargetLongIntegerSize + 3 * inferior.TargetAddressSize;
-
-			TargetReader reader = new TargetReader (inferior.ReadMemory (debug_base, size));
-			if (reader.ReadLongInteger () != 1)
-				return;
-
-			first_link_map = reader.ReadAddress ();
-			dynlink_breakpoint_addr = reader.ReadAddress ();
-
-			rdebug_state_addr = debug_base + reader.Offset;
-
-			if (reader.ReadLongInteger () != 0)
-				return;
-
-			has_dynlink_info = true;
-
-			Instruction insn = inferior.Architecture.ReadInstruction (inferior, dynlink_breakpoint_addr);
-			if ((insn == null) || !insn.CanInterpretInstruction)
-				throw new InternalError ("Unknown dynlink breakpoint: {0}", dynlink_breakpoint_addr);
-
-			dynlink_breakpoint = new DynlinkBreakpoint (this, insn);
-			dynlink_breakpoint.Insert (inferior);
-
-			do_update_shlib_info (inferior);
-
-			CheckLoadedLibrary (inferior, main_reader);
-		}
-
-		bool dynlink_handler (Inferior inferior)
-		{
-			if (inferior.ReadInteger (rdebug_state_addr) != 0)
-				return false;
-
-			do_update_shlib_info (inferior);
-			return false;
-		}
-
-		void do_update_shlib_info (Inferior inferior)
-		{
-			bool first = true;
-			TargetAddress map = first_link_map;
-			while (!map.IsNull) {
-				int the_size = 4 * inferior.TargetAddressSize;
-				TargetReader map_reader = new TargetReader (inferior.ReadMemory (map, the_size));
-
-				TargetAddress l_addr = map_reader.ReadAddress ();
-				TargetAddress l_name = map_reader.ReadAddress ();
-				map_reader.ReadAddress ();
-
-				string name;
-				try {
-					name = inferior.ReadString (l_name);
-					// glibc 2.3.x uses the empty string for the virtual
-					// "linux-gate.so.1".
-					if ((name != null) && (name == ""))
-						name = null;
-				} catch {
-					name = null;
-				}
-
-				map = map_reader.ReadAddress ();
-
-				if (first) {
-					first = false;
-					continue;
-				}
-
-				if (name == null)
-					continue;
-
-				if (reader_hash.ContainsKey (name))
-					continue;
-
-				bool step_into = Process.ProcessStart.LoadNativeSymbolTable;
-				AddExecutableFile (inferior, name, l_addr, step_into, true);
-			}
-		}
-
-		protected class DynlinkBreakpoint : AddressBreakpoint
-		{
-			protected readonly LinuxOperatingSystem OS;
-			public readonly Instruction Instruction;
-
-			public DynlinkBreakpoint (LinuxOperatingSystem os, Instruction instruction)
-				: base ("dynlink", ThreadGroup.System, instruction.Address)
-			{
-				this.OS = os;
-				this.Instruction = instruction;
-			}
-
-			public override bool CheckBreakpointHit (Thread target, TargetAddress address)
-			{
-				return true;
-			}
-
-			internal override bool BreakpointHandler (Inferior inferior,
-								  out bool remain_stopped)
-			{
-				OS.dynlink_handler (inferior);
-				if (!Instruction.InterpretInstruction (inferior))
-					throw new InternalError ();
-				remain_stopped = false;
-				return true;
-			}
-		}
+		{ }
 
 #endregion
 

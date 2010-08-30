@@ -1,7 +1,9 @@
 using System;
 using System.IO;
 using System.Collections;
+
 using Mono.Debugger;
+using Mono.Debugger.Server;
 using Mono.Debugger.Architectures;
 
 namespace Mono.Debugger.Backend

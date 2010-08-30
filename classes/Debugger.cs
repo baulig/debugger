@@ -45,10 +45,14 @@ namespace Mono.Debugger
 
 			kill_event = new ManualResetEvent (false);
 
+#if FIXME
 			if (options.RemoteServer != null)
 				server = new RemoteDebuggerServer (this, options.RemoteServer);
 			else
 				server = new NativeDebuggerServer (this);
+#else
+			server = new RemoteDebuggerServer (this, options.RemoteServer);
+#endif
 
 			thread_manager = server.ThreadManager;
 			process_hash = Hashtable.Synchronized (new Hashtable ());

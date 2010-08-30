@@ -3,6 +3,7 @@ using System.IO;
 using System.Collections;
 
 using Mono.Debugger;
+using Mono.Debugger.Server;
 using Mono.Debugger.Architectures;
 
 namespace Mono.Debugger.Backend
@@ -45,6 +46,7 @@ namespace Mono.Debugger.Backend
 				inferior.WriteInteger (data, 1);
 				pending_mono_init = info;
 
+#if FIXME
 				// Add a breakpoint in mini_debugger_init, to make sure that InitializeMono()
 				// gets called in time to set the breakpoint at debugger_initialize, needed to 
 				// initialize the notifications.
@@ -58,6 +60,7 @@ namespace Mono.Debugger.Backend
 					DynlinkBreakpoint init_breakpoint = new DynlinkBreakpoint (this, insn);
 					init_breakpoint.Insert (inferior);
 				}
+#endif
 				return;
 			}
 			
@@ -81,6 +84,7 @@ namespace Mono.Debugger.Backend
 		public override bool GetTrampoline (TargetMemoryAccess memory, TargetAddress address,
 						    out TargetAddress trampoline, out bool is_start)
 		{
+#if FIXME
 			foreach (ExecutableReader reader in reader_hash.Values) {
 				Bfd bfd = reader as Bfd;
 				if (bfd == null)
@@ -89,6 +93,7 @@ namespace Mono.Debugger.Backend
 				if (bfd.GetTrampoline (memory, address, out trampoline, out is_start))
 					return true;
 			}
+#endif
 
 			is_start = false;
 			trampoline = TargetAddress.Null;
@@ -110,6 +115,8 @@ namespace Mono.Debugger.Backend
 		}
 
 #region Dynamic Linking
+
+#if FIXME
 
 		bool has_dynlink_info;
 		TargetAddress dyld_all_image_infos = TargetAddress.Null;
@@ -225,6 +232,10 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
+#else
+		protected override void DoUpdateSharedLibraries (Inferior inferior, ExecutableReader main_reader)
+		{ }
+#endif
 
 #endregion
 	}

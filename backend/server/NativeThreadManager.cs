@@ -1,3 +1,4 @@
+#if FIXME
 using System;
 using System.IO;
 using System.Linq;
@@ -577,3 +578,4 @@ namespace Mono.Debugger.Server
 #endregion
 	}
 }
+#endif
