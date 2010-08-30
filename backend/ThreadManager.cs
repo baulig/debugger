@@ -18,7 +18,7 @@ using Mono.Debugger.Server;
 
 namespace Mono.Debugger.Backend
 {
-	internal abstract class ThreadManager : DebuggerMarshalByRefObject
+	internal class ThreadManager : DebuggerMarshalByRefObject
 	{
 		public static TimeSpan WaitTimeout = TimeSpan.FromMilliseconds (5000);
 
@@ -68,8 +68,8 @@ namespace Mono.Debugger.Backend
 			return (SingleSteppingEngine) engine_hash [id];
 		}
 
-		public abstract bool HasTarget {
-			get;
+		public bool HasTarget {
+			get { return debugger_server != null; }
 		}
 
 		static int next_process_id = 0;
@@ -148,7 +148,10 @@ namespace Mono.Debugger.Backend
 			return retval;
 		}
 
-		internal abstract bool GetPendingSigstopForNewThread (int pid);
+		internal bool GetPendingSigstopForNewThread (int pid)
+		{
+			return false;
+		}
 
 		public Debugger Debugger {
 			get { return debugger; }
@@ -158,20 +161,33 @@ namespace Mono.Debugger.Backend
 			get { return address_domain; }
 		}
 
-		internal abstract bool InBackgroundThread {
-			get;
+		internal bool InBackgroundThread {
+			get { return true; }
 		}
 
 		internal DebuggerServer DebuggerServer {
 			get { return debugger_server; }
 		}
 
-		internal abstract object SendCommand (SingleSteppingEngine sse, TargetAccessDelegate target,
-						      object user_data);
+		internal object SendCommand (SingleSteppingEngine sse, TargetAccessDelegate target, object user_data)
+		{
+			return target (sse.Thread, user_data);
+		}
 
-		public abstract Process StartApplication (ProcessStart start, out CommandResult result);
+		public Process StartApplication (ProcessStart start, out CommandResult result)
+		{
+			Process process = new Process (this, start);
+			processes.Add (process);
 
-		internal abstract void AddPendingEvent (SingleSteppingEngine engine, DebuggerServer.ChildEvent cevent);
+			result = process.StartApplication ();
+
+			return process;
+		}
+
+		internal void AddPendingEvent (SingleSteppingEngine engine, DebuggerServer.ChildEvent cevent)
+		{
+			throw new InvalidOperationException ();
+		}
 
 		protected static void check_error (TargetError error)
 		{

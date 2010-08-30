@@ -11,31 +11,61 @@ using Mono.Debugger.Backend;
 
 namespace Mono.Debugger.Server
 {
-	internal abstract class DebuggerServer : DebuggerMarshalByRefObject, IDisposable
+	internal class DebuggerServer : DebuggerMarshalByRefObject, IDisposable
 	{
-		public abstract ThreadManager ThreadManager {
-			get;
+		IDebuggerServer server;
+
+		protected DebuggerServer (Debugger debugger, IDebuggerServer server)
+		{
+			this.server = server;
+
+			Debugger = debugger;
+			ThreadManager = new ThreadManager (debugger, this);
+
+			Type = server.ServerType;
+			Capabilities = server.Capabilities;
+			ArchType = server.Architecture;
 		}
 
-		public abstract ServerType Type {
-			get;
+		public Debugger Debugger {
+			get; private set;
 		}
 
-		public abstract ServerCapabilities Capabilities {
-			get;
+		public ThreadManager ThreadManager {
+			get; private set;
 		}
 
-		public abstract ArchTypeEnum ArchType {
-			get;
+		public ServerType Type {
+			get; private set;
 		}
 
-		public abstract IBreakpointManager CreateBreakpointManager ();
+		public ServerCapabilities Capabilities {
+			get; private set;
+		}
 
-		public abstract IInferior CreateInferior (SingleSteppingEngine sse, Inferior inferior,
-							  IBreakpointManager breakpoint_manager);
+		public ArchTypeEnum ArchType {
+			get; private set;
+		}
 
-		public abstract ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,
-								      string filename, TargetAddress base_address, bool is_loaded);
+		public IBreakpointManager CreateBreakpointManager ()
+		{
+			return server.CreateBreakpointManager ();
+		}
+
+		public IInferior CreateInferior (SingleSteppingEngine sse, Inferior inferior,
+						 IBreakpointManager breakpoint_manager)
+		{
+			return server.CreateInferior (breakpoint_manager);
+		}
+
+		public ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,
+							     string filename, TargetAddress base_address, bool is_loaded)
+		{
+			var mdb_reader = server.CreateExeReader (filename);
+			var reader = new ExecutableReader (os, memory, this, mdb_reader, filename);
+			reader.ReadDebuggingInfo ();
+			return reader;
+		}
 
 		internal struct ServerStackFrame
 		{
@@ -164,7 +194,10 @@ namespace Mono.Debugger.Server
 
 		internal delegate void ChildOutputHandler (bool is_stderr, string output);
 
-		public abstract TargetInfo GetTargetInfo ();
+		public TargetInfo GetTargetInfo ()
+		{
+			return server.GetTargetInfo ();
+		}
 
 		internal class CallbackFrame
 		{
@@ -200,16 +233,66 @@ namespace Mono.Debugger.Server
 		internal abstract class MonoRuntimeHandle
 		{ }
 
-		public abstract MonoRuntimeHandle InitializeMonoRuntime (
+		public MonoRuntimeHandle InitializeMonoRuntime (
 			int address_size, long notification_address,
 			long executable_code_buffer, int executable_code_buffer_size,
 			long breakpoint_info, long breakpoint_info_index,
-			int breakpoint_table_size);
+			int breakpoint_table_size)
+		{
+			throw new NotImplementedException ();
+		}
 
-		public abstract void InitializeCodeBuffer (MonoRuntimeHandle runtime, long executable_code_buffer,
-							   int executable_code_buffer_size);
+		public void InitializeCodeBuffer (MonoRuntimeHandle runtime, long executable_code_buffer,
+						  int executable_code_buffer_size)
+		{
+			throw new NotImplementedException ();
+		}
 
-		public abstract void FinalizeMonoRuntime (MonoRuntimeHandle runtime);
+		public void FinalizeMonoRuntime (MonoRuntimeHandle runtime)
+		{
+			throw new NotImplementedException ();
+		}
+
+		public Disassembler GetDisassembler ()
+		{
+			return new ServerDisassembler (this);
+		}
+
+                protected string DisassembleInsn (Inferior inferior, long address, out int insn_size)
+                {
+                        var handle = (IInferior) inferior.InferiorHandle;
+                        return handle.DisassembleInstruction (address, out insn_size);
+                }
+
+		class ServerDisassembler : Disassembler
+		{
+			public readonly DebuggerServer Server;
+
+			public ServerDisassembler (DebuggerServer server)
+			{
+				this.Server = server;
+			}
+
+			public override int GetInstructionSize (TargetMemoryAccess memory, TargetAddress address)
+			{
+				int insn_size;
+				Server.DisassembleInsn ((Inferior) memory, address.Address, out insn_size);
+				return insn_size;
+			}
+
+			public override AssemblerMethod DisassembleMethod (TargetMemoryAccess memory, Method method)
+			{
+				throw new NotImplementedException ();
+			}
+
+			public override AssemblerLine DisassembleInstruction (TargetMemoryAccess memory,
+									      Method method, TargetAddress address)
+			{
+				int insn_size;
+				var insn = Server.DisassembleInsn ((Inferior) memory, address.Address, out insn_size);
+				return new AssemblerLine (null, address, (byte) insn_size, insn);
+			}
+		}
 
 		//
 		// IDisposable
