@@ -43,19 +43,20 @@ namespace Mono.Debugger.MdbServer
 			get { return pid; }
 		}
 
-		public void InitializeProcess ()
+		public MdbExeReader InitializeProcess ()
 		{
-			Connection.SendReceive (CommandSet.SERVER, (int)CmdInferior.INITIALIZE_PROCESS, null);
+			int reader_iid = Connection.SendReceive (CommandSet.SERVER, (int)CmdInferior.INITIALIZE_PROCESS, null).ReadInt ();
+			return new MdbExeReader (Connection, reader_iid);
+		}
+
+		IExecutableReader IInferior.InitializeProcess ()
+		{
+			return InitializeProcess ();
 		}
 
 		public void InitializeThread (int child_pid, bool wait)
 		{
 			throw new NotImplementedException ();
-		}
-
-		public void InitializeAtEntryPoint ()
-		{
-			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.INIT_AT_ENTRYPOINT, new Connection.PacketWriter ().WriteInt (ID));
 		}
 
 		public bool Stop ()

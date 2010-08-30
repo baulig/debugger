@@ -2996,9 +2996,11 @@ namespace Mono.Debugger.Backend
 				return EventResult.Running;
 			}
 
-			inferior.InitializeAtEntryPoint ();
+			inferior.InitializeProcess ();
 
 			sse.Process.InitializeThreads (inferior, !sse.Process.IsAttached);
+
+			return EventResult.Completed;
 
 			if (sse.Process.IsAttached)
 				return EventResult.Completed;

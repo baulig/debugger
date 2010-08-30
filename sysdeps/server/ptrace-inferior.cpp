@@ -37,6 +37,7 @@ public:
 	}
 
 	bool Initialize ();
+	void InitializeProcess (void);
 
 private:
 	int pid;
@@ -58,8 +59,6 @@ public:
 	ErrorCode Spawn (const gchar *working_directory,
 			 const gchar **argv, const gchar **envp,
 			 gint *out_child_pid, gchar **out_error);
-
-	ErrorCode InitializeProcess (void);
 
 	ErrorCode GetSignalInfo (SignalInfo **sinfo);
 
@@ -94,6 +93,8 @@ public:
 
 protected:
 	ErrorCode SetupInferior (void);
+
+	ErrorCode InitializeProcess (void);
 
 	bool WaitForNewThread (void);
 
@@ -231,6 +232,10 @@ PTraceInferior::Spawn (const gchar *working_directory, const gchar **argv, const
 		return ERR_INTERNAL_ERROR;
 
 	result = SetupInferior ();
+	if (result)
+		return result;
+
+	result = InitializeProcess ();
 	if (result)
 		return result;
 
@@ -754,10 +759,12 @@ PTraceProcess::Initialize ()
 	buffer [len] = 0;
 
 	main_reader = inferior->GetServer ()->GetExeReader (buffer);
-	if (!main_reader)
-		return false;
+	return main_reader != NULL;
+}
 
-	main_reader->ReadDynamicInfo (inferior);
-
-	return true;
+void
+PTraceProcess::InitializeProcess ()
+{
+	if (main_reader)
+		main_reader->ReadDynamicInfo (inferior);
 }

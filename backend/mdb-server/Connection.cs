@@ -45,7 +45,8 @@ namespace Mono.Debugger.MdbServer
 		INFERIOR = 2,
 		EVENT = 3,
 		BPM = 4,
-		EXE_READER = 5
+		EXE_READER = 5,
+		PROCESS = 6
 	}
 
 	internal class Connection

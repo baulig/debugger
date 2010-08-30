@@ -435,6 +435,22 @@ Connection::HandleIncomingRequest (MdbServer *server)
 		break;
 	}
 
+	case CMD_SET_PROCESS: {
+		MdbProcess *process;
+		int iid;
+
+		iid = in->DecodeID ();
+		process = (MdbProcess *) ServerObject::GetObjectByID (iid, SERVER_OBJECT_KIND_PROCESS);
+
+		if (!process) {
+			err = ERR_NO_SUCH_PROCESS;
+			break;
+		}
+
+		err = process->ProcessCommand (command, id, in, buf);
+		break;
+	}
+
 	default:
 		err = ERR_NOT_IMPLEMENTED;
 	}

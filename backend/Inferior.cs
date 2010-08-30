@@ -32,6 +32,7 @@ namespace Mono.Debugger.Backend
 		protected readonly SingleSteppingEngine sse;
 
 		IInferior inferior;
+		IProcess server_process;
 
 		int child_pid;
 		bool initialized;
@@ -326,11 +327,9 @@ namespace Mono.Debugger.Backend
 			string[] env = new string[start.Environment.Length + 1];
 			Array.Copy(start.Environment, env, start.Environment.Length);
 
-			inferior = server.Spawn (sse, start.WorkingDirectory, args, env);
+			inferior = server.Spawn (sse, start.WorkingDirectory, args, env, out server_process);
 
 			initialized = true;
-
-			inferior.InitializeProcess ();
 
 			SetupInferior ();
 
@@ -382,7 +381,7 @@ namespace Mono.Debugger.Backend
 
 			has_target = true;
 
-			inferior = server.Attach (sse, start.PID);
+			inferior = server.Attach (sse, start.PID, out server_process);
 			this.child_pid = start.PID;
 
 			string exe_file, cwd;
@@ -398,9 +397,9 @@ namespace Mono.Debugger.Backend
 			change_target_state (TargetState.Stopped, 0);
 		}
 
-		public void InitializeAtEntryPoint ()
+		public void InitializeProcess ()
 		{
-			inferior.InitializeAtEntryPoint ();
+			server_process.InitializeProcess ();
 		}
 
 #if FIXME
@@ -466,23 +465,8 @@ namespace Mono.Debugger.Backend
 
 			target_info = thread_manager.GetTargetMemoryInfo (address_domain);
 
-			try {
-				string cwd;
-				string[] cmdline_args;
-
-				string application = GetApplication (out cwd, out cmdline_args);
-
-				exe = process.OperatingSystem.LoadExecutable (
-					target_info, application, start.LoadNativeSymbolTable);
-			} catch (Exception e) {
-				if (error_handler != null)
-					error_handler (this, String.Format (
-							       "Can't read symbol file {0}", start.TargetApplication), e);
-				else
-					Console.WriteLine ("Can't read symbol file {0}: {1}",
-							   start.TargetApplication, e);
-				return;
-			}
+			exe = new ExecutableReader (process.OperatingSystem, target_info, server, server_process.MainReader);
+			exe.ReadDebuggingInfo ();
 
 			arch = process.Architecture;
 		}

@@ -9,31 +9,37 @@ namespace Mono.Debugger.MdbServer
 	{
 		public MdbExeReader (Connection connection, int id)
 			: base (connection, id, ServerObjectKind.ExeReader)
-		{ }
+		{
+			StartAddress = connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_START_ADDRESS, new Connection.PacketWriter ().WriteInt (ID)).ReadLong ();
+			FileName = connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_FILENAME, new Connection.PacketWriter ().WriteInt (ID)).ReadString ();
+			TargetName = connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_TARGET_NAME, new Connection.PacketWriter ().WriteInt (ID)).ReadString ();
+		}
 
 		enum CmdExeReader {
-			GET_START_ADDRESS = 1,
-			LOOKUP_SYMBOL = 2,
-			GET_TARGET_NAME = 3,
-			HAS_SECTION = 4,
-			GET_SECTION_ADDRESS = 5,
-			GET_SECTION_CONTENTS = 6
+			GET_FILENAME = 1,
+			GET_START_ADDRESS = 2,
+			LOOKUP_SYMBOL = 3,
+			GET_TARGET_NAME = 4,
+			HAS_SECTION = 5,
+			GET_SECTION_ADDRESS = 6,
+			GET_SECTION_CONTENTS = 7
 		}
 
 		public long StartAddress {
-			get {
-				return Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_START_ADDRESS, new Connection.PacketWriter ().WriteInt (ID)).ReadLong ();
-			}
+			get; private set;
+		}
+
+		public string FileName {
+			get; private set;
+		}
+
+		public string TargetName {
+			get; private set;
 		}
 
 		public long LookupSymbol (string name)
 		{
 			return Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.LOOKUP_SYMBOL, new Connection.PacketWriter ().WriteInt (ID).WriteString (name)).ReadLong ();
-		}
-
-		public string GetTargetName ()
-		{
-			return Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_TARGET_NAME, new Connection.PacketWriter ().WriteInt (ID)).ReadString ();
 		}
 
 		public bool HasSection (string name)

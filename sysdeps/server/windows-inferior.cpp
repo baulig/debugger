@@ -36,8 +36,6 @@ public:
 			 const gchar **argv, const gchar **envp,
 			 gint *out_child_pid, gchar **out_error);
 
-	ErrorCode InitializeProcess (void);
-
 	ErrorCode GetSignalInfo (SignalInfo **sinfo);
 
 	ErrorCode GetApplication (gchar **out_exe_file, gchar **out_cwd,
@@ -466,12 +464,6 @@ debugging_thread_main (LPVOID dummy_arg)
 	}
 
 	return 0;
-}
-
-ErrorCode
-WindowsInferior::InitializeProcess (void)
-{
-	return ERR_NONE;
 }
 
 ErrorCode

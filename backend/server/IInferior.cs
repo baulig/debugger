@@ -84,11 +84,9 @@ namespace Mono.Debugger.Server
 			get;
 		}
 
-		void InitializeProcess ();
+		IExecutableReader InitializeProcess ();
 
 		void InitializeThread (int child_pid, bool wait);
-
-		void InitializeAtEntryPoint ();
 
 		bool Stop ();
 

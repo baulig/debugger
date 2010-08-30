@@ -25,14 +25,14 @@ public:
 	static ServerCapabilities GetCapabilities (void);
 	static ArchType GetArchType (void);
 
+	MdbExeReader *InitializeProcess (void);
+
 	static ErrorCode GetTargetInfo (guint32 *out_target_int_size, guint32 *out_target_long_size,
 					guint32 *out_target_address_size, guint32 *out_is_bigendian);
 
 	virtual ErrorCode Spawn (const gchar *working_directory,
 				 const gchar **argv, const gchar **envp,
 				 gint *out_child_pid, gchar **out_error) = 0;
-
-	virtual ErrorCode InitializeProcess (void) = 0;
 
 	virtual ErrorCode GetSignalInfo (SignalInfo **sinfo) = 0;
 

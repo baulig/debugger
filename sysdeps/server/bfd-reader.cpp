@@ -455,7 +455,7 @@ dynlink_breakpoint_handler (MdbInferior *inferior, BreakpointInfo *breakpoint)
 void
 BfdReader::ReadDynamicInfo (MdbInferior *inferior)
 {
-#ifdef LINK_DYNLINK_SUPPORT
+#ifdef LINUX_DYNLINK_SUPPORT
 	asection *section;
 	guint8 *contents, *ptr;
 	struct r_debug rdebug;

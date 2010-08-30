@@ -29,15 +29,12 @@ namespace Mono.Debugger.Backend
 		TargetAddress base_address = TargetAddress.Null;
 
 		public ExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory_info,
-					 DebuggerServer server, IExecutableReader reader, string file)
+					 DebuggerServer server, IExecutableReader reader)
 		{
 			this.OperatingSystem = os;
 			this.TargetMemoryInfo = memory_info;
-			this.FileName = file;
 			this.server = server;
 			this.reader = reader;
-
-			TargetName = reader.GetTargetName ();
 
 			if (DwarfReader.IsSupported (this))
 				dwarf_supported = true;
@@ -46,9 +43,9 @@ namespace Mono.Debugger.Backend
 
 			symfile = new ExeReaderSymbolFile (this);
 
-			Module = os.Process.Session.GetModule (file);
+			Module = os.Process.Session.GetModule (FileName);
 			if (Module == null) {
-				Module = os.Process.Session.CreateModule (file, symfile);
+				Module = os.Process.Session.CreateModule (FileName, symfile);
 			} else {
 				Module.LoadModule (symfile);
 			}
@@ -69,11 +66,11 @@ namespace Mono.Debugger.Backend
 		}
 
 		public string FileName {
-			get; private set;
+			get { return reader.FileName; }
 		}
 
 		public string TargetName {
-			get; private set;
+			get { return reader.TargetName; }
 		}
 
 		public bool IsLoaded {

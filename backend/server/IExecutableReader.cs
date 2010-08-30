@@ -2,13 +2,19 @@ namespace Mono.Debugger.Server
 {
 	internal interface IExecutableReader : IServerObject
 	{
+		string FileName {
+			get;
+		}
+
 		long StartAddress {
 			get;
 		}
 
-		long LookupSymbol (string name);
+		string TargetName {
+			get;
+		}
 
-		string GetTargetName ();
+		long LookupSymbol (string name);
 
 		bool HasSection (string name);
 

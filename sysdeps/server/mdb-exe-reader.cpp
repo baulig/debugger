@@ -4,6 +4,11 @@ ErrorCode
 MdbExeReader::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 {
 	switch (command) {
+	case CMD_EXE_READER_GET_FILENAME: {
+		out->AddString (filename);
+		break;
+	}
+
 	case CMD_EXE_READER_GET_START_ADDRESS: {
 		guint64 address;
 

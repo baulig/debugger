@@ -119,10 +119,6 @@ MdbInferior::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 	ErrorCode result = ERR_NONE;
 
 	switch (command) {
-	case CMD_INFERIOR_INIT_PROCESS:
-		result = InitializeProcess ();
-		break;
-
 	case CMD_INFERIOR_GET_SIGNAL_INFO: {
 		SignalInfo *sinfo;
 
@@ -316,10 +312,6 @@ MdbInferior::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		result = SetSignal (sig, send_it);
 		break;
 	}
-
-	case CMD_INFERIOR_INIT_AT_ENTRYPOINT:
-		GetProcess ()->Initialize ();
-		break;
 
 	case CMD_INFERIOR_DISASSEMBLE_INSN: {
 		guint64 address;

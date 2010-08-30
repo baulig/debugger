@@ -56,7 +56,7 @@ namespace Mono.Debugger.MdbServer
 			get { return BreakpointManager; }
 		}
 
-		public MdbInferior Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp)
+		public MdbInferior Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp, out MdbProcess process)
 		{
 			var writer = new Connection.PacketWriter ();
 			writer.WriteString (cwd ?? "");
@@ -68,24 +68,32 @@ namespace Mono.Debugger.MdbServer
 			for (int i = 0; i < argc; i++)
 				writer.WriteString (argv [i] ?? "dummy");
 			var reader = Connection.SendReceive (CommandSet.SERVER, (int)CmdServer.SPAWN, writer);
+			int process_iid = reader.ReadInt ();
 			int inferior_iid = reader.ReadInt ();
 			int pid = reader.ReadInt ();
+			process = new MdbProcess (Connection, process_iid);
 			return new MdbInferior (Connection, sse, pid, inferior_iid);
 		}
 
-		IInferior IDebuggerServer.Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp)
+		IInferior IDebuggerServer.Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp, out IProcess process)
 		{
-			return Spawn (sse, cwd, argv, envp);
+			MdbProcess mdb_process;
+			var inferior = Spawn (sse, cwd, argv, envp, out mdb_process);
+			process = mdb_process;
+			return inferior;
 		}
 
-		public MdbInferior Attach (SingleSteppingEngine sse, int pid)
+		public MdbInferior Attach (SingleSteppingEngine sse, int pid, out MdbProcess process)
 		{
 			throw new NotImplementedException ();
 		}
 
-		IInferior IDebuggerServer.Attach (SingleSteppingEngine sse, int pid)
+		IInferior IDebuggerServer.Attach (SingleSteppingEngine sse, int pid, out IProcess process)
 		{
-			return Attach (sse, pid);
+			MdbProcess mdb_process;
+			var inferior = Attach (sse, pid, out mdb_process);
+			process = mdb_process;
+			return inferior;
 		}
 
 		public MdbExeReader CreateExeReader (string filename)

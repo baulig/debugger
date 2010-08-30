@@ -9,6 +9,13 @@ class MdbProcess : public ServerObject
 public:
 	virtual bool Initialize (void) = 0;
 
+	virtual void InitializeProcess (void) = 0;
+
+	MdbExeReader *GetMainReader (void)
+	{
+		return main_reader;
+	}
+
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
 protected:

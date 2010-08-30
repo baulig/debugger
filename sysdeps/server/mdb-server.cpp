@@ -1,5 +1,6 @@
 #include <config.h>
 #include <mdb-server.h>
+#include <mdb-process.h>
 #include <mdb-inferior.h>
 #include <mdb-exe-reader.h>
 #include <debugger-mutex.h>
@@ -270,6 +271,7 @@ MdbServer::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		char *cwd, **argv, *error;
 		int argc, i, child_pid;
 		MdbInferior *inferior;
+		MdbProcess *process;
 		ErrorCode result;
 
 		cwd = in->DecodeString ();
@@ -289,6 +291,13 @@ MdbServer::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		if (result)
 			return result;
 
+		process = inferior->GetProcess ();
+		if (!process->Initialize ())
+			return ERR_CANNOT_START_TARGET;
+
+		g_message (G_STRLOC ": %d - %d - %d", process->GetID (), inferior->GetID (), child_pid);
+
+		out->AddInt (process->GetID ());
 		out->AddInt (inferior->GetID ());
 		out->AddInt (child_pid);
 
