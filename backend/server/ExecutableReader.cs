@@ -1,33 +1,42 @@
 using System;
-using System.IO;
-using System.Text;
-using ST = System.Threading;
-using System.Configuration;
 using System.Collections;
-using System.Collections.Specialized;
-using System.Runtime.InteropServices;
+using System.Collections.Generic;
 
+using Mono.Debugger;
 using Mono.Debugger.Backend;
 using Mono.Debugger.Languages;
+using Mono.Debugger.Architectures;
 
-namespace Mono.Debugger.MdbServer
+namespace Mono.Debugger.Server
 {
-	internal class RemoteExecutableReader : ExecutableReader
+	internal class ExecutableReader : DebuggerMarshalByRefObject, IDisposable
 	{
-		OperatingSystemBackend os;
-		TargetMemoryInfo memory_info;
-		RemoteDebuggerServer server;
-		string target_name;
-		Module module;
-		string file;
+		internal interface IServerExeReader
+		{
+			long StartAddress {
+				get;
+			}
 
-		MdbExeReader reader;
+			long LookupSymbol (string name);
+
+			string GetTargetName ();
+
+			bool HasSection (string name);
+
+			long GetSectionAddress (string name);
+
+			byte[] GetSectionContents (string name);
+		}
+
+		DebuggerServer server;
+
+		IServerExeReader reader;
 
 		DebuggingFileReader debug_info;
-		RemoteSymbolFile symfile;
+		ExeReaderSymbolFile symfile;
 
 		ArrayList simple_symbols;
-		RemoteSymbolTable simple_symtab;
+		SymbolTable simple_symtab;
 
 		bool dwarf_supported;
 		bool stabs_supported;
@@ -36,59 +45,56 @@ namespace Mono.Debugger.MdbServer
 		TargetAddress end_address = TargetAddress.Null;
 		TargetAddress base_address = TargetAddress.Null;
 
-		public RemoteExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory_info,
-					       RemoteDebuggerServer server, string file)
+		public ExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory_info,
+					 DebuggerServer server, IServerExeReader reader, string file)
 		{
-			this.os = os;
-			this.memory_info = memory_info;
+			this.OperatingSystem = os;
+			this.TargetMemoryInfo = memory_info;
+			this.FileName = file;
 			this.server = server;
-			this.file = file;
+			this.reader = reader;
 
-			reader = server.Server.CreateExeReader (file);
-			target_name = reader.BfdGetTargetName ();
+			TargetName = reader.GetTargetName ();
 
 			if (DwarfReader.IsSupported (this))
 				dwarf_supported = true;
 			else if (StabsReader.IsSupported (this))
 				stabs_supported = true;
 
-			symfile = new RemoteSymbolFile (this);
+			symfile = new ExeReaderSymbolFile (this);
 
-			module = os.Process.Session.GetModule (file);
-			if (module == null) {
-				module = os.Process.Session.CreateModule (file, symfile);
+			Module = os.Process.Session.GetModule (file);
+			if (Module == null) {
+				Module = os.Process.Session.CreateModule (file, symfile);
 			} else {
-				module.LoadModule (symfile);
+				Module.LoadModule (symfile);
 			}
 
-			Console.WriteLine ("TEST: {0} {1}", module, module.Language != null);
-
 			os.Process.SymbolTableManager.AddSymbolFile (symfile);
-
-		}
-
-		public override TargetMemoryInfo TargetMemoryInfo {
-			get { return memory_info; }
-		}
-
-		public override Module Module {
-			get { return module; }
-		}
-
-		public override string FileName {
-			get { return file; }
-		}
-
-		public override bool IsLoaded {
-			get { return true; }
-		}
-
-		public override string TargetName {
-			get { return target_name; }
 		}
 
 		public OperatingSystemBackend OperatingSystem {
-			get { return os; }
+			get; private set;
+		}
+
+		public TargetMemoryInfo TargetMemoryInfo {
+			get; private set;
+		}
+
+		public Module Module {
+			get; private set;
+		}
+
+		public string FileName {
+			get; private set;
+		}
+
+		public string TargetName {
+			get; private set;
+		}
+
+		public bool IsLoaded {
+			get { return true; }
 		}
 
 		protected bool HasDebuggingInfo {
@@ -97,14 +103,14 @@ namespace Mono.Debugger.MdbServer
 
 		TargetAddress create_address (long addr)
 		{
-			return addr != 0 ? new TargetAddress (memory_info.AddressDomain, addr) : TargetAddress.Null;
+			return addr != 0 ? new TargetAddress (TargetMemoryInfo.AddressDomain, addr) : TargetAddress.Null;
 		}
 
-		public override bool IsContinuous {
+		public bool IsContinuous {
 			get { return !end_address.IsNull; }
 		}
 
-		public override TargetAddress StartAddress {
+		public TargetAddress StartAddress {
 			get {
 				if (!IsContinuous)
 					throw new InvalidOperationException ();
@@ -113,7 +119,7 @@ namespace Mono.Debugger.MdbServer
 			}
 		}
 
-		public override TargetAddress EndAddress {
+		public TargetAddress EndAddress {
 			get {
 				if (!IsContinuous)
 					throw new InvalidOperationException ();
@@ -122,59 +128,46 @@ namespace Mono.Debugger.MdbServer
 			}
 		}
 
-		public override TargetAddress BaseAddress {
+		public TargetAddress BaseAddress {
 			get { return base_address; }
 		}
 
-		public override TargetAddress LookupSymbol (string name)
+		public TargetAddress LookupSymbol (string name)
 		{
-			Console.WriteLine ("LOOKUP SYMBOL: {0}", name);
-			var addr = reader.BfdLookupSymbol (name);
-			Console.WriteLine ("LOOKUP SYMBOL #1: {0:x}", addr);
+			var addr = reader.LookupSymbol (name);
 			return create_address (addr);
 		}
 
-		public override TargetAddress LookupLocalSymbol (string name)
+		public TargetAddress LookupLocalSymbol (string name)
 		{
-			Console.WriteLine ("LOOKUP LOCAL SYMBOL: {0}", name);
-			var addr = reader.BfdLookupSymbol (name);
-			Console.WriteLine ("LOOKUP LOCAL SYMBOL #1: {0:x}", addr);
+			var addr = reader.LookupSymbol (name);
 			return create_address (addr);
 		}
 
-		public override bool HasSection (string name)
+		public bool HasSection (string name)
 		{
-			Console.WriteLine ("HAS SECTION: {0}", name);
-			return reader.BfdHasSection (name);
+			return reader.HasSection (name);
 		}
 
-		public override TargetAddress GetSectionAddress (string name)
+		public TargetAddress GetSectionAddress (string name)
 		{
-			Console.WriteLine ("GET SECTION ADDRESS: {0}", name);
-			var addr = reader.BfdGetSectionAddress (name);
+			var addr = reader.GetSectionAddress (name);
 			return create_address (addr);
 		}
 
-		public override byte[] GetSectionContents (string name)
+		public byte[] GetSectionContents (string name)
 		{
-			Console.WriteLine ("GET SECTION READER: {0}", name);
-			return reader.BfdGetSectionContents (name);
+			return reader.GetSectionContents (name);
 		}
 
-		public override TargetAddress EntryPoint {
+		public TargetAddress EntryPoint {
 			get {
-				var addr = reader.BfdGetStartAddress ();
-				Console.WriteLine ("ENTRY POINT: {0:x}", addr);
+				var addr = reader.StartAddress;
 				return create_address (addr);
 			}
 		}
 
-		internal override TargetAddress ReadDynamicInfo (Inferior inferior)
-		{
-			throw new InvalidOperationException ();
-		}
-
-		public override void ReadDebuggingInfo ()
+		public void ReadDebuggingInfo ()
 		{
 			read_dwarf ();
 			read_stabs ();
@@ -186,7 +179,7 @@ namespace Mono.Debugger.MdbServer
 				return;
 
 			try {
-				var dwarf = new DwarfReader (os, this, module);
+				var dwarf = new DwarfReader (OperatingSystem, this, Module);
 				dwarf.ReadTypes ();
 				debug_info = dwarf;
 			} catch (Exception ex) {
@@ -203,7 +196,7 @@ namespace Mono.Debugger.MdbServer
 				return;
 
 			try {
-				debug_info = new StabsReader (os, this, module);
+				debug_info = new StabsReader (OperatingSystem, this, Module);
 			} catch (Exception ex) {
 				Console.WriteLine ("Cannot read STABS debugging info from " +
 						   "symbol file `{0}': {1}", FileName, ex);
@@ -239,11 +232,11 @@ namespace Mono.Debugger.MdbServer
 			return new ArrayList ();
 		}
 
-		protected class RemoteSymbolFile : SymbolFile
+		protected class ExeReaderSymbolFile : SymbolFile
 		{
-			public readonly RemoteExecutableReader ExecutableReader;
+			public readonly ExecutableReader ExecutableReader;
 
-			public RemoteSymbolFile (RemoteExecutableReader reader)
+			public ExeReaderSymbolFile (ExecutableReader reader)
 			{
 				this.ExecutableReader = reader;
 			}
@@ -312,12 +305,12 @@ namespace Mono.Debugger.MdbServer
 		// The BFD symbol table.
 		//
 
-		private class RemoteSymbolTable
+		private class ExeReaderSymbolTable
 		{
-			RemoteExecutableReader reader;
+			ExecutableReader reader;
 			Symbol[] list;
 
-			public RemoteSymbolTable (RemoteExecutableReader reader)
+			public ExeReaderSymbolTable (ExecutableReader reader)
 			{
 				this.reader = reader;
 			}
@@ -363,6 +356,43 @@ namespace Mono.Debugger.MdbServer
 
 				return null;
 			}
+		}
+
+
+		//
+		// IDisposable
+		//
+
+		private bool disposed = false;
+
+		protected virtual void DoDispose ()
+		{ }
+
+		private void Dispose (bool disposing)
+		{
+			// Check to see if Dispose has already been called.
+			lock (this) {
+				if (disposed)
+					return;
+
+				disposed = true;
+			}
+
+			// If this is a call to Dispose, dispose all managed resources.
+			if (disposing)
+				DoDispose ();
+		}
+
+		public void Dispose ()
+		{
+			Dispose (true);
+			// Take yourself off the Finalization queue
+			GC.SuppressFinalize (this);
+		}
+
+		~ExecutableReader ()
+		{
+			Dispose (false);
 		}
 	}
 }

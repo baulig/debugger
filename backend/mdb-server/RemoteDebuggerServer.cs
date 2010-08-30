@@ -98,7 +98,8 @@ namespace Mono.Debugger.MdbServer
 		public override ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,
 								      string filename, TargetAddress base_address, bool is_loaded)
 		{
-			var reader = new RemoteExecutableReader (os, memory, this, filename);
+			var mdb_reader = server.CreateExeReader (filename);
+			var reader = new ExecutableReader (os, memory, this, mdb_reader, filename);
 			reader.ReadDebuggingInfo ();
 			return reader;
 		}

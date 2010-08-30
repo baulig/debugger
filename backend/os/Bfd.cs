@@ -6,6 +6,7 @@ using System.Collections;
 using System.Runtime.InteropServices;
 
 using Mono.Debugger;
+using Mono.Debugger.Server;
 using Mono.Debugger.Languages;
 using Mono.Debugger.Languages.Native;
 using Mono.Debugger.Architectures;

@@ -1,10 +1,11 @@
 using System;
 using System.Runtime.InteropServices;
+
 using Mono.Debugger.Server;
 
 namespace Mono.Debugger.MdbServer
 {
-	internal class MdbExeReader : ServerObject
+	internal class MdbExeReader : ServerObject, ExecutableReader.IServerExeReader
 	{
 		public MdbExeReader (Connection connection, int id)
 			: base (connection, id, ServerObjectKind.ExeReader)
@@ -19,32 +20,33 @@ namespace Mono.Debugger.MdbServer
 			GET_SECTION_CONTENTS = 6
 		}
 
-		public long BfdGetStartAddress ()
-		{
-			return Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_START_ADDRESS, new Connection.PacketWriter ().WriteInt (ID)).ReadLong ();
+		public long StartAddress {
+			get {
+				return Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_START_ADDRESS, new Connection.PacketWriter ().WriteInt (ID)).ReadLong ();
+			}
 		}
 
-		public long BfdLookupSymbol (string name)
+		public long LookupSymbol (string name)
 		{
 			return Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.LOOKUP_SYMBOL, new Connection.PacketWriter ().WriteInt (ID).WriteString (name)).ReadLong ();
 		}
 
-		public string BfdGetTargetName ()
+		public string GetTargetName ()
 		{
 			return Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_TARGET_NAME, new Connection.PacketWriter ().WriteInt (ID)).ReadString ();
 		}
 
-		public bool BfdHasSection (string name)
+		public bool HasSection (string name)
 		{
 			return Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.HAS_SECTION, new Connection.PacketWriter ().WriteInt (ID).WriteString (name)).ReadByte () != 0;
 		}
 
-		public long BfdGetSectionAddress (string name)
+		public long GetSectionAddress (string name)
 		{
 			return Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_SECTION_ADDRESS, new Connection.PacketWriter ().WriteInt (ID).WriteString (name)).ReadLong ();
 		}
 
-		public byte[] BfdGetSectionContents (string name)
+		public byte[] GetSectionContents (string name)
 		{
 			var reader = Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_SECTION_CONTENTS, new Connection.PacketWriter ().WriteInt (ID).WriteString (name));
 			int size = reader.ReadInt ();
