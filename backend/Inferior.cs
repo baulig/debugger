@@ -29,7 +29,7 @@ namespace Mono.Debugger.Backend
 		protected readonly bool native;
 
 		DebuggerServer server;
-		DebuggerServer.InferiorHandle inferior;
+		IInferior inferior;
 
 		int child_pid;
 		bool initialized;
@@ -67,7 +67,7 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		internal DebuggerServer.InferiorHandle InferiorHandle {
+		internal IInferior InferiorHandle {
 			get {
 				check_disposed ();
 				return inferior;
@@ -88,7 +88,7 @@ namespace Mono.Debugger.Backend
 			this.address_domain = address_domain;
 
 			server = thread_manager.DebuggerServer;
-			inferior = server.CreateInferior (sse, this, bpm);
+			inferior = server.CreateInferior (sse, this, bpm.ServerHandle);
 		}
 
 		public static Inferior CreateInferior (ThreadManager thread_manager, Process process,
@@ -123,14 +123,6 @@ namespace Mono.Debugger.Backend
 			return inferior;
 		}
 
-		protected static void check_error (TargetError error)
-		{
-			if (error == TargetError.None)
-				return;
-
-			throw new TargetException (error);
-		}
-
 		public void CallMethod (TargetAddress method, long data1, long data2,
 					long callback_arg)
 		{
@@ -138,7 +130,7 @@ namespace Mono.Debugger.Backend
 
 			TargetState old_state = change_target_state (TargetState.Busy);
 			try {
-				check_error (server.CallMethod (inferior, method.Address, data1, data2, callback_arg));
+				inferior.CallMethod (method.Address, data1, data2, callback_arg);
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -152,7 +144,7 @@ namespace Mono.Debugger.Backend
 
 			TargetState old_state = change_target_state (TargetState.Running);
 			try {
-				check_error (server.CallMethod (inferior, method.Address, arg1, arg2, arg3, arg4, callback_arg));
+				inferior.CallMethod (method.Address, arg1, arg2, arg3, arg4, callback_arg);
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -166,7 +158,7 @@ namespace Mono.Debugger.Backend
 			TargetState old_state = change_target_state (TargetState.Running);
 
 			try {
-				check_error (server.CallMethod (inferior, method.Address, data, callback_arg));
+				inferior.CallMethod (method.Address, data, callback_arg);
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -186,8 +178,7 @@ namespace Mono.Debugger.Backend
 			else
 				blob = obj.Location.ReadBuffer (this, obj.Type.Size);
 
-			check_error (server.CallMethod (
-				inferior, method.Address, method_argument, address, blob, callback_arg));
+			inferior.CallMethod (method.Address, method_argument, address, blob, callback_arg);
 		}
 
 		public void RuntimeInvoke (TargetAddress invoke_method,
@@ -233,78 +224,66 @@ namespace Mono.Debugger.Backend
 				blob_size += blobs [i].Length;
 			}
 
-			check_error (server.RuntimeInvoke (
-				inferior, invoke_method.Address, method_argument.Address,
-				length, blob, blob_offsets, addresses, callback_arg, debug));
+			inferior.RuntimeInvoke (
+				invoke_method.Address, method_argument.Address,
+				length, blob, blob_offsets, addresses, callback_arg, debug);
 		}
 
 		public void ExecuteInstruction (byte[] instruction, bool update_ip)
 		{
 			check_disposed ();
 
-			check_error (server.ExecuteInstruction (inferior, instruction, update_ip));
+			inferior.ExecuteInstruction (instruction, update_ip);
 		}
 
 		public void MarkRuntimeInvokeFrame ()
 		{
-			check_error (server.MarkRuntimeInvokeFrame (inferior));
+			inferior.MarkRuntimeInvokeFrame ();
 		}
 
 		public void AbortInvoke (long rti_id)
 		{
-			check_error (server.AbortInvoke (inferior, rti_id));
+			inferior.AbortInvoke (rti_id);
 		}
 
 		public int InsertBreakpoint (TargetAddress address)
 		{
-			return server.InsertBreakpoint (inferior, address.Address);
+			return inferior.InsertBreakpoint (address.Address);
 		}
 
-		public int InsertHardwareBreakpoint (TargetAddress address, bool fallback, out int index)
+		public int InsertHardwareBreakpoint (TargetAddress address, bool fallback, out int hw_index)
 		{
-			int retval;
-			TargetError result = server.InsertHardwareBreakpoint (
-				inferior, DebuggerServer.HardwareBreakpointType.NONE,
-				out index, address.Address, out retval);
-			if (result == TargetError.None)
-				return retval;
-			else if (fallback &&
-				 ((result == TargetError.DebugRegisterOccupied) ||
-				  (result == TargetError.NotImplemented))) {
-				index = -1;
-				return InsertBreakpoint (address);
-			} else {
-				throw new TargetException (result);
-			}
+			return inferior.InsertHardwareBreakpoint (
+				DebuggerServer.HardwareBreakpointType.NONE, fallback,
+				address.Address, out hw_index);
 		}
 
 		public void RemoveBreakpoint (int breakpoint)
 		{
-			server.RemoveBreakpoint (inferior, breakpoint);
+			inferior.RemoveBreakpoint (breakpoint);
 		}
 
 		public int InsertHardwareWatchPoint (TargetAddress address, DebuggerServer.HardwareBreakpointType type,
-						     out int index)
+						     out int hw_index)
 		{
-			int retval;
-			check_error (server.InsertHardwareBreakpoint (
-				inferior, type, out index, address.Address, out retval));
-			return retval;
+			return inferior.InsertHardwareBreakpoint (type, false, address.Address, out hw_index);
 		}
 
 		public void EnableBreakpoint (int breakpoint)
 		{
-			server.EnableBreakpoint (inferior, breakpoint);
+			inferior.EnableBreakpoint (breakpoint);
 		}
 
 		public void DisableBreakpoint (int breakpoint)
 		{
-			server.DisableBreakpoint (inferior, breakpoint);
+			inferior.DisableBreakpoint (breakpoint);
 		}
 
 		public void RestartNotification ()
 		{
-			check_error (server.RestartNotification (inferior));
+#if FIXME
+			inferior.RestartNotification (inferior);
+#endif
 		}
 
 		public ProcessStart ProcessStart {
@@ -333,15 +312,11 @@ namespace Mono.Debugger.Backend
 			string[] env = new string[start.Environment.Length + 1];
 			Array.Copy(start.Environment, env, start.Environment.Length);
 
-			child_pid = server.Spawn (
-				inferior, start.WorkingDirectory, args, env, start.RedirectOutput,
-				delegate (bool is_stderr, string text) {
-					process.OnTargetOutput (is_stderr, text);
-				});
+			child_pid = inferior.Spawn (start.WorkingDirectory, args, env);
 
 			initialized = true;
 
-			server.InitializeProcess (inferior);
+			inferior.InitializeProcess ();
 
 			SetupInferior ();
 
@@ -359,7 +334,7 @@ namespace Mono.Debugger.Backend
 
 			bool pending_sigstop = process.ThreadManager.GetPendingSigstopForNewThread (pid);
 
-			check_error (server.InitializeThread (inferior, pid, !pending_sigstop));
+			inferior.InitializeThread (pid, !pending_sigstop);
 			this.child_pid = pid;
 
 			SetupInferior ();
@@ -374,7 +349,7 @@ namespace Mono.Debugger.Backend
 
 			initialized = true;
 
-			check_error (server.InitializeThread (inferior, pid, false));
+			inferior.InitializeThread (pid, false);
 			this.child_pid = pid;
 
 			string exe_file, cwd;
@@ -395,7 +370,7 @@ namespace Mono.Debugger.Backend
 
 			has_target = true;
 
-			check_error (server.Attach (inferior, pid));
+			inferior.Attach (pid);
 			this.child_pid = pid;
 
 			string exe_file, cwd;
@@ -411,6 +386,12 @@ namespace Mono.Debugger.Backend
 			change_target_state (TargetState.Stopped, 0);
 		}
 
+		public void InitializeAtEntryPoint ()
+		{
+			inferior.InitializeAtEntryPoint ();
+		}
+
+#if FIXME
 		public DebuggerServer.ChildEvent ProcessEvent (int status)
 		{
 			long arg, data1, data2;
@@ -419,8 +400,8 @@ namespace Mono.Debugger.Backend
 			int opt_data_size;
 			byte[] opt_data;
 
-			message = server.DispatchEvent (
-				inferior, status, out arg, out data1, out data2, out opt_data);
+			message = inferior.DispatchEvent (
+				status, out arg, out data1, out data2, out opt_data);
 
 			switch (message) {
 			case DebuggerServer.ChildEventType.CHILD_EXITED:
@@ -447,6 +428,7 @@ namespace Mono.Debugger.Backend
 
 			return new DebuggerServer.ChildEvent (message, arg, data1, data2);
 		}
+#endif
 
 		public static string GetFileContents (string filename)
 		{
@@ -466,7 +448,7 @@ namespace Mono.Debugger.Backend
 		protected void SetupInferior ()
 		{
 			if ((server.Capabilities & DebuggerServer.ServerCapabilities.HAS_SIGNALS) != 0) {
-				signal_info = server.GetSignalInfo (inferior);
+				signal_info = inferior.GetSignalInfo ();
 				has_signals = true;
 			}
 
@@ -555,7 +537,7 @@ namespace Mono.Debugger.Backend
 
 		byte[] read_buffer (TargetAddress address, int size)
 		{
-			return server.ReadMemory (inferior, address.Address, size);
+			return inferior.ReadMemory (address.Address, size);
 		}
 
 		public override byte[] ReadBuffer (TargetAddress address, int size)
@@ -664,7 +646,7 @@ namespace Mono.Debugger.Backend
 		public override void WriteBuffer (TargetAddress address, byte[] buffer)
 		{
 			check_disposed ();
-			server.WriteMemory (inferior, address.Address, buffer);
+			inferior.WriteMemory (address.Address, buffer);
 			OnMemoryChanged ();
 		}
 
@@ -672,7 +654,7 @@ namespace Mono.Debugger.Backend
 		{
 			check_disposed ();
 			var buffer = BitConverter.GetBytes (value);
-			server.WriteMemory (inferior, address.Address, buffer);
+			inferior.WriteMemory (address.Address, buffer);
 			OnMemoryChanged ();
 		}
 
@@ -680,7 +662,7 @@ namespace Mono.Debugger.Backend
 		{
 			check_disposed ();
 			var buffer = BitConverter.GetBytes (value);
-			server.WriteMemory (inferior, address.Address, buffer);
+			inferior.WriteMemory (address.Address, buffer);
 			OnMemoryChanged ();
 		}
 
@@ -688,7 +670,7 @@ namespace Mono.Debugger.Backend
 		{
 			check_disposed ();
 			var buffer = BitConverter.GetBytes (value);
-			server.WriteMemory (inferior, address.Address, buffer);
+			inferior.WriteMemory (address.Address, buffer);
 			OnMemoryChanged ();
 		}
 
@@ -760,7 +742,7 @@ namespace Mono.Debugger.Backend
 
 			TargetState old_state = change_target_state (TargetState.Running);
 			try {
-				server.Step (inferior);
+				inferior.Step ();
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -772,7 +754,7 @@ namespace Mono.Debugger.Backend
 			check_disposed ();
 			TargetState old_state = change_target_state (TargetState.Running);
 			try {
-				server.Continue (inferior);
+				inferior.Continue ();
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -785,7 +767,7 @@ namespace Mono.Debugger.Backend
 
 			TargetState old_state = change_target_state (TargetState.Running);
 			try {
-				server.Resume (inferior);
+				inferior.Resume ();
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -801,9 +783,10 @@ namespace Mono.Debugger.Backend
 		// </summary>
 		public bool Stop (out DebuggerServer.ChildEvent new_event)
 		{
+#if FIXME
 			check_disposed ();
 			int status;
-			TargetError error = server.StopAndWait (inferior, out status);
+			TargetError error = inferior.StopAndWait (out status);
 			if (error != TargetError.None) {
 				new_event = null;
 				return false;
@@ -814,6 +797,9 @@ namespace Mono.Debugger.Backend
 
 			new_event = ProcessEvent (status);
 			return true;
+#else
+			throw new NotImplementedException ();
+#endif
 		}
 
 		// <summary>
@@ -824,41 +810,40 @@ namespace Mono.Debugger.Backend
 		public bool Stop ()
 		{
 			check_disposed ();
-			TargetError error = server.Stop (inferior);
-			if(error == TargetError.AlreadyStopped)
-				change_target_state (TargetState.Stopped);
-			return error == TargetError.None;
+			bool stopped = inferior.Stop ();
+			change_target_state (TargetState.Stopped);
+			return stopped;
 		}
 
 		public void SetSignal (int signal, bool send_it)
 		{
 			check_disposed ();
-			server.SetSignal (inferior, signal, send_it);
+			inferior.SetSignal (signal, send_it);
 		}
 
 		public int GetPendingSignal ()
 		{
 			check_disposed ();
-			return server.GetPendingSignal (inferior);
+			return inferior.GetPendingSignal ();
 		}
 
 		public void Detach ()
 		{
 			check_disposed ();
 			if (pushed_regs)
-				server.PopRegisters (inferior);
-			check_error (server.Detach (inferior));
+				inferior.PopRegisters ();
+			inferior.Detach ();
 		}
 
 		public void Shutdown ()
 		{
-			server.Kill (inferior);
+			inferior.Kill ();
 		}
 
 		public void Kill ()
 		{
 			check_disposed ();
-			check_error (server.Kill (inferior));
+			inferior.Kill ();
 		}
 
 		public TargetAddress CurrentFrame {
@@ -871,12 +856,7 @@ namespace Mono.Debugger.Backend
 		public bool CurrentInstructionIsBreakpoint {
 			get {
 				check_disposed ();
-				int is_breakpoint;
-				TargetError result = server.CurrentInsnIsBpt (inferior, out is_breakpoint);
-				if (result != TargetError.None)
-					throw new TargetException (TargetError.NoStack);
-
-				return is_breakpoint != 0;
+				return inferior.CurrentInsnIsBpt ();
 			}
 		}
 
@@ -895,7 +875,7 @@ namespace Mono.Debugger.Backend
 
 		public override Registers GetRegisters ()
 		{
-			return new Registers (arch, server.GetRegisters (inferior));
+			return new Registers (arch, inferior.GetRegisters ());
 		}
 
 		public override void SetRegisters (Registers registers)
@@ -910,31 +890,34 @@ namespace Mono.Debugger.Backend
 					registers [i].SetValue (old_regs [i].Value);
 			}
 
-			check_error (server.SetRegisters (inferior, registers.Values));
+			inferior.SetRegisters (registers.Values);
 		}
 
 		public int[] GetThreads ()
 		{
+#if FIXME
 			int[] threads;
-			check_error (server.GetThreads (inferior, out threads));
+			inferior.GetThreads (out threads);
 			return threads;
+#else
+			throw new NotImplementedException ();
+#endif
 		}
 
 		protected string GetApplication (out string cwd, out string[] cmdline_args)
 		{
-			return server.GetApplication (inferior, out cwd, out cmdline_args);
+			return inferior.GetApplication (out cwd, out cmdline_args);
 		}
 
 		public void DetachAfterFork ()
 		{
-			server.DetachAfterFork (inferior);
+			inferior.DetachAfterFork ();
 			Dispose ();
 		}
 
 		public TargetAddress PushRegisters ()
 		{
-			long new_rsp;
-			check_error (server.PushRegisters (inferior, out new_rsp));
+			long new_rsp = inferior.PushRegisters ();
 			pushed_regs = true;
 			return create_address (new_rsp);
 		}
@@ -942,18 +925,16 @@ namespace Mono.Debugger.Backend
 		public void PopRegisters ()
 		{
 			pushed_regs = false;
-			check_error (server.PopRegisters (inferior));
+			inferior.PopRegisters ();
 		}
 
 		internal CallbackFrame GetCallbackFrame (TargetAddress stack_pointer, bool exact_match)
 		{
-			DebuggerServer.CallbackFrame cframe;
-			TargetError result = server.GetCallbackFrame (
-				inferior, stack_pointer.Address, exact_match, out cframe);
+			DebuggerServer.CallbackFrame cframe = inferior.GetCallbackFrame (
+				stack_pointer.Address, exact_match);
 
-			if (result == TargetError.NoCallbackFrame)
+			if (cframe == null)
 				return null;
-			check_error (result);
 
 			return new CallbackFrame (this, cframe);
 		}
@@ -988,7 +969,7 @@ namespace Mono.Debugger.Backend
 
 		internal void SetRuntimeInfo (DebuggerServer.MonoRuntimeHandle runtime)
 		{
-			server.SetRuntimeInfo (inferior, runtime);
+			inferior.SetRuntimeInfo (runtime);
 		}
 
 		internal class StackFrame
@@ -1032,14 +1013,14 @@ namespace Mono.Debugger.Backend
 		DebuggerServer.ServerStackFrame get_current_frame ()
 		{
 			check_disposed ();
-			return server.GetFrame (inferior);
+			return inferior.GetFrame ();
 		}
 
 		public StackFrame GetCurrentFrame (bool may_fail)
 		{
 			check_disposed ();
 			try {
-				var frame = server.GetFrame (inferior);
+				var frame = inferior.GetFrame ();
 				return new StackFrame (target_info, frame);
 			} catch {
 				if (may_fail)
@@ -1234,7 +1215,7 @@ namespace Mono.Debugger.Backend
 				// Release unmanaged resources
 				lock (this) {
 					if (inferior != null) {
-						server.Finalize (inferior);
+						inferior.Dispose ();
 						inferior = null;
 					}
 				}

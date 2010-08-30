@@ -165,6 +165,7 @@ namespace Mono.Debugger.Backend
 		}
 
 #region child event processing
+#if FIXME
 		// <summary>
 		//   This is called from the SingleSteppingEngine's main event loop to give
 		//   us the next event - `status' has no meaning to us, it's just meant to
@@ -184,6 +185,7 @@ namespace Mono.Debugger.Backend
 
 			ProcessEvent (inferior.ProcessEvent (status));
 		}
+#endif
 
 		public bool ProcessEvent (DebuggerServer.ChildEvent cevent)
 		{
@@ -2990,7 +2992,7 @@ namespace Mono.Debugger.Backend
 				return EventResult.Running;
 			}
 
-			sse.ThreadManager.DebuggerServer.InitializeAtEntryPoint (inferior);
+			inferior.InitializeAtEntryPoint ();
 
 			sse.Process.InitializeThreads (inferior, !sse.Process.IsAttached);
 

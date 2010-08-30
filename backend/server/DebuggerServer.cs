@@ -13,9 +13,6 @@ namespace Mono.Debugger.Server
 {
 	internal abstract class DebuggerServer : DebuggerMarshalByRefObject, IDisposable
 	{
-		internal interface InferiorHandle
-		{ }
-
 		public abstract ThreadManager ThreadManager {
 			get;
 		}
@@ -32,14 +29,10 @@ namespace Mono.Debugger.Server
 			get;
 		}
 
-		public abstract BreakpointManager CreateBreakpointManager ();
+		public abstract IBreakpointManager CreateBreakpointManager ();
 
-		public abstract InferiorHandle CreateInferior (SingleSteppingEngine sse, Inferior inferior,
-							       BreakpointManager breakpoint_manager);
-
-		public abstract void InitializeProcess (InferiorHandle inferior);
-
-		public abstract TargetError InitializeThread (InferiorHandle inferior, int child_pid, bool wait);
+		public abstract IInferior CreateInferior (SingleSteppingEngine sse, Inferior inferior,
+							  IBreakpointManager breakpoint_manager);
 
 		public abstract ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,
 								      string filename, TargetAddress base_address, bool is_loaded);
@@ -171,95 +164,7 @@ namespace Mono.Debugger.Server
 
 		internal delegate void ChildOutputHandler (bool is_stderr, string output);
 
-		public abstract int Spawn (InferiorHandle inferior, string working_dir, string[] argv, string[] envp,
-					   bool redirect_fds, ChildOutputHandler output_handler);
-
-		public abstract TargetError Attach (InferiorHandle inferior, int child_pid);
-
-		public abstract ServerStackFrame GetFrame (InferiorHandle inferior);
-
-		public abstract TargetError CurrentInsnIsBpt (InferiorHandle inferior, out int is_breakpoint);
-
-		public abstract void Step (InferiorHandle inferior);
-
-		public abstract void Continue (InferiorHandle inferior);
-
-		public abstract void Resume (InferiorHandle inferior);
-
-		public abstract TargetError Detach (InferiorHandle inferior);
-
-		public abstract TargetError Finalize (InferiorHandle inferior);
-
-		public abstract byte[] ReadMemory (InferiorHandle inferior, long address, int size);
-
-		public abstract void WriteMemory (InferiorHandle inferior, long start, byte[] buffer);
-
 		public abstract TargetInfo GetTargetInfo ();
-
-		public abstract TargetError CallMethod (InferiorHandle inferior, long method_address, long arg1, long arg2,
-							long callback_arg);
-
-		public abstract TargetError CallMethod (InferiorHandle inferior, long method_address, long arg1, long arg2, long arg3,
-							string string_arg, long callback_arg);
-
-		public abstract TargetError CallMethod (InferiorHandle inferior, long method_address, byte[] data, long callback_arg);
-
-		public abstract TargetError CallMethod (InferiorHandle inferior, long method_address, long arg1, long arg2,
-							byte[] data, long callback_arg);
-
-		public abstract TargetError MarkRuntimeInvokeFrame (InferiorHandle inferior);
-
-		public abstract TargetError AbortInvoke (InferiorHandle inferior, long rti_id);
-
-		public abstract TargetError RuntimeInvoke (InferiorHandle inferior, long invoke_method, long method_address,
-							   int num_params, byte[] blob, int[] blob_offsets, long[] addresses,
-							   long callback_arg, bool debug);
-
-		public abstract TargetError ExecuteInstruction (InferiorHandle inferior, byte[] instruction, bool update_ip);
-
-		public abstract int InsertBreakpoint (InferiorHandle inferior, long address);
-
-		public abstract TargetError InsertHardwareBreakpoint (InferiorHandle inferior, HardwareBreakpointType type,
-								      out int index, long address, out int breakpoint);
-
-		public abstract void RemoveBreakpoint (InferiorHandle inferior, int breakpoint);
-
-		public abstract void EnableBreakpoint (InferiorHandle inferior, int breakpoint);
-
-		public abstract void DisableBreakpoint (InferiorHandle inferior, int breakpoint);
-
-		public abstract long[] GetRegisters (InferiorHandle inferior);
-
-		public abstract TargetError SetRegisters (InferiorHandle inferior, long[] registers);
-
-		public abstract TargetError Stop (InferiorHandle inferior);
-
-		public abstract TargetError StopAndWait (InferiorHandle inferior, out int status);
-
-		public abstract void SetSignal (InferiorHandle inferior, int signal, bool send_it);
-
-		public abstract int GetPendingSignal (InferiorHandle inferior);
-
-		public abstract TargetError Kill (InferiorHandle inferior);
-
-		public abstract ChildEventType DispatchEvent (InferiorHandle inferior, int status, out long arg,
-							      out long data1, out long data2, out byte[] opt_data);
-
-		public abstract SignalInfo GetSignalInfo (InferiorHandle inferior);
-
-		public abstract TargetError GetThreads (InferiorHandle inferior, out int[] threads);
-
-		public abstract string GetApplication (InferiorHandle inferior, out string cwd,
-						       out string[] cmdline_args);
-
-		public abstract TargetError DetachAfterFork (InferiorHandle inferior);
-
-		public abstract TargetError PushRegisters (InferiorHandle inferior, out long new_rsp);
-
-		public abstract TargetError PopRegisters (InferiorHandle inferior);
-
-		public abstract TargetError GetCallbackFrame (InferiorHandle inferior, long stack_pointer, bool exact_match,
-							      out CallbackFrame info);
 
 		internal class CallbackFrame
 		{
@@ -292,8 +197,6 @@ namespace Mono.Debugger.Server
 			}
 		}
 
-		public abstract TargetError RestartNotification (InferiorHandle inferior);
-
 		internal abstract class MonoRuntimeHandle
 		{ }
 
@@ -303,14 +206,10 @@ namespace Mono.Debugger.Server
 			long breakpoint_info, long breakpoint_info_index,
 			int breakpoint_table_size);
 
-		public abstract void SetRuntimeInfo (InferiorHandle inferior, MonoRuntimeHandle runtime);
-
 		public abstract void InitializeCodeBuffer (MonoRuntimeHandle runtime, long executable_code_buffer,
 							   int executable_code_buffer_size);
 
 		public abstract void FinalizeMonoRuntime (MonoRuntimeHandle runtime);
-
-		internal abstract void InitializeAtEntryPoint (Inferior inferior);
 
 		//
 		// IDisposable

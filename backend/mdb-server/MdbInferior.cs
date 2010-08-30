@@ -4,7 +4,7 @@ using Mono.Debugger.Server;
 
 namespace Mono.Debugger.MdbServer
 {
-	internal class MdbInferior : ServerObject, DebuggerServer.InferiorHandle
+	internal class MdbInferior : ServerObject, IInferior
 	{
 		public MdbInferior (Connection connection, int id)
 			: base (connection, id, ServerObjectKind.Inferior)
@@ -32,7 +32,7 @@ namespace Mono.Debugger.MdbServer
 			DISASSEMBLE_INSN
 		}
 
-		public int Spawn (string cwd, string[] argv)
+		public int Spawn (string cwd, string[] argv, string[] envp)
 		{
 			var writer = new Connection.PacketWriter ();
 			writer.WriteInt (ID);
@@ -49,14 +49,29 @@ namespace Mono.Debugger.MdbServer
 			return pid;
 		}
 
+		public void Attach (int pid)
+		{
+			throw new NotImplementedException ();
+		}
+
 		public void InitializeProcess ()
 		{
 			Connection.SendReceive (CommandSet.SERVER, (int)CmdInferior.INITIALIZE_PROCESS, null);
 		}
 
+		public void InitializeThread (int child_pid, bool wait)
+		{
+			throw new NotImplementedException ();
+		}
+
 		public void InitializeAtEntryPoint ()
 		{
 			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.INIT_AT_ENTRYPOINT, new Connection.PacketWriter ().WriteInt (ID));
+		}
+
+		public bool Stop ()
+		{
+			throw new NotImplementedException ();
 		}
 
 		public DebuggerServer.SignalInfo GetSignalInfo ()
@@ -113,6 +128,12 @@ namespace Mono.Debugger.MdbServer
 						       new Connection.PacketWriter ().WriteInt (ID).WriteLong (address)).ReadInt ();
 		}
 
+		public int InsertHardwareBreakpoint (DebuggerServer.HardwareBreakpointType type, bool fallback,
+						     long address, out int hw_index)
+		{
+			throw new NotImplementedException ();
+		}
+
 		public void EnableBreakpoint (int breakpoint)
 		{
 			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.ENABLE_BREAKPOINT,
@@ -129,6 +150,11 @@ namespace Mono.Debugger.MdbServer
 		{
 			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.REMOVE_BREAKPOINT,
 						new Connection.PacketWriter ().WriteInt (ID).WriteInt (breakpoint));
+		}
+
+		public bool CurrentInsnIsBpt ()
+		{
+			throw new NotImplementedException ();
 		}
 
 		public void Step ()
@@ -157,6 +183,11 @@ namespace Mono.Debugger.MdbServer
 			return regs;
 		}
 
+		public void SetRegisters (long[] regs)
+		{
+			throw new NotImplementedException ();
+		}
+
 		public byte[] ReadMemory (long address, int size)
 		{
 			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.READ_MEMORY, new Connection.PacketWriter ().WriteInt (ID).WriteLong (address).WriteInt (size));
@@ -178,11 +209,90 @@ namespace Mono.Debugger.MdbServer
 			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.SET_SIGNAL, new Connection.PacketWriter ().WriteInt (ID).WriteInt (sig).WriteByte (send_it ? (byte)1 : (byte)0));
 		}
 
-		public string DisassembleInsn (long address, out int insn_size)
+		public string DisassembleInstruction (long address, out int insn_size)
 		{
 			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.DISASSEMBLE_INSN, new Connection.PacketWriter ().WriteInt (ID).WriteLong (address));
 			insn_size = reader.ReadInt ();
 			return reader.ReadString ();
+		}
+
+		public void CallMethod (long method_address, long arg1, long arg2, long callback_arg)
+		{
+			throw new NotImplementedException ();
+		}
+
+		public void CallMethod (long method_address, long arg1, long arg2, long arg3,
+					string string_arg, long callback_arg)
+		{
+			throw new NotImplementedException ();
+		}
+
+		public void CallMethod (long method_address, byte[] data, long callback_arg)
+		{
+			throw new NotImplementedException ();
+		}
+
+		public void CallMethod (long method_address, long arg1, long arg2,
+					byte[] data, long callback_arg)
+		{
+			throw new NotImplementedException ();
+		}
+
+		public void MarkRuntimeInvokeFrame ()
+		{
+			throw new NotImplementedException ();
+		}
+
+		public void AbortInvoke (long rti_id)
+		{
+			throw new NotImplementedException ();
+		}
+
+		public void RuntimeInvoke (long invoke_method, long method_address, int num_params,
+					   byte[] blob, int[] blob_offsets, long[] addresses,
+					   long callback_arg, bool debug)
+		{
+			throw new NotImplementedException ();
+		}
+
+		public void ExecuteInstruction (byte[] instruction, bool update_ip)
+		{
+			throw new NotImplementedException ();
+		}
+
+		public DebuggerServer.CallbackFrame GetCallbackFrame (long stack_pointer, bool exact_match)
+		{
+			throw new NotImplementedException ();
+		}
+
+		public void SetRuntimeInfo (DebuggerServer.MonoRuntimeHandle runtime)
+		{
+			throw new NotImplementedException ();
+		}
+
+		public long PushRegisters ()
+		{
+			throw new NotImplementedException ();
+		}
+
+		public void PopRegisters ()
+		{
+			throw new NotImplementedException ();
+		}
+
+		public void Detach ()
+		{
+			throw new NotImplementedException ();
+		}
+
+		public void DetachAfterFork ()
+		{
+			throw new NotImplementedException ();
+		}
+
+		public void Kill ()
+		{
+			throw new NotImplementedException ();
 		}
 
 		internal override void HandleEvent (ServerEvent e)

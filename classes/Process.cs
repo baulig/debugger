@@ -213,7 +213,7 @@ namespace Mono.Debugger
 
 			is_attached = start.PID != 0;
 
-			breakpoint_manager = manager.DebuggerServer.CreateBreakpointManager ();
+			breakpoint_manager = new BreakpointManager (manager.DebuggerServer.CreateBreakpointManager ());
 
 			exception_handlers = new Dictionary<int,ExceptionCatchPoint> ();
 
@@ -405,7 +405,7 @@ namespace Mono.Debugger
 
 			session.OnProcessExecd (this);
 
-			breakpoint_manager = manager.DebuggerServer.CreateBreakpointManager ();
+			breakpoint_manager = new BreakpointManager (manager.DebuggerServer.CreateBreakpointManager ());
 
 			exception_handlers = new Dictionary<int,ExceptionCatchPoint> ();
 

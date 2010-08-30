@@ -83,17 +83,15 @@ namespace Mono.Debugger.MdbServer
 			get { return manager; }
 		}
 
-		public override BreakpointManager CreateBreakpointManager ()
+		public override IBreakpointManager CreateBreakpointManager ()
 		{
-			var bpm = server.CreateBreakpointManager ();
-			return new BreakpointManager (bpm);
+			return server.CreateBreakpointManager ();
 		}
 
-		public override InferiorHandle CreateInferior (SingleSteppingEngine sse, Inferior inferior,
-							       BreakpointManager breakpoint_manager)
+		public override IInferior CreateInferior (SingleSteppingEngine sse, Inferior inferior,
+							  IBreakpointManager breakpoint_manager)
 		{
-			var bpm = (MdbBreakpointManager) breakpoint_manager.ServerHandle;
-			return server.CreateInferior (bpm);
+			return server.CreateInferior ((MdbBreakpointManager) breakpoint_manager);
 		}
 
 		public override ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,
@@ -105,235 +103,10 @@ namespace Mono.Debugger.MdbServer
 			return reader;
 		}
 
-		public override void InitializeProcess (InferiorHandle inferior)
-		{
-			((MdbInferior) inferior).InitializeProcess ();
-		}
-
-		public override TargetError InitializeThread (InferiorHandle inferior, int child_pid, bool wait)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override int Spawn (InferiorHandle inferior, string working_dir, string[] argv, string[] envp,
-					   bool redirect_fds, ChildOutputHandler output_handler)
-		{
-			return ((MdbInferior) inferior).Spawn (working_dir, argv);
-		}
-
-		public override TargetError Attach (InferiorHandle inferior, int child_pid)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override ServerStackFrame GetFrame (InferiorHandle inferior)
-		{
-			return ((MdbInferior) inferior).GetFrame ();
-		}
-
-		public override TargetError CurrentInsnIsBpt (InferiorHandle inferior, out int is_breakpoint)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override void Step (InferiorHandle inferior)
-		{
-			((MdbInferior) inferior).Step ();
-		}
-
-		public override void Continue (InferiorHandle inferior)
-		{
-			((MdbInferior) inferior).Continue ();
-		}
-
-		public override void Resume (InferiorHandle inferior)
-		{
-			((MdbInferior) inferior).Resume ();
-		}
-
-		public override TargetError Detach (InferiorHandle inferior)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override TargetError Finalize (InferiorHandle inferior)
-		{
-			((MdbInferior) inferior).Dispose ();
-			connection = null;
-			return TargetError.None;
-		}
-
-		public override byte[] ReadMemory (InferiorHandle inferior, long address, int size)
-		{
-			return ((MdbInferior) inferior).ReadMemory (address, size);
-		}
-
-		public override void WriteMemory (InferiorHandle inferior, long start, byte[] buffer)
-		{
-			((MdbInferior) inferior).WriteMemory (start, buffer);
-		}
-
 		public override TargetInfo GetTargetInfo ()
 		{
 			check_disposed ();
 			return server.GetTargetInfo ();
-		}
-
-		public override TargetError CallMethod (InferiorHandle inferior, long method_address, long arg1, long arg2,
-							long callback_arg)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override TargetError CallMethod (InferiorHandle inferior, long method_address, long arg1, long arg2, long arg3,
-							string string_arg, long callback_arg)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override TargetError CallMethod (InferiorHandle inferior, long method_address, byte[] data, long callback_arg)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override TargetError CallMethod (InferiorHandle inferior, long method_address, long arg1, long arg2,
-							byte[] data, long callback_arg)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override TargetError MarkRuntimeInvokeFrame (InferiorHandle inferior)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override TargetError AbortInvoke (InferiorHandle inferior, long rti_id)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override TargetError RuntimeInvoke (InferiorHandle inferior, long invoke_method, long method_address,
-							   int num_params, byte[] blob, int[] blob_offsets, long[] addresses,
-							   long callback_arg, bool debug)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override TargetError ExecuteInstruction (InferiorHandle inferior, byte[] instruction, bool update_ip)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override int InsertBreakpoint (InferiorHandle inferior, long address)
-		{
-			return ((MdbInferior) inferior).InsertBreakpoint (address);
-		}
-
-		public override TargetError InsertHardwareBreakpoint (InferiorHandle inferior, HardwareBreakpointType type,
-								      out int index, long address, out int breakpoint)
-		{
-			index = -1;
-			breakpoint = -1;
-			return TargetError.NotImplemented;
-		}
-
-		public override void RemoveBreakpoint (InferiorHandle inferior, int breakpoint)
-		{
-			((MdbInferior) inferior).RemoveBreakpoint (breakpoint);
-		}
-
-		public override void EnableBreakpoint (InferiorHandle inferior, int breakpoint)
-		{
-			((MdbInferior) inferior).EnableBreakpoint (breakpoint);
-		}
-
-		public override void DisableBreakpoint (InferiorHandle inferior, int breakpoint)
-		{
-			((MdbInferior) inferior).DisableBreakpoint (breakpoint);
-		}
-
-		public override long[] GetRegisters (InferiorHandle inferior)
-		{
-			return ((MdbInferior) inferior).GetRegisters ();
-		}
-
-		public override TargetError SetRegisters (InferiorHandle inferior, long[] registers)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override TargetError Stop (InferiorHandle inferior)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override TargetError StopAndWait (InferiorHandle inferior, out int status)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override void SetSignal (InferiorHandle inferior, int signal, bool send_it)
-		{
-			((MdbInferior) inferior).SetSignal (signal, send_it);
-		}
-
-		public override int GetPendingSignal (InferiorHandle inferior)
-		{
-			return ((MdbInferior) inferior).GetPendingSignal ();
-		}
-
-		public override TargetError Kill (InferiorHandle inferior)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override ChildEventType DispatchEvent (InferiorHandle inferior, int status, out long arg,
-							      out long data1, out long data2, out byte[] opt_data)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override SignalInfo GetSignalInfo (InferiorHandle inferior)
-		{
-			return ((MdbInferior) inferior).GetSignalInfo ();
-		}
-
-		public override TargetError GetThreads (InferiorHandle inferior, out int[] threads)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override string GetApplication (InferiorHandle inferior, out string cwd,
-						       out string[] cmdline_args)
-		{
-			return ((MdbInferior) inferior).GetApplication (out cwd, out cmdline_args);
-		}
-
-		public override TargetError DetachAfterFork (InferiorHandle inferior)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override TargetError PushRegisters (InferiorHandle inferior, out long new_rsp)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override TargetError PopRegisters (InferiorHandle inferior)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override TargetError GetCallbackFrame (InferiorHandle inferior, long stack_pointer, bool exact_match,
-							      out CallbackFrame info)
-		{
-			info = null;
-			return TargetError.NoCallbackFrame;
-		}
-
-		public override TargetError RestartNotification (InferiorHandle inferior)
-		{
-			throw new NotImplementedException ();
 		}
 
 		public override MonoRuntimeHandle InitializeMonoRuntime (
@@ -341,11 +114,6 @@ namespace Mono.Debugger.MdbServer
 			long executable_code_buffer, int executable_code_buffer_size,
 			long breakpoint_info, long breakpoint_info_index,
 			int breakpoint_table_size)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public override void SetRuntimeInfo (InferiorHandle inferior, MonoRuntimeHandle runtime)
 		{
 			throw new NotImplementedException ();
 		}
@@ -361,22 +129,16 @@ namespace Mono.Debugger.MdbServer
 			throw new NotImplementedException ();
 		}
 
-		internal override void InitializeAtEntryPoint (Inferior inferior)
-		{
-			var handle = (MdbInferior) inferior.InferiorHandle;
-			handle.InitializeAtEntryPoint ();
-		}
-
-		public string DisassembleInsn (Inferior inferior, long address, out int insn_size)
-		{
-			var handle = (MdbInferior) inferior.InferiorHandle;
-			return handle.DisassembleInsn (address, out insn_size);
-		}
-
 		public Disassembler GetDisassembler ()
 		{
 			return new RemoteDisassembler (this);
 		}
+
+                protected string DisassembleInsn (Inferior inferior, long address, out int insn_size)
+                {
+                        var handle = (MdbInferior) inferior.InferiorHandle;
+                        return handle.DisassembleInstruction (address, out insn_size);
+                }
 
 		class RemoteDisassembler : Disassembler
 		{
