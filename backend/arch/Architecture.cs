@@ -22,11 +22,7 @@ namespace Mono.Debugger.Backend
 			this.process = process;
 			this.TargetInfo = info;
 
-			var server = process.ThreadManager.DebuggerServer as RemoteDebuggerServer;
-			if (server != null)
-				disassembler = server.GetDisassembler ();
-			else if (!Inferior.IsRunningOnWindows)
-				disassembler = new BfdDisassembler (process, info.TargetAddressSize == 8);
+			disassembler = process.ThreadManager.DebuggerServer.GetDisassembler ();
 
 			switch (process.ThreadManager.DebuggerServer.ArchType) {
 			case ArchType.I386:

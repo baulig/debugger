@@ -422,7 +422,14 @@ namespace Mono.Debugger.MdbServer
 			socket.Send (packet);
 		}
 
-		public MdbServer Connect (IPEndPoint endpoint)
+		public static MdbServer Connect (IPEndPoint endpoint)
+		{
+			var connection = new Connection (endpoint);
+
+			return new MdbServer (connection);
+		}
+
+		protected Connection (IPEndPoint endpoint)
 		{
 			socket = new Socket (AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 			socket.Connect (endpoint);
@@ -448,8 +455,6 @@ namespace Mono.Debugger.MdbServer
 
 			receiver_thread = new ST.Thread (new ST.ThreadStart (receiver_thread_main));
 			receiver_thread.Start ();
-
-			return new MdbServer (this);
 		}
 
 		public void Close ()

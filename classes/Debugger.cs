@@ -51,7 +51,7 @@ namespace Mono.Debugger
 			else
 				server = new NativeDebuggerServer (this);
 #else
-			server = RemoteDebuggerServer.Create (this, options.RemoteServer);
+			server = DebuggerServer.Connect (this, options.RemoteServer);
 #endif
 
 			thread_manager = server.ThreadManager;

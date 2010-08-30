@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Net;
 using System.Text;
 using ST = System.Threading;
 using System.Configuration;
@@ -8,6 +9,7 @@ using System.Collections.Specialized;
 using System.Runtime.InteropServices;
 
 using Mono.Debugger.Backend;
+using Mono.Debugger.MdbServer;
 
 namespace Mono.Debugger.Server
 {
@@ -25,6 +27,13 @@ namespace Mono.Debugger.Server
 			Type = server.ServerType;
 			Capabilities = server.Capabilities;
 			ArchType = server.ArchType;
+		}
+
+		public static DebuggerServer Connect (Debugger debugger, IPEndPoint endpoint)
+		{
+			var server = Connection.Connect (endpoint);
+
+			return new DebuggerServer (debugger, server);
 		}
 
 		public Debugger Debugger {
