@@ -1,4 +1,4 @@
-#include <mdb-server.h>
+#include <mdb-server-windows.h>
 #include <mdb-inferior.h>
 #include <errno.h>
 #if HAVE_UNISTD_H
@@ -12,7 +12,13 @@
 #endif
 #include <ws2tcpip.h>
 
-gboolean
+MdbServer *
+mdb_server_new (Connection *connection)
+{
+	return new MdbServerWindows (connection);
+}
+
+bool
 MdbServer::Initialize (void)
 {
 	WORD wVersionRequested;
@@ -27,19 +33,19 @@ MdbServer::Initialize (void)
 	err = WSAStartup (wVersionRequested, &wsaData);
 	if (err != 0) {
 		g_warning (G_STRLOC ": WSAStartup failed with error: %d", err);
-		return FALSE;
+		return false;
 	}
 
 	if (LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2) {
 		g_warning (G_STRLOC ": Could not find a usable version of Winsock.dll");
-		return FALSE;
+		return false;
 	}
 
-	return TRUE;
+	return true;
 }
 
 void
-MdbServer::MainLoop (int conn_fd)
+MdbServerWindows::MainLoop (int conn_fd)
 {
 	while (TRUE) {
 		fd_set readfds;

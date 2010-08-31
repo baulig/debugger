@@ -45,6 +45,8 @@ int WSAAPI getnameinfo(const struct sockaddr*,socklen_t,char*,DWORD,
 #endif
 #endif
 
+GHashTable *MdbServer::inferior_by_thread_id;
+
 void
 MdbServer::SendEvent (ServerEvent *e)
 {
@@ -67,6 +69,8 @@ main (int argc, char *argv[])
 		g_warning (G_STRLOC ": Failed to initialize OS backend.");
 		exit (-1);
 	}
+
+	MdbServer::inferior_by_thread_id = g_hash_table_new (NULL, NULL);
 
 	MdbInferior::Initialize ();
 
@@ -172,6 +176,44 @@ MdbServer::GetDisassembler (MdbInferior *inferior)
 	return main_reader->GetDisassembler (inferior);
 }
 
+MdbInferior *
+MdbServer::GetInferiorByThreadId (guint32 thread_id)
+{
+	return (MdbInferior *) g_hash_table_lookup (inferior_by_thread_id, GUINT_TO_POINTER (thread_id));
+}
+
+void
+MdbServer::AddInferior (guint32 thread_id, MdbInferior *inferior)
+{
+	g_hash_table_insert (inferior_by_thread_id, GUINT_TO_POINTER (thread_id), inferior);
+}
+
+ErrorCode
+MdbServer::Spawn (const gchar *working_directory, const gchar **argv, const gchar **envp,
+		  MdbProcess **out_process, MdbInferior **out_inferior,
+		  guint32 *out_thread_id, gchar **out_error)
+{
+	MdbInferior *inferior;
+	ErrorCode result;
+	guint32 thread_id;
+
+	inferior = mdb_inferior_new (this);
+
+	result = inferior->Spawn (working_directory, argv, envp, &main_process, &thread_id, out_error);
+	if (result) {
+		*out_inferior = NULL;
+		delete inferior;
+		return result;
+	}
+
+	g_hash_table_insert (inferior_by_thread_id, GUINT_TO_POINTER (thread_id), inferior);
+
+	*out_process = main_process;
+	*out_inferior = inferior;
+	*out_thread_id = thread_id;
+	return ERR_NONE;
+}
+
 ErrorCode
 MdbServer::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 {
@@ -213,10 +255,11 @@ MdbServer::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 
 	case CMD_SERVER_SPAWN: {
 		char *cwd, **argv, *error;
-		int argc, i, child_pid;
 		MdbInferior *inferior;
 		MdbProcess *process;
+		guint32 thread_id;
 		ErrorCode result;
+		int argc, i;
 
 		cwd = in->DecodeString ();
 		argc = in->DecodeInt ();
@@ -231,15 +274,13 @@ MdbServer::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 			cwd = g_get_current_dir ();
 		}
 
-		result = Spawn (cwd, (const gchar **) argv, NULL, &inferior, &child_pid, &error);
+		result = Spawn (cwd, (const gchar **) argv, NULL, &process, &inferior, &thread_id, &error);
 		if (result)
 			return result;
 
-		process = inferior->GetProcess ();
-
 		out->AddInt (process->GetID ());
 		out->AddInt (inferior->GetID ());
-		out->AddInt (child_pid);
+		out->AddInt (thread_id);
 
 		g_free (cwd);
 		for (i = 0; i < argc; i++)

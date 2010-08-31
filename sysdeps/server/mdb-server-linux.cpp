@@ -19,8 +19,6 @@ mdb_server_new (Connection *connection)
 	return new MdbServerLinux (connection);
 }
 
-GHashTable *MdbServerLinux::inferior_by_pid;
-
 static sigset_t sigmask;
 static pthread_t wait_thread;
 static int self_pipe[2];
@@ -41,8 +39,6 @@ MdbServer::Initialize (void)
 {
 	int res;
 
-	MdbServerLinux::Initialize ();
-
 	sigemptyset (&sigmask);
 	sigaddset (&sigmask, SIGCHLD);
 
@@ -61,18 +57,6 @@ MdbServer::Initialize (void)
 	bfd_init ();
 
 	return true;
-}
-
-void
-MdbServerLinux::Initialize (void)
-{
-	inferior_by_pid = g_hash_table_new (NULL, NULL);
-}
-
-MdbInferior *
-MdbServerLinux::GetInferiorByPid (int pid)
-{
-	return (MdbInferior *) g_hash_table_lookup (inferior_by_pid, GUINT_TO_POINTER (pid));
 }
 
 void
@@ -115,7 +99,7 @@ MdbServerLinux::MainLoop (int conn_fd)
 }
 
 bool
-MdbServerLinux::HandleExtendedWaitEvent (int pid, int status)
+MdbServerLinux::HandleExtendedWaitEvent (MdbProcess *process, int pid, int status)
 {
 	if ((status >> 16) == 0)
 		return false;
@@ -132,7 +116,7 @@ MdbServerLinux::HandleExtendedWaitEvent (int pid, int status)
 			return true;
 		}
 
-		new_inferior = GetInferiorByPid (new_pid);
+		new_inferior = GetInferiorByThreadId (new_pid);
 
 		//
 		// We already got a stop event for this new thread.
@@ -140,11 +124,11 @@ MdbServerLinux::HandleExtendedWaitEvent (int pid, int status)
 		if (new_inferior)
 			return true;
 
-		new_inferior = CreateThread (new_pid, false);
+		new_inferior = CreateThread (process, new_pid, false);
 
 		e = g_new0 (ServerEvent, 1);
 		e->type = SERVER_EVENT_THREAD_CREATED;
-		e->sender = main_process;
+		e->sender = process;
 		e->arg_object = new_inferior;
 		e->arg = new_pid;
 		SendEvent (e);
@@ -164,7 +148,7 @@ MdbServerLinux::HandleExtendedWaitEvent (int pid, int status)
 
 		e = g_new0 (ServerEvent, 1);
 		e->type = SERVER_EVENT_FORKED;
-		e->sender = main_process;
+		e->sender = process;
 		e->arg = new_pid;
 		SendEvent (e);
 		g_free (e);
@@ -175,7 +159,7 @@ MdbServerLinux::HandleExtendedWaitEvent (int pid, int status)
 		ServerEvent *e = g_new0 (ServerEvent, 1);
 
 		e->type = SERVER_EVENT_EXECD;
-		e->sender = main_process;
+		e->sender = process;
 		SendEvent (e);
 		g_free (e);
 		return true;
@@ -192,7 +176,7 @@ MdbServerLinux::HandleExtendedWaitEvent (int pid, int status)
 
 		e = g_new0 (ServerEvent, 1);
 		e->type = SERVER_EVENT_CALLED_EXIT;
-		e->sender = main_process;
+		e->sender = process;
 		e->arg = exitcode;
 		SendEvent (e);
 		g_free (e);
@@ -209,7 +193,9 @@ void
 MdbServerLinux::HandleLinuxWaitEvent (void)
 {
 	MdbInferior *inferior;
+	MdbProcess *process;
 	int pid, status;
+	ServerEvent *e;
 
 #if DEBUG_WAIT
 	g_message (G_STRLOC ": HandleLinuxWaitEvent()");
@@ -226,57 +212,59 @@ MdbServerLinux::HandleLinuxWaitEvent (void)
 	} else if (pid == 0)
 		return;
 
-	if (HandleExtendedWaitEvent (pid, status)) {
-		inferior = GetInferiorByPid (pid);
+	inferior = GetInferiorByThreadId (pid);
+
+	if (!inferior) {
+		//
+		// There's a race condition in the Linux kernel which makes it sometimes
+		// emit the first stop event for a new thread before the corresponding
+		// PTRACE_EVENT_CLONE.
+		//
+
+		process = GetMainProcess ();
+
+		if (WIFSTOPPED (status)) {
+			ServerEvent *e;
+
+			inferior = CreateThread (process, pid, true);
+
+			e = g_new0 (ServerEvent, 1);
+			e->sender = process;
+			e->type = SERVER_EVENT_THREAD_CREATED;
+			e->arg_object = inferior;
+			e->arg = pid;
+
+			SendEvent (e);
+			g_free (e);
+			return;
+		}
+
+		g_warning (G_STRLOC ": Got wait event %x for unknown pid: %d", status, pid);
+		return;
+	}
+
+	process = inferior->GetProcess ();
+
+	if (HandleExtendedWaitEvent (process, pid, status)) {
 #if DEBUG_WAIT
 		g_message (G_STRLOC ": extended event => %d - %x - %p", pid, status, inferior);
 #endif
-		if (!inferior || inferior->Continue ()) {
+		if (inferior->Continue ()) {
 			g_warning (G_STRLOC ": Can't resume after extended wait event.");
 		}
 		return;
 	}
 
-	inferior = GetInferiorByPid (pid);
 #if DEBUG_WAIT
 	g_message (G_STRLOC ": normal event => %d - %x - %p", pid, status, inferior);
 #endif
-	if (inferior) {
-		ServerEvent *e;
 
-		e = inferior->HandleLinuxWaitEvent (status);
+	e = inferior->HandleLinuxWaitEvent (status);
 #if DEBUG_WAIT
-		g_message (G_STRLOC ": normal event => %d - %x - %p - %p", pid, status, inferior, e);
+	g_message (G_STRLOC ": normal event => %d - %x - %p - %p", pid, status, inferior, e);
 #endif
-		if (e) {
-			SendEvent (e);
-			g_free (e);
-		}
-		return;
-	}
-
-	//
-	// There's a race condition in the Linux kernel which makes it sometimes
-	// emit the first stop event for a new thread before the corresponding
-	// PTRACE_EVENT_CLONE.
-	//
-
-	if (WIFSTOPPED (status)) {
-		ServerEvent *e;
-
-		inferior = CreateThread (pid, true);
-
-		e = g_new0 (ServerEvent, 1);
-		e->sender = main_process;
-		e->type = SERVER_EVENT_THREAD_CREATED;
-		e->arg_object = inferior;
-		e->arg = pid;
-
+	if (e) {
 		SendEvent (e);
 		g_free (e);
-		return;
 	}
-
-	g_warning (G_STRLOC ": Got wait event %x for unknown pid: %d", status, pid);
 }
-

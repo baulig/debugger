@@ -16,7 +16,7 @@ class MdbInferior : public ServerObject
 public:
 	MdbServer *GetServer (void) { return server; }
 	MdbArch *GetArch (void) { return arch; }
-	MdbProcess *GetProcess (void) { return process; }
+	virtual MdbProcess *GetProcess (void) = 0;
 
 	static void Initialize (void);
 
@@ -31,7 +31,8 @@ public:
 
 	virtual ErrorCode Spawn (const gchar *working_directory,
 				 const gchar **argv, const gchar **envp,
-				 gint *out_child_pid, gchar **out_error) = 0;
+				 MdbProcess **out_process, guint32 *out_thread_id,
+				 gchar **out_error) = 0;
 
 	virtual ErrorCode GetSignalInfo (SignalInfo **sinfo) = 0;
 
@@ -105,11 +106,10 @@ public:
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
 protected:
-	MdbInferior (MdbServer *server, MdbProcess *process)
+	MdbInferior (MdbServer *server)
 		: ServerObject (SERVER_OBJECT_KIND_INFERIOR)
 	{
 		this->server = server;
-		this->process = process;
 
 #if defined(__linux__) || defined(__FreeBSD__)
 		last_signal = 0;
@@ -125,12 +125,13 @@ protected:
 #endif
 
 	MdbServer *server;
-	MdbProcess *process;
 	MdbArch *arch;
 
 	MdbDisassembler *disassembler;
 
 	friend MdbArch *mdb_arch_new (MdbInferior *inferior);
 };
+
+extern MdbInferior *mdb_inferior_new (MdbServer *server);
 
 #endif

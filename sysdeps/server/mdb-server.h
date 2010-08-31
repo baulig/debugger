@@ -81,26 +81,26 @@ public:
 	bool InferiorCommand (InferiorDelegate *delegate);
 #endif
 
-	virtual ErrorCode Spawn (const gchar *working_directory,
-				 const gchar **argv, const gchar **envp,
-				 MdbInferior **out_inferior, int *out_child_pid,
-				 gchar **out_error) = 0;
+	ErrorCode Spawn (const gchar *working_directory,
+			 const gchar **argv, const gchar **envp,
+			 MdbProcess **out_process, MdbInferior **out_inferior,
+			 guint32 *out_thread_id, gchar **out_error);
 
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
 protected:
-	MdbExeReader *main_reader;
-	GHashTable *exe_file_hash;
+	static MdbInferior *GetInferiorByThreadId (guint32 thread_id);
 
-	BreakpointManager *bpm;
-
-	MdbProcess *main_process;
+	static void AddInferior (guint32 thread_id, MdbInferior *inferior);
 
 	virtual void MainLoop (int conn_fd) = 0;
 
-	bool MainLoopIteration (void);
+	MdbProcess *GetMainProcess (void)
+	{
+		return main_process;
+	}
 
-	Connection *connection;
+	bool MainLoopIteration (void);
 
 	MdbServer (Connection *connection) : ServerObject (SERVER_OBJECT_KIND_SERVER)
 	{
@@ -113,6 +113,18 @@ protected:
 	}
 
 	friend int main (int argc, char *argv []);
+
+private:
+	MdbExeReader *main_reader;
+	GHashTable *exe_file_hash;
+
+	BreakpointManager *bpm;
+
+	MdbProcess *main_process;
+
+	Connection *connection;
+
+	static GHashTable *inferior_by_thread_id;
 };
 
 extern MdbServer *mdb_server_new (Connection *connection);

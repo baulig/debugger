@@ -9,8 +9,6 @@ class MdbProcess : public ServerObject
 public:
 	virtual void InitializeProcess (MdbInferior *inferior) = 0;
 
-	virtual bool Initialize (MdbInferior *inferior) = 0;
-
 	MdbExeReader *GetMainReader (void)
 	{
 		return main_reader;

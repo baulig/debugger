@@ -1,4 +1,4 @@
-#include <mdb-server.h>
+#include <mdb-server-windows.h>
 #include <mdb-inferior.h>
 #include <x86-arch.h>
 #include <string.h>
@@ -10,22 +10,39 @@
 #include <stdlib.h>
 #include <glib.h>
 
-typedef struct
+class WindowsInferior;
+
+class WindowsProcess : public MdbProcess
 {
+public:
+	WindowsProcess (MdbServer *server) : MdbProcess (server)
+	{ }
+
+	void InitializeProcess (MdbInferior *inferior);
+
+private:
 	HANDLE process_handle;
 	DWORD process_id;
 	guint32 argc;
 	gchar **argv;
 	gchar *exe_path;
-} ProcessHandle;
+
+	friend class WindowsInferior;
+};
 
 class WindowsInferior : public MdbInferior
 {
 public:
-	WindowsInferior (MdbServer *server, BreakpointManager *bpm)
-		: MdbInferior (server, bpm)
+	WindowsInferior (MdbServer *server)
+		: MdbInferior (server)
 	{
-		process = (ProcessHandle *) g_new0 (ProcessHandle, 1);
+		thread_handle = NULL;
+		thread_id = 0;
+	}
+
+	MdbProcess *GetProcess (void)
+	{
+		return process;
 	}
 
 	//
@@ -34,7 +51,8 @@ public:
 
 	ErrorCode Spawn (const gchar *working_directory,
 			 const gchar **argv, const gchar **envp,
-			 gint *out_child_pid, gchar **out_error);
+			 MdbProcess **out_process, guint32 *out_thread_id,
+			 gchar **out_error);
 
 	ErrorCode GetSignalInfo (SignalInfo **sinfo);
 
@@ -75,11 +93,17 @@ protected:
 	ErrorCode SetStepFlag (bool on);
 
 private:
-	ProcessHandle *process;
+	WindowsProcess *process;
 
 	HANDLE thread_handle;
 	DWORD thread_id;
 };
+
+MdbInferior *
+mdb_inferior_new (MdbServer *server)
+{
+	return new WindowsInferior (server);
+}
 
 static GHashTable *inferior_hash; // thread id -> MdbServer *
 
@@ -308,12 +332,6 @@ MdbInferior::GetTargetInfo (guint32 *target_int_size, guint32 *target_long_size,
 	return ERR_NONE;
 }
 
-MdbInferior *
-mdb_inferior_new (MdbServer *server, BreakpointManager *bpm)
-{
-	return new WindowsInferior (server, bpm);
-}
-
 static void
 handle_debug_event (DEBUG_EVENT *de)
 {
@@ -468,7 +486,7 @@ debugging_thread_main (LPVOID dummy_arg)
 
 ErrorCode
 WindowsInferior::Spawn (const gchar *working_directory, const gchar **argv, const gchar **envp,
-			gint *out_child_pid, gchar **out_error)
+			MdbProcess **out_process, guint32 *out_thread_id, gchar **out_error)
 {
 	wchar_t* utf16_argv = NULL;
 	wchar_t* utf16_envp = NULL;
@@ -483,6 +501,8 @@ WindowsInferior::Spawn (const gchar *working_directory, const gchar **argv, cons
 
 	if (out_error)
 		*out_error = NULL;
+	*out_process = NULL;
+	*out_thread_id = 0;
 
 	if (working_directory) {
 		gunichar2* utf16_dir_tmp;
@@ -585,14 +605,16 @@ WindowsInferior::Spawn (const gchar *working_directory, const gchar **argv, cons
 
 	g_message (G_STRLOC ": SPAWN: %d/%d", pi.dwProcessId, pi.dwThreadId);
 
-	*out_child_pid = pi.dwProcessId;
+	process = new WindowsProcess (server);
+
 	process->process_handle = pi.hProcess;
 	process->process_id = pi.dwProcessId;
 
 	thread_handle = pi.hThread;
 	thread_id = pi.dwThreadId;
 
-	g_hash_table_insert (inferior_hash, GINT_TO_POINTER (pi.dwThreadId), this);
+	*out_process = process;
+	*out_thread_id = pi.dwThreadId;
 
 	return ERR_NONE;
 }
@@ -808,4 +830,9 @@ ErrorCode
 WindowsInferior::SetSignal (guint32 signo, gboolean send_it)
 {
 	return ERR_NOT_IMPLEMENTED;
+}
+
+void
+WindowsProcess::InitializeProcess (MdbInferior *inferior)
+{
 }
