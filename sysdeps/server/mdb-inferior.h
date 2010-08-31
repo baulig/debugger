@@ -15,7 +15,6 @@ class MdbInferior : public ServerObject
 {
 public:
 	MdbServer *GetServer (void) { return server; }
-	BreakpointManager *GetBreakpointManager (void) { return bpm; }
 	MdbArch *GetArch (void) { return arch; }
 	MdbProcess *GetProcess (void) { return process; }
 
@@ -106,12 +105,11 @@ public:
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
 protected:
-	MdbInferior (MdbServer *server, BreakpointManager *bpm)
+	MdbInferior (MdbServer *server, MdbProcess *process)
 		: ServerObject (SERVER_OBJECT_KIND_INFERIOR)
 	{
 		this->server = server;
-		this->process = NULL;
-		this->bpm = bpm;
+		this->process = process;
 
 #if defined(__linux__) || defined(__FreeBSD__)
 		last_signal = 0;
@@ -126,8 +124,6 @@ protected:
 	int last_signal;
 #endif
 
-	BreakpointManager *bpm;
-
 	MdbServer *server;
 	MdbProcess *process;
 	MdbArch *arch;
@@ -136,7 +132,5 @@ protected:
 
 	friend MdbArch *mdb_arch_new (MdbInferior *inferior);
 };
-
-extern MdbInferior *mdb_inferior_new (MdbServer *server, BreakpointManager *bpm);
 
 #endif

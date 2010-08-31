@@ -88,11 +88,14 @@ namespace Mono.Debugger.Backend
 				      DebuggerWaitHandle.CurrentThread, this);
 		}
 
+		static int next_pid;
+
 		public SingleSteppingEngine (ThreadManager manager, Process process,
 					     ProcessStart start)
 			: this (manager, process)
 		{
-			inferior = Inferior.Spawn (this, start);
+			inferior = Inferior.Spawn (this);
+			pid = ++next_pid;
 
 #if FIXME
 			if (start.PID != 0) {
@@ -104,6 +107,14 @@ namespace Mono.Debugger.Backend
 #endif
 
 			manager.AddEngine (this);
+		}
+
+		public SingleSteppingEngine (ThreadManager manager, Process process,
+					     IProcess server_process, IInferior server_inferior)
+			: this (manager, process)
+		{
+			inferior = Inferior.CreateThread (this, server_process, server_inferior);
+			pid = ++next_pid;
 		}
 
 #if FIXME

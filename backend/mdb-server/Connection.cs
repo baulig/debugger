@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using ST = System.Threading;
 
 using Mono.Debugger.Server;
+using Mono.Debugger.Backend;
 
 namespace Mono.Debugger.MdbServer
 {
@@ -58,6 +59,7 @@ namespace Mono.Debugger.MdbServer
 
 		Socket socket;
 		ST.Thread receiver_thread;
+		ST.Thread wait_thread;
 		bool disconnected;
 
 		Dictionary<int, byte[]> reply_packets;
@@ -401,8 +403,13 @@ namespace Mono.Debugger.MdbServer
 			reply_cbs = new Dictionary<int, ReplyCallback> ();
 			reply_packets_monitor = new Object ();
 
+			wait_queue = new DebuggerEventQueue ("event_queue");
+
 			receiver_thread = new ST.Thread (new ST.ThreadStart (receiver_thread_main));
 			receiver_thread.Start ();
+
+			wait_thread = new ST.Thread (new ST.ThreadStart (wait_thread_main));
+			wait_thread.Start ();
 
 			server = new MdbServer (this);
 		}
@@ -412,6 +419,30 @@ namespace Mono.Debugger.MdbServer
 			disconnected = true;
 			socket.Close ();
 			receiver_thread.Join ();
+		}
+
+		DebuggerEventQueue wait_queue;
+		ServerEvent current_event;
+		Queue<ServerEvent> event_queue = new Queue<ServerEvent> ();
+
+		void wait_thread_main ()
+		{
+			while (!disconnected) {
+				wait_queue.Lock ();
+
+				if (event_queue.Count == 0)
+					wait_queue.Wait ();
+
+				var e = event_queue.Dequeue ();
+
+				wait_queue.Unlock ();
+
+				try {
+					server.HandleEvent (e);
+				} catch (Exception ex) {
+					Console.WriteLine ("FUCK: {0}", ex);
+				}
+			}
 		}
 
 		void receiver_thread_main ()
@@ -470,7 +501,7 @@ namespace Mono.Debugger.MdbServer
 
 					var arg_obj_kind = (ServerObjectKind) r.ReadByte ();
 					if (arg_obj_kind != ServerObjectKind.None)
-						arg_object = ServerObject.GetObjectByID (r.ReadInt (), arg_obj_kind);
+						arg_object = ServerObject.GetOrCreateObject (this, r.ReadInt (), arg_obj_kind);
 
 					var type = (ServerEventType) r.ReadByte ();
 					var arg = r.ReadLong ();
@@ -483,9 +514,20 @@ namespace Mono.Debugger.MdbServer
 
 					var e = new ServerEvent (type, sender, arg, data1, data2, arg_object, opt_data);
 
-					ST.ThreadPool.QueueUserWorkItem (delegate {
-						sender.HandleEvent (e);
-					});
+					//
+					// Don't block the receiver thread.
+					//
+
+					wait_queue.Lock ();
+
+					event_queue.Enqueue (e);
+
+					if (event_queue.Count == 1)
+						wait_queue.Signal ();
+
+					wait_queue.Unlock ();
+
+					return true;
 				}
 			}
 

@@ -8,6 +8,6 @@ namespace Mono.Debugger.Server
 			get;
 		}
 
-		void InitializeProcess ();
+		void InitializeProcess (IInferior inferior);
 	}
 }

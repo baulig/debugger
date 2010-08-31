@@ -333,6 +333,18 @@ namespace Mono.Debugger
 			get { return operation_host; }
 		}
 
+		internal SingleSteppingEngine ThreadCreated (IProcess server_process, IInferior server_inferior)
+		{
+			var sse = new SingleSteppingEngine (manager, this, server_process, server_inferior);
+			OnThreadCreatedEvent (sse);
+
+			CommandResult result = current_operation != null ?
+				current_operation : new ThreadCommandResult (sse.Thread);
+			sse.StartThread (result);
+
+			return sse;
+		}
+
 #if FIXME
 		internal void ThreadCreated (Inferior inferior, int pid, bool do_attach, bool resume_thread)
 		{

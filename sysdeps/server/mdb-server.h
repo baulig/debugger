@@ -56,6 +56,7 @@ typedef struct {
 	int mono_thread_abort;
 } SignalInfo;
 
+class MdbProcess;
 class MdbInferior;
 class MdbExeReader;
 class MdbDisassembler;
@@ -63,24 +64,27 @@ class MdbDisassembler;
 class MdbServer : public ServerObject
 {
 public:
-	static gboolean Initialize (void);
+	static bool Initialize (void);
 
 	MdbExeReader *GetExeReader (const char *filename);
 
 	MdbDisassembler *GetDisassembler (MdbInferior *inferior);
 
-	void SendEvent (ServerEvent *e);
+	BreakpointManager *GetBreakpointManager (void)
+	{
+		return bpm;
+	}
 
-	MdbInferior *GetInferiorByPid (int pid);
+	void SendEvent (ServerEvent *e);
 
 #if WINDOWS
 	bool InferiorCommand (InferiorDelegate *delegate);
 #endif
 
-	ErrorCode Spawn (const gchar *working_directory,
-			 const gchar **argv, const gchar **envp,
-			 MdbInferior **out_inferior, int *out_child_pid,
-			 gchar **out_error);
+	virtual ErrorCode Spawn (const gchar *working_directory,
+				 const gchar **argv, const gchar **envp,
+				 MdbInferior **out_inferior, int *out_child_pid,
+				 gchar **out_error) = 0;
 
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
@@ -90,14 +94,12 @@ protected:
 
 	BreakpointManager *bpm;
 
-	void MainLoop (int conn_fd);
-	gboolean MainLoopIteration (void);
+	MdbProcess *main_process;
 
-#if defined(__linux__)
-	ServerEvent *HandleLinuxWaitEvent (void);
-#endif
+	virtual void MainLoop (int conn_fd) = 0;
 
-private:
+	bool MainLoopIteration (void);
+
 	Connection *connection;
 
 	MdbServer (Connection *connection) : ServerObject (SERVER_OBJECT_KIND_SERVER)
@@ -105,11 +107,14 @@ private:
 		this->connection = connection;
 		exe_file_hash = g_hash_table_new (NULL, NULL);
 		main_reader = NULL;
+		main_process = NULL;
 
 		bpm = new BreakpointManager ();
 	}
 
 	friend int main (int argc, char *argv []);
 };
+
+extern MdbServer *mdb_server_new (Connection *connection);
 
 #endif

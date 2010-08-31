@@ -93,22 +93,32 @@ namespace Mono.Debugger.Backend
 			server = thread_manager.DebuggerServer;
 		}
 
-		protected Inferior (SingleSteppingEngine sse, ProcessStart start)
+		protected Inferior (SingleSteppingEngine sse)
 		{
 			this.sse = sse;
 			this.thread_manager = sse.ThreadManager;
 			this.process = sse.Process;
-			this.start = start;
+			this.start = sse.Process.ProcessStart;
 			this.native = start.IsNative;
 			this.breakpoint_manager = sse.Process.BreakpointManager;
 			this.address_domain = sse.ThreadManager.AddressDomain;
 			this.server = sse.ThreadManager.DebuggerServer;
 		}
 
-		public static Inferior Spawn (SingleSteppingEngine sse, ProcessStart start)
+		public static Inferior Spawn (SingleSteppingEngine sse)
 		{
-			var inferior = new Inferior (sse, start);
+			var inferior = new Inferior (sse);
 			inferior.Run ();
+			return inferior;
+		}
+
+		public static Inferior CreateThread (SingleSteppingEngine sse, IProcess server_process,
+						     IInferior server_inferior)
+		{
+			var inferior = new Inferior (sse);
+			inferior.server_process = server_process;
+			inferior.inferior = server_inferior;
+			inferior.SetupInferior ();
 			return inferior;
 		}
 
@@ -399,7 +409,7 @@ namespace Mono.Debugger.Backend
 
 		public void InitializeProcess ()
 		{
-			server_process.InitializeProcess ();
+			server_process.InitializeProcess (inferior);
 		}
 
 #if FIXME

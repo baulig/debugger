@@ -19,8 +19,6 @@ namespace Mono.Debugger.MdbServer
 			get; private set;
 		}
 
-		internal abstract void HandleEvent (ServerEvent e);
-
 		public static ServerObject GetObjectByID (int id)
 		{
 			lock (object_hash) {
@@ -40,6 +38,41 @@ namespace Mono.Debugger.MdbServer
 				var obj = object_hash [id];
 				if (obj.Kind != kind)
 					throw new ArgumentException ();
+				return obj;
+			}
+		}
+
+		public static ServerObject GetOrCreateObject (Connection connection, int id, ServerObjectKind kind)
+		{
+			lock (object_hash) {
+				ServerObject obj;
+
+				if (object_hash.ContainsKey (id)) {
+					obj = object_hash [id];
+					if (obj.Kind != kind)
+						throw new ArgumentException ();
+
+					return obj;
+				}
+
+				switch (kind) {
+				case ServerObjectKind.Inferior:
+					obj = new MdbInferior (connection, id);
+					break;
+				case ServerObjectKind.Process:
+					obj = new MdbProcess (connection, id);
+					break;
+				case ServerObjectKind.ExeReader:
+					obj = new MdbExeReader (connection, id);
+					break;
+				case ServerObjectKind.BreakpointManager:
+					obj = new MdbBreakpointManager (connection, id);
+					break;
+				default:
+					throw new InvalidOperationException ();
+				}
+
+				// The ctor already inserts it into the hash.
 				return obj;
 			}
 		}

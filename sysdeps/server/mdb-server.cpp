@@ -45,15 +45,6 @@ int WSAAPI getnameinfo(const struct sockaddr*,socklen_t,char*,DWORD,
 #endif
 #endif
 
-static GHashTable *inferior_by_pid = NULL;
-
-
-MdbInferior *
-MdbServer::GetInferiorByPid (int pid)
-{
-	return (MdbInferior *) g_hash_table_lookup (inferior_by_pid, GUINT_TO_POINTER (pid));
-}
-
 void
 MdbServer::SendEvent (ServerEvent *e)
 {
@@ -69,8 +60,6 @@ main (int argc, char *argv[])
 	int conn_fd, fd, res;
 	socklen_t cli_len;
 	char buf[128];
-
-	inferior_by_pid = g_hash_table_new (NULL, NULL);
 
 	ServerObject::Initialize ();
 
@@ -132,7 +121,7 @@ main (int argc, char *argv[])
 		flag = 1;
 	}
 
-	server = new MdbServer (connection);
+	server = mdb_server_new (connection);
 
 	server->MainLoop (conn_fd);
 
@@ -153,7 +142,7 @@ main (int argc, char *argv[])
 	exit (0);
 }
 
-gboolean
+bool
 MdbServer::MainLoopIteration (void)
 {
 	return connection->HandleIncomingRequest (this);
@@ -181,27 +170,6 @@ MdbDisassembler *
 MdbServer::GetDisassembler (MdbInferior *inferior)
 {
 	return main_reader->GetDisassembler (inferior);
-}
-
-ErrorCode
-MdbServer::Spawn (const gchar *working_directory, const gchar **argv, const gchar **envp,
-		  MdbInferior **out_inferior, int *out_child_pid, gchar **out_error)
-{
-	MdbInferior *inferior;
-	ErrorCode result;
-
-	inferior = mdb_inferior_new (this, bpm);
-	result = inferior->Spawn (working_directory, argv, envp, out_child_pid, out_error);
-	if (result) {
-		*out_inferior = NULL;
-		delete inferior;
-		return result;
-	}
-
-	g_hash_table_insert (inferior_by_pid, GUINT_TO_POINTER (*out_child_pid), inferior);
-
-	*out_inferior = inferior;
-	return ERR_NONE;
 }
 
 ErrorCode
@@ -238,34 +206,10 @@ MdbServer::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		break;
 	}
 
-	case CMD_SERVER_CREATE_BPM: {
-		BreakpointManager *bpm;
-		int iid;
-
-		bpm = new BreakpointManager ();
-
+	case CMD_SERVER_GET_BPM: {
 		out->AddInt (bpm->GetID ());
 		break;
 	}
-
-	case CMD_SERVER_CREATE_EXE_READER: {
-		MdbExeReader *reader;
-		gchar *filename;
-		int iid;
-
-		filename = in->DecodeString ();
-
-		reader = GetExeReader (filename);
-		if (!reader)
-			return ERR_CANNOT_OPEN_EXE;
-
-		out->AddInt (reader->GetID ());
-		break;
-	}
-
-	case CMD_SERVER_GET_BPM:
-		out->AddInt (bpm->GetID ());
-		break;
 
 	case CMD_SERVER_SPAWN: {
 		char *cwd, **argv, *error;
@@ -292,10 +236,6 @@ MdbServer::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 			return result;
 
 		process = inferior->GetProcess ();
-		if (!process->Initialize ())
-			return ERR_CANNOT_START_TARGET;
-
-		g_message (G_STRLOC ": %d - %d - %d", process->GetID (), inferior->GetID (), child_pid);
 
 		out->AddInt (process->GetID ());
 		out->AddInt (inferior->GetID ());

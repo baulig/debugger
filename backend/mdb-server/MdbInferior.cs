@@ -8,15 +8,9 @@ namespace Mono.Debugger.MdbServer
 {
 	internal class MdbInferior : ServerObject, IInferior
 	{
-		SingleSteppingEngine sse;
-		int pid;
-
-		public MdbInferior (Connection connection, SingleSteppingEngine sse, int pid, int id)
+		public MdbInferior (Connection connection, int id)
 			: base (connection, id, ServerObjectKind.Inferior)
-		{
-			this.sse = sse;
-			this.pid = pid;
-		}
+		{ }
 
 		enum CmdInferior {
 			INITIALIZE_PROCESS = 2,
@@ -37,10 +31,6 @@ namespace Mono.Debugger.MdbServer
 			SET_SIGNAL = 17,
 			INIT_AT_ENTRYPOINT = 18,
 			DISASSEMBLE_INSN
-		}
-
-		public int PID {
-			get { return pid; }
 		}
 
 		public MdbExeReader InitializeProcess ()
@@ -288,16 +278,6 @@ namespace Mono.Debugger.MdbServer
 		public void Kill ()
 		{
 			throw new NotImplementedException ();
-		}
-
-		internal override void HandleEvent (ServerEvent e)
-		{
-			Console.WriteLine ("INFERIOR EVENT: {0}", e);
-			try {
-				sse.ProcessEvent (e);
-			} catch (Exception ex) {
-				Console.WriteLine ("INFERIOR EVENT EX: {0}", ex);
-			}
 		}
 	}
 }

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+
 using Mono.Debugger.Server;
 using Mono.Debugger.Backend;
 
@@ -6,6 +8,11 @@ namespace Mono.Debugger.MdbServer
 {
 	internal class MdbServer : ServerObject, IDebuggerServer
 	{
+		ThreadManager manager;
+		Process process;
+
+		MdbProcess main_process;
+
 		public MdbServer (Connection connection)
 			: base (connection, -1, ServerObjectKind.Server)
 		{
@@ -25,11 +32,8 @@ namespace Mono.Debugger.MdbServer
 			GET_SERVER_TYPE = 2,
 			GET_ARCH_TYPE = 3,
 			GET_CAPABILITIES = 4,
-			CREATE_BPM = 6,
-			CREATE_EXE_READER = 7,
-
-			GET_BPM = 100,
-			SPAWN
+			GET_BPM = 5,
+			SPAWN = 6
 		}
 
 		public TargetInfo TargetInfo {
@@ -56,7 +60,10 @@ namespace Mono.Debugger.MdbServer
 			get { return BreakpointManager; }
 		}
 
-		public MdbInferior Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp, out MdbProcess process)
+		Dictionary<int,SingleSteppingEngine> sse_by_inferior = new Dictionary<int,SingleSteppingEngine> ();
+
+		public MdbInferior Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp,
+					  out MdbProcess process)
 		{
 			var writer = new Connection.PacketWriter ();
 			writer.WriteString (cwd ?? "");
@@ -71,11 +78,21 @@ namespace Mono.Debugger.MdbServer
 			int process_iid = reader.ReadInt ();
 			int inferior_iid = reader.ReadInt ();
 			int pid = reader.ReadInt ();
-			process = new MdbProcess (Connection, process_iid);
-			return new MdbInferior (Connection, sse, pid, inferior_iid);
+			process = main_process = new MdbProcess (Connection, process_iid);
+
+			manager = sse.ThreadManager;
+			this.process = sse.Process;
+
+			var inferior = new MdbInferior (Connection, inferior_iid);
+			sse_by_inferior.Add (inferior_iid, sse);
+
+			Console.WriteLine ("SPAWN: {0}", inferior_iid);
+
+			return inferior;
 		}
 
-		IInferior IDebuggerServer.Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp, out IProcess process)
+		IInferior IDebuggerServer.Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp,
+						 out IProcess process)
 		{
 			MdbProcess mdb_process;
 			var inferior = Spawn (sse, cwd, argv, envp, out mdb_process);
@@ -96,20 +113,32 @@ namespace Mono.Debugger.MdbServer
 			return inferior;
 		}
 
-		public MdbExeReader CreateExeReader (string filename)
+		internal void HandleEvent (ServerEvent e)
 		{
-			int iid = Connection.SendReceive (CommandSet.SERVER, (int)CmdServer.CREATE_EXE_READER, new Connection.PacketWriter ().WriteString (filename)).ReadInt ();
-			return new MdbExeReader (Connection, iid);
-		}
+			Console.WriteLine ("SERVER EVENT: {0} {1}", e, DebuggerWaitHandle.CurrentThread);
 
-		IExecutableReader IDebuggerServer.CreateExeReader (string filename)
-		{
-			return CreateExeReader (filename);
-		}
+			if (e.Sender.Kind == ServerObjectKind.Inferior) {
+				var inferior = (MdbInferior) e.Sender;
+				Console.WriteLine ("INFERIOR EVENT: {0}", inferior.ID);
 
-		internal override void HandleEvent (ServerEvent e)
-		{
-			Console.WriteLine ("SERVER EVENT: {0}", e);
+				if (!sse_by_inferior.ContainsKey (inferior.ID)) {
+					Console.WriteLine ("UNKNOWN INFERIOR !");
+					return;
+				}
+
+				var sse = sse_by_inferior [inferior.ID];
+				sse.ProcessEvent (e);
+			}
+
+			switch (e.Type) {
+			case ServerEventType.ThreadCreated:
+				var inferior = (MdbInferior) e.ArgumentObject;
+				Console.WriteLine ("THREAD CREATED: {0}", inferior.ID);
+
+				var sse = process.ThreadCreated (main_process, inferior);
+				sse_by_inferior.Add (inferior.ID, sse);
+				break;
+			}
 		}
 	}
 }

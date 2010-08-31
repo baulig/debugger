@@ -11,6 +11,7 @@ MdbInferior::GetFrame (StackFrame *out_frame)
 ErrorCode
 MdbInferior::InsertBreakpoint (guint64 address, BreakpointInfo **out_breakpoint)
 {
+	BreakpointManager *bpm = server->GetBreakpointManager ();
 	ErrorCode result;
 
 	*out_breakpoint = bpm->Lookup (address);

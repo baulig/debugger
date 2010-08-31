@@ -9,11 +9,7 @@ namespace Mono.Debugger.MdbServer
 	{
 		public MdbExeReader (Connection connection, int id)
 			: base (connection, id, ServerObjectKind.ExeReader)
-		{
-			StartAddress = connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_START_ADDRESS, new Connection.PacketWriter ().WriteInt (ID)).ReadLong ();
-			FileName = connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_FILENAME, new Connection.PacketWriter ().WriteInt (ID)).ReadString ();
-			TargetName = connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_TARGET_NAME, new Connection.PacketWriter ().WriteInt (ID)).ReadString ();
-		}
+		{ }
 
 		enum CmdExeReader {
 			GET_FILENAME = 1,
@@ -25,16 +21,44 @@ namespace Mono.Debugger.MdbServer
 			GET_SECTION_CONTENTS = 7
 		}
 
+		bool initialized;
+		long start_address;
+		string file_name;
+		string target_name;
+
+		void initialize ()
+		{
+			lock (this) {
+				if (initialized)
+					return;
+
+				start_address = Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_START_ADDRESS, new Connection.PacketWriter ().WriteInt (ID)).ReadLong ();
+				file_name = Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_FILENAME, new Connection.PacketWriter ().WriteInt (ID)).ReadString ();
+				target_name = Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_TARGET_NAME, new Connection.PacketWriter ().WriteInt (ID)).ReadString ();
+
+				initialized = true;
+			}
+		}
+
 		public long StartAddress {
-			get; private set;
+			get {
+				initialize ();
+				return start_address;
+			}
 		}
 
 		public string FileName {
-			get; private set;
+			get {
+				initialize ();
+				return file_name;
+			}
 		}
 
 		public string TargetName {
-			get; private set;
+			get {
+				initialize ();
+				return target_name;
+			}
 		}
 
 		public long LookupSymbol (string name)
@@ -59,11 +83,6 @@ namespace Mono.Debugger.MdbServer
 			if (size < 0)
 				return null;
 			return reader.ReadData (size);
-		}
-
-		internal override void HandleEvent (ServerEvent e)
-		{
-			throw new InternalError ("GOT UNEXPECTED EVENT: {0}", e);
 		}
 	}
 }

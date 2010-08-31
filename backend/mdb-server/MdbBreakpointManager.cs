@@ -35,10 +35,5 @@ namespace Mono.Debugger.MdbServer
 			enabled = reader.ReadByte () != 0;
 			return true;
 		}
-
-		internal override void HandleEvent (ServerEvent e)
-		{
-			throw new InternalError ("GOT UNEXPECTED EVENT: {0}", e);
-		}
 	}
 }

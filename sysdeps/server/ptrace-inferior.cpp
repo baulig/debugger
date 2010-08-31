@@ -1,3 +1,4 @@
+#include <mdb-server-linux.h>
 #include <mdb-inferior.h>
 #include <mdb-process.h>
 #include <stdio.h>
@@ -31,25 +32,33 @@
 class PTraceProcess : public MdbProcess
 {
 public:
-	PTraceProcess (MdbInferior *inferior, int pid) : MdbProcess (inferior)
-	{
-		this->pid = pid;
-	}
+	PTraceProcess (MdbServer *server) : MdbProcess (server)
+	{ }
 
-	bool Initialize ();
-	void InitializeProcess (void);
+	bool Initialize (MdbInferior *inferior);
+	void InitializeProcess (MdbInferior *inferior);
 
 private:
-	int pid;
 };
 
 class PTraceInferior : public MdbInferior
 {
 public:
-	PTraceInferior (MdbServer *server, BreakpointManager *bpm)
-		: MdbInferior (server, bpm)
+	PTraceInferior (MdbServer *server, MdbProcess *process)
+		: MdbInferior (server, process)
 	{
 		pid = -1;
+	}
+
+	PTraceInferior (MdbServer *server, MdbProcess *process, int pid, bool stopped)
+		: MdbInferior (server, process)
+	{
+		this->pid = pid;
+
+		if (!stopped)
+			WaitForNewThread ();
+
+		SetupInferior ();
 	}
 
 	//
@@ -90,6 +99,11 @@ public:
 	ErrorCode SetRegisters (InferiorRegs *regs);
 
 	ServerEvent *HandleLinuxWaitEvent (int status);
+
+	int GetPid (void)
+	{
+		return pid;
+	}
 
 protected:
 	ErrorCode SetupInferior (void);
@@ -154,12 +168,6 @@ MdbInferior::GetTargetInfo (guint32 *target_int_size, guint32 *target_long_size,
 	*is_bigendian = 0;
 
 	return ERR_NONE;
-}
-
-MdbInferior *
-mdb_inferior_new (MdbServer *server, BreakpointManager *bpm)
-{
-	return new PTraceInferior (server, bpm);
 }
 
 ErrorCode
@@ -239,7 +247,9 @@ PTraceInferior::Spawn (const gchar *working_directory, const gchar **argv, const
 	if (result)
 		return result;
 
-	process = new PTraceProcess (this, pid);
+	if (!process->Initialize (this))
+		return ERR_CANNOT_START_TARGET;
+
 	return ERR_NONE;
 }
 
@@ -272,7 +282,15 @@ PTraceInferior::WaitForNewThread (void)
 	guint32 ret = 0;
 	int status;
 
+#if DEBUG_WAIT
+	g_message (G_STRLOC ": WaitForNewThread(): %d", pid);
+#endif
+
 	ret = waitpid (pid, &status, WUNTRACED | __WALL | __WCLONE);
+
+#if DEBUG_WAIT
+	g_message (G_STRLOC ": WaitForNewThread(): %d - %d / %x", pid, ret, status);
+#endif
 
 	/*
 	 * Safety check: make sure we got the correct event.
@@ -744,11 +762,16 @@ PTraceInferior::HandleLinuxWaitEvent (int status)
 }
 
 bool
-PTraceProcess::Initialize ()
+PTraceProcess::Initialize (MdbInferior *inferior)
 {
-	gchar *exe_filename = g_strdup_printf ("/proc/%d/exe", pid);
 	char buffer [BUFSIZ+1];
+	gchar *exe_filename;
 	gsize len;
+	int pid;
+
+	pid = ((PTraceInferior *) inferior)->GetPid ();
+
+	exe_filename = g_strdup_printf ("/proc/%d/exe", pid);
 
 	len = readlink (exe_filename, buffer, BUFSIZ);
 	if (len < 0) {
@@ -758,13 +781,49 @@ PTraceProcess::Initialize ()
 
 	buffer [len] = 0;
 
-	main_reader = inferior->GetServer ()->GetExeReader (buffer);
+	main_reader = server->GetExeReader (buffer);
 	return main_reader != NULL;
 }
 
 void
-PTraceProcess::InitializeProcess ()
+PTraceProcess::InitializeProcess (MdbInferior *inferior)
 {
 	if (main_reader)
 		main_reader->ReadDynamicInfo (inferior);
+}
+
+ErrorCode
+MdbServerLinux::Spawn (const gchar *working_directory, const gchar **argv, const gchar **envp,
+		       MdbInferior **out_inferior, int *out_child_pid, gchar **out_error)
+{
+	MdbInferior *inferior;
+	ErrorCode result;
+	int pid;
+
+	main_process = new PTraceProcess (this);
+
+	inferior = new PTraceInferior (this, main_process);
+
+	result = inferior->Spawn (working_directory, argv, envp, &pid, out_error);
+	if (result) {
+		*out_inferior = NULL;
+		delete inferior;
+		return result;
+	}
+
+	g_hash_table_insert (inferior_by_pid, GUINT_TO_POINTER (pid), inferior);
+
+	*out_inferior = inferior;
+	*out_child_pid = pid;
+	return ERR_NONE;
+}
+
+MdbInferior *
+MdbServerLinux::CreateThread (int pid, bool stopped)
+{
+	PTraceInferior *inferior = new PTraceInferior (this, main_process, pid, stopped);
+
+	g_hash_table_insert (inferior_by_pid, GUINT_TO_POINTER (pid), inferior);
+
+	return inferior;
 }

@@ -26,14 +26,14 @@ namespace Mono.Debugger.MdbServer
 			get { return MainReader; }
 		}
 
-		public void InitializeProcess ()
+		public void InitializeProcess (MdbInferior inferior)
 		{
-			Connection.SendReceive (CommandSet.PROCESS, (int)CmdProcess.INITIALIZE_PROCESS, new Connection.PacketWriter ().WriteInt (ID));
+			Connection.SendReceive (CommandSet.PROCESS, (int)CmdProcess.INITIALIZE_PROCESS, new Connection.PacketWriter ().WriteInt (ID).WriteInt (inferior.ID));
 		}
 
-		internal override void HandleEvent (ServerEvent e)
+		void IProcess.InitializeProcess (IInferior inferior)
 		{
-			throw new InternalError ("GOT UNEXPECTED EVENT: {0}", e);
+			InitializeProcess ((MdbInferior) inferior);
 		}
 	}
 }

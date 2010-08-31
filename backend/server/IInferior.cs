@@ -80,10 +80,6 @@ namespace Mono.Debugger.Server
 
 	internal interface IInferior : IServerObject, IDisposable
 	{
-		int PID {
-			get;
-		}
-
 		IExecutableReader InitializeProcess ();
 
 		void InitializeThread (int child_pid, bool wait);

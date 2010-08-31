@@ -15,7 +15,7 @@ MdbArch::LookupBreakpoint (guint32 idx, BreakpointManager **out_bpm)
 		}
 	}
 
-	bpm = inferior->GetBreakpointManager ();
+	bpm = inferior->GetServer ()->GetBreakpointManager ();
 
 	info = bpm->LookupById (idx);
 	if (info) {

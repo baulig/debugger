@@ -125,7 +125,7 @@ X86Arch::RemoveBreakpointsFromTargetMemory (guint64 start, guint32 size, gpointe
 	guint8 *ptr = (guint8 *) buffer;
 	guint32 i;
 
-	breakpoints = inferior->GetBreakpointManager ()->GetBreakpoints ();
+	breakpoints = inferior->GetServer ()->GetBreakpointManager ()->GetBreakpoints ();
 
 	for (i = 0; i < breakpoints->len; i++) {
 		BreakpointInfo *info = (BreakpointInfo *) g_ptr_array_index (breakpoints, i);
@@ -173,6 +173,7 @@ X86Arch::ChildStopped (int stopsig)
 	CodeBufferData *cbuffer = NULL;
 	CallbackData *cdata;
 	BreakpointInfo *breakpoint;
+	BreakpointManager *bpm;
 	bool is_callback;
 	ServerEvent *e;
 	gsize code;
@@ -336,7 +337,9 @@ X86Arch::ChildStopped (int stopsig)
 		}
 	}
 
-	breakpoint = inferior->GetBreakpointManager()->Lookup (INFERIOR_REG_RIP (current_regs) - 1);
+	bpm = inferior->GetServer ()->GetBreakpointManager();
+
+	breakpoint = bpm->Lookup (INFERIOR_REG_RIP (current_regs) - 1);
 	if (breakpoint && breakpoint->enabled) {
 		if (breakpoint->handler && breakpoint->handler (inferior, breakpoint)) {
 			if (!inferior->Resume ()) {

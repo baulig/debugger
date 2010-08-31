@@ -478,6 +478,13 @@ Connection::SendEvent (ServerEvent *e)
 {
 	Buffer *buf;
 
+#if TRANSPORT_DEBUG
+	g_message (G_STRLOC ": SendEvent(): %d - %d - %d - %d", e->type,
+		   e->sender ? e->sender->GetID () : 0,
+		   e->arg_object ? e->arg_object->GetID () : 0,
+		   e->arg);
+#endif
+
 	buf = new Buffer (128 + e->opt_data_size);
 	if (e->sender) {
 		buf->AddByte (e->sender->GetObjectKind ());

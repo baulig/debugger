@@ -1,4 +1,4 @@
-#include <mdb-server.h>
+#include <mdb-server-linux.h>
 #include <mdb-inferior.h>
 #include <errno.h>
 #include <unistd.h>
@@ -12,6 +12,14 @@
 #include <sys/wait.h>
 #include <pthread.h>
 #include <bfd.h>
+
+MdbServer *
+mdb_server_new (Connection *connection)
+{
+	return new MdbServerLinux (connection);
+}
+
+GHashTable *MdbServerLinux::inferior_by_pid;
 
 static sigset_t sigmask;
 static pthread_t wait_thread;
@@ -28,10 +36,12 @@ wait_thread_main (void)
 	}
 }
 
-gboolean
+bool
 MdbServer::Initialize (void)
 {
 	int res;
+
+	MdbServerLinux::Initialize ();
 
 	sigemptyset (&sigmask);
 	sigaddset (&sigmask, SIGCHLD);
@@ -39,7 +49,7 @@ MdbServer::Initialize (void)
 	res = sigprocmask (SIG_BLOCK, &sigmask, NULL);
 	if (res < 0) {
 		g_error (G_STRLOC ": sigprocmask() failed: %d - %s", res, g_strerror (errno));
-		return FALSE;
+		return false;
 	}
 
 	pipe (self_pipe);
@@ -50,11 +60,23 @@ MdbServer::Initialize (void)
 
 	bfd_init ();
 
-	return TRUE;
+	return true;
 }
 
 void
-MdbServer::MainLoop (int conn_fd)
+MdbServerLinux::Initialize (void)
+{
+	inferior_by_pid = g_hash_table_new (NULL, NULL);
+}
+
+MdbInferior *
+MdbServerLinux::GetInferiorByPid (int pid)
+{
+	return (MdbInferior *) g_hash_table_lookup (inferior_by_pid, GUINT_TO_POINTER (pid));
+}
+
+void
+MdbServerLinux::MainLoop (int conn_fd)
 {
 	while (TRUE) {
 		fd_set readfds;
@@ -81,111 +103,180 @@ MdbServer::MainLoop (int conn_fd)
 
 			read (self_pipe[0], &ret, 1);
 
-			e = HandleLinuxWaitEvent ();
-			if (e) {
-				SendEvent (e);
-				g_free (e);
-			}
+			HandleLinuxWaitEvent ();
 		}
 
 		if (FD_ISSET (conn_fd, &readfds)) {
-			if (!MainLoopIteration ())
+			if (!MainLoopIteration ()) {
 				break;
+			}
 		}
 	}
 }
 
-static ServerEvent *
-handle_extended_event (int pid, int status)
+bool
+MdbServerLinux::HandleExtendedWaitEvent (int pid, int status)
 {
-	ServerEvent *e;
-
 	if ((status >> 16) == 0)
-		return NULL;
-
-	e = g_new0 (ServerEvent, 1);
+		return false;
 
 	switch (status >> 16) {
 	case PTRACE_EVENT_CLONE: {
-		int new_pid;
+		MdbInferior *new_inferior;
+		gsize new_pid;
+		int ret, status;
+		ServerEvent *e;
 
 		if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &new_pid)) {
 			g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
-			e->type = SERVER_EVENT_UNKNOWN_ERROR;
-			return e;
+			return true;
 		}
 
+		new_inferior = GetInferiorByPid (new_pid);
+
+		//
+		// We already got a stop event for this new thread.
+		//
+		if (new_inferior)
+			return true;
+
+		new_inferior = CreateThread (new_pid, false);
+
+		e = g_new0 (ServerEvent, 1);
 		e->type = SERVER_EVENT_THREAD_CREATED;
+		e->sender = main_process;
+		e->arg_object = new_inferior;
 		e->arg = new_pid;
-		return e;
+		SendEvent (e);
+		g_free (e);
+
+		return true;
 	}
 
 	case PTRACE_EVENT_FORK: {
-		int new_pid;
+		gsize new_pid;
+		ServerEvent *e;
 
 		if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &new_pid)) {
 			g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
-			e->type = SERVER_EVENT_UNKNOWN_ERROR;
-			return e;
+			return false;
 		}
 
+		e = g_new0 (ServerEvent, 1);
 		e->type = SERVER_EVENT_FORKED;
+		e->sender = main_process;
 		e->arg = new_pid;
-		return e;
+		SendEvent (e);
+		g_free (e);
+		return true;
 	}
 
 	case PTRACE_EVENT_EXEC: {
-		e = g_new0 (ServerEvent, 1);
+		ServerEvent *e = g_new0 (ServerEvent, 1);
+
 		e->type = SERVER_EVENT_EXECD;
-		return e;
+		e->sender = main_process;
+		SendEvent (e);
+		g_free (e);
+		return true;
 	}
 
 	case PTRACE_EVENT_EXIT: {
-		int exitcode;
+		gsize exitcode;
+		ServerEvent *e;
 
 		if (ptrace (PTRACE_GETEVENTMSG, pid, 0, &exitcode)) {
 			g_warning (G_STRLOC ": %d - %s", pid, g_strerror (errno));
-			e->type = SERVER_EVENT_UNKNOWN_ERROR;
-			return e;
+			return true;
 		}
 
+		e = g_new0 (ServerEvent, 1);
 		e->type = SERVER_EVENT_CALLED_EXIT;
+		e->sender = main_process;
 		e->arg = exitcode;
-		return e;
+		SendEvent (e);
+		g_free (e);
+		return true;
 	}
 
 	default:
 		g_warning (G_STRLOC ": Received unknown wait result %x on child %d", status, pid);
-		e->type = SERVER_EVENT_UNKNOWN_ERROR;
-		e->arg = pid;
-		return e;
+		return true;
 	}
 }
 
-ServerEvent *
-MdbServer::HandleLinuxWaitEvent (void)
+void
+MdbServerLinux::HandleLinuxWaitEvent (void)
 {
-	ServerEvent *e;
 	MdbInferior *inferior;
 	int pid, status;
 
+#if DEBUG_WAIT
+	g_message (G_STRLOC ": HandleLinuxWaitEvent()");
+#endif
+
 	pid = waitpid (-1, &status, WUNTRACED | __WALL | __WCLONE | WNOHANG);
+#if DEBUG_WAIT
+	g_message (G_STRLOC ": HandleLinuxWaitEvent () - %d - %x", pid, status);
+#endif
+
 	if (pid < 0) {
 		g_warning (G_STRLOC ": waitpid() failed: %s", g_strerror (errno));
-		return NULL;
+		return;
 	} else if (pid == 0)
-		return NULL;
+		return;
 
-	e = handle_extended_event (pid, status);
-	if (e)
-		return e;
-
-	inferior = GetInferiorByPid (pid);
-	if (!inferior) {
-		g_warning (G_STRLOC ": Got wait event for unknown pid: %d", pid);
-		return NULL;
+	if (HandleExtendedWaitEvent (pid, status)) {
+		inferior = GetInferiorByPid (pid);
+#if DEBUG_WAIT
+		g_message (G_STRLOC ": extended event => %d - %x - %p", pid, status, inferior);
+#endif
+		if (!inferior || inferior->Continue ()) {
+			g_warning (G_STRLOC ": Can't resume after extended wait event.");
+		}
+		return;
 	}
 
-	return inferior->HandleLinuxWaitEvent (status);
+	inferior = GetInferiorByPid (pid);
+#if DEBUG_WAIT
+	g_message (G_STRLOC ": normal event => %d - %x - %p", pid, status, inferior);
+#endif
+	if (inferior) {
+		ServerEvent *e;
+
+		e = inferior->HandleLinuxWaitEvent (status);
+#if DEBUG_WAIT
+		g_message (G_STRLOC ": normal event => %d - %x - %p - %p", pid, status, inferior, e);
+#endif
+		if (e) {
+			SendEvent (e);
+			g_free (e);
+		}
+		return;
+	}
+
+	//
+	// There's a race condition in the Linux kernel which makes it sometimes
+	// emit the first stop event for a new thread before the corresponding
+	// PTRACE_EVENT_CLONE.
+	//
+
+	if (WIFSTOPPED (status)) {
+		ServerEvent *e;
+
+		inferior = CreateThread (pid, true);
+
+		e = g_new0 (ServerEvent, 1);
+		e->sender = main_process;
+		e->type = SERVER_EVENT_THREAD_CREATED;
+		e->arg_object = inferior;
+		e->arg = pid;
+
+		SendEvent (e);
+		g_free (e);
+		return;
+	}
+
+	g_warning (G_STRLOC ": Got wait event %x for unknown pid: %d", status, pid);
 }
 

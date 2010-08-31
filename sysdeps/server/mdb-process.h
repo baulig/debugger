@@ -7,9 +7,9 @@
 class MdbProcess : public ServerObject
 {
 public:
-	virtual bool Initialize (void) = 0;
+	virtual void InitializeProcess (MdbInferior *inferior) = 0;
 
-	virtual void InitializeProcess (void) = 0;
+	virtual bool Initialize (MdbInferior *inferior) = 0;
 
 	MdbExeReader *GetMainReader (void)
 	{
@@ -19,14 +19,14 @@ public:
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
 protected:
-	MdbProcess (MdbInferior *inferior)
+	MdbProcess (MdbServer *server)
 		: ServerObject (SERVER_OBJECT_KIND_PROCESS)
 	{
-		this->inferior = inferior;
+		this->server = server;
 		this->main_reader = NULL;
 	}
 
-	MdbInferior *inferior;
+	MdbServer *server;
 	MdbExeReader *main_reader;
 };
 

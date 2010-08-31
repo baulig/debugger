@@ -56,7 +56,8 @@ namespace Mono.Debugger.Server
 			get { return server.BreakpointManager; }
 		}
 
-		public IInferior Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp, out IProcess process)
+		public IInferior Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp,
+					out IProcess process)
 		{
 			return server.Spawn (sse, cwd, argv, envp, out process);
 		}
@@ -69,10 +70,7 @@ namespace Mono.Debugger.Server
 		public ExecutableReader GetExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory,
 							     string filename, TargetAddress base_address, bool is_loaded)
 		{
-			var mdb_reader = server.CreateExeReader (filename);
-			var reader = new ExecutableReader (os, memory, this, mdb_reader);
-			reader.ReadDebuggingInfo ();
-			return reader;
+			throw new NotImplementedException ();
 		}
 
 		public TargetInfo GetTargetInfo ()
