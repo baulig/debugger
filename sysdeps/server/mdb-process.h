@@ -14,6 +14,12 @@ public:
 		return main_reader;
 	}
 
+	void OnMainModuleLoaded (MdbExeReader *reader);
+	MdbExeReader *OnMainModuleLoaded (const char *filename);
+
+	void OnDllLoaded (MdbExeReader *reader);
+	MdbExeReader *OnDllLoaded (const char *filename);
+
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
 protected:
@@ -24,6 +30,7 @@ protected:
 		this->main_reader = NULL;
 	}
 
+private:
 	MdbServer *server;
 	MdbExeReader *main_reader;
 };

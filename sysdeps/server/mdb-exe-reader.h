@@ -10,7 +10,7 @@ protected:
 	const char *filename;
 	MdbExeReader (const char *filename) : ServerObject (SERVER_OBJECT_KIND_EXE_READER)
 	{
-		this->filename = filename;
+		this->filename = g_strdup (filename);
 	}
 
 public:

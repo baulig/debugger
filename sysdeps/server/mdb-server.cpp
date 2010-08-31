@@ -61,7 +61,6 @@ main (int argc, char *argv[])
 	struct sockaddr_in serv_addr, cli_addr;
 	int conn_fd, fd, res;
 	socklen_t cli_len;
-	char buf[128];
 
 	ServerObject::Initialize ();
 
@@ -188,6 +187,28 @@ MdbServer::AddInferior (guint32 thread_id, MdbInferior *inferior)
 	g_hash_table_insert (inferior_by_thread_id, GUINT_TO_POINTER (thread_id), inferior);
 }
 
+#if WINDOWS
+
+typedef struct {
+	MdbInferior *inferior;
+	const gchar *cwd;
+	const gchar **argv;
+	const gchar **envp;
+	ErrorCode result;
+	MdbProcess *process;
+	guint32 thread_id;
+	gchar *error;
+} SpawnData;
+
+static void
+spawn_proxy (gpointer user_data)
+{
+	SpawnData *data = (SpawnData *) user_data;
+
+	data->result = data->inferior->Spawn (data->cwd, data->argv, data->envp, &data->process, &data->thread_id, &data->error);
+}
+#endif
+
 ErrorCode
 MdbServer::Spawn (const gchar *working_directory, const gchar **argv, const gchar **envp,
 		  MdbProcess **out_process, MdbInferior **out_inferior,
@@ -196,12 +217,42 @@ MdbServer::Spawn (const gchar *working_directory, const gchar **argv, const gcha
 	MdbInferior *inferior;
 	ErrorCode result;
 	guint32 thread_id;
+	gchar *error;
 
 	inferior = mdb_inferior_new (this);
 
-	result = inferior->Spawn (working_directory, argv, envp, &main_process, &thread_id, out_error);
+#if WINDOWS
+	{
+		SpawnData *data = g_new0 (SpawnData, 1);
+		InferiorDelegate delegate;
+
+		data->inferior = inferior;
+		data->cwd = working_directory;
+		data->argv = argv;
+		data->envp = envp;
+
+		delegate.func = spawn_proxy;
+		delegate.user_data = data;
+
+		if (!InferiorCommand (&delegate))
+			result = ERR_NOT_STOPPED;
+		else {
+			result = data->result;
+			main_process = data->process;
+			thread_id = data->thread_id;
+			error = data->error;
+		}
+	}
+#else
+	result = inferior->Spawn (working_directory, argv, envp, &main_process, &thread_id, &error);
+#endif
+
 	if (result) {
+		*out_process = NULL;
 		*out_inferior = NULL;
+		*out_thread_id = 0;
+		if (out_error)
+			*out_error = error;
 		delete inferior;
 		return result;
 	}
@@ -211,6 +262,8 @@ MdbServer::Spawn (const gchar *working_directory, const gchar **argv, const gcha
 	*out_process = main_process;
 	*out_inferior = inferior;
 	*out_thread_id = thread_id;
+	if (out_error)
+		*out_error = error;
 	return ERR_NONE;
 }
 

@@ -4,6 +4,13 @@
 #include <connection.h>
 #include <mdb-server.h>
 
+#ifdef _MSC_VER
+#include <winsock2.h>
+#endif
+#include <ws2tcpip.h>
+
+#include <windows.h>
+
 class MdbServerWindows : public MdbServer
 {
 public:
@@ -11,6 +18,8 @@ public:
 	{ }
 
 	static void Initialize (void);
+
+	static void HandleDebugEvent (DEBUG_EVENT *de);
 
 protected:
 

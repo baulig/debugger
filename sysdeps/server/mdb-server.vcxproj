@@ -20,10 +20,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="breakpoints.cpp" />
+    <ClCompile Include="connection.cpp" />
     <ClCompile Include="debugger-mutex.c" />
-    <ClCompile Include="i386-arch.cpp" />
     <ClCompile Include="mdb-arch.cpp" />
+    <ClCompile Include="mdb-exe-reader.cpp" />
     <ClCompile Include="mdb-inferior.cpp" />
+    <ClCompile Include="mdb-process.cpp" />
+    <ClCompile Include="server-object.cpp" />
     <ClCompile Include="x86-arch.cpp" />
     <ClCompile Include="bfd-reader.cpp" />
     <ClCompile Include="mdb-server-windows.cpp" />
@@ -32,12 +35,16 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="breakpoints.h" />
+    <ClInclude Include="connection.h" />
     <ClInclude Include="debugger-mutex.h" />
     <ClInclude Include="i386-arch.h" />
     <ClInclude Include="mdb-arch.h" />
     <ClInclude Include="mdb-exe-reader.h" />
     <ClInclude Include="mdb-inferior.h" />
+    <ClInclude Include="mdb-process.h" />
+    <ClInclude Include="mdb-server-windows.h" />
     <ClInclude Include="mdb-server.h" />
+    <ClInclude Include="server-object.h" />
     <ClInclude Include="x86-arch.h" />
   </ItemGroup>
   <ItemGroup>

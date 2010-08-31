@@ -23,7 +23,8 @@ namespace Mono.Debugger.Server
 		UnknownError = 0x40,
 		InternalError,
 
-		DllLoaded = 0x50,
+		MainModuleLoaded = 0x50,
+		DllLoaded,
 
 		UnhandledException = 0x70,
 		ThrowException,

@@ -806,15 +806,16 @@ PTraceProcess::Initialize (int pid)
 
 	buffer [len] = 0;
 
-	main_reader = server->GetExeReader (buffer);
-	return main_reader != NULL;
+	return OnMainModuleLoaded (buffer) != NULL;
 }
 
 void
 PTraceProcess::InitializeProcess (MdbInferior *inferior)
 {
-	if (main_reader)
-		main_reader->ReadDynamicInfo (inferior);
+	MdbExeReader *reader = GetMainReader ();
+
+	if (reader)
+		reader->ReadDynamicInfo (inferior);
 }
 
 MdbInferior *

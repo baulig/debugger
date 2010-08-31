@@ -154,7 +154,12 @@ class X86Arch : public MdbArch
 {
 public:
 	X86Arch (MdbInferior *inferior) : MdbArch (inferior)
-	{ }
+	{
+		callback_stack = NULL;
+		code_buffer = NULL;
+		hw_bpm = NULL;
+	}
+
 
 	ErrorCode EnableBreakpoint (BreakpointInfo *breakpoint);
 	ErrorCode DisableBreakpoint (BreakpointInfo *breakpoint);

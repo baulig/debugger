@@ -9,8 +9,10 @@ namespace Mono.Debugger.MdbServer
 		public MdbProcess (Connection connection, int id)
 			: base (connection, id, ServerObjectKind.Process)
 		{
+#if FIXME
 			int reader_iid = connection.SendReceive (CommandSet.PROCESS, (int)CmdProcess.GET_MAIN_READER, new Connection.PacketWriter ().WriteInt (ID)).ReadInt ();
 			MainReader = new MdbExeReader (connection, reader_iid);
+#endif
 		}
 
 		enum CmdProcess {

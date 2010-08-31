@@ -7,11 +7,6 @@
 #include <string.h>
 #include <bfd.h>
 
-#ifdef _MSC_VER
-#include <winsock2.h>
-#endif
-#include <ws2tcpip.h>
-
 MdbServer *
 mdb_server_new (Connection *connection)
 {

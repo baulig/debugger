@@ -2977,22 +2977,26 @@ namespace Mono.Debugger.Backend
 		protected override void DoExecute ()
 		{
 			Report.Debug (DebugFlags.SSE,
-				      "{0} start execute: {1} {2} {3} {4}", sse, sse.Process.IsAttached,
-				      inferior.CurrentFrame, inferior.EntryPoint, sse.manager.HasThreadEvents);
+				      "{0} start execute: {1} {2} {3}", sse, sse.Process.IsAttached,
+				      inferior.CurrentFrame, sse.manager.HasThreadEvents);
 
+			sse.do_continue ();
+
+			return;
+
+#if FIXME
 			if (!sse.Process.IsAttached && sse.manager.HasThreadEvents)
 				sse.do_continue (inferior.EntryPoint);
 			else
 				sse.ProcessEvent (new ServerEvent (ServerEventType.Stopped, inferior.InferiorHandle, 0, 0, 0));
+#endif
 		}
 
 		protected override EventResult DoProcessEvent (ServerEvent cevent,
 							       out TargetEventArgs args)
 		{
-			Report.Debug (DebugFlags.SSE,
-				      "{0} start: {1} {2} {3} {4}", sse,
-				      cevent, sse.Process.IsAttached,
-				      inferior.CurrentFrame, inferior.EntryPoint);
+			Report.Debug (DebugFlags.SSE, "{0} start: {1} {2} {3}", sse,
+				      cevent, sse.Process.IsAttached, inferior.CurrentFrame);
 
 			args = null;
 			if ((cevent.Type != ServerEventType.Stopped) &&

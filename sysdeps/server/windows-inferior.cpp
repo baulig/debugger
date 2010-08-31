@@ -3,7 +3,6 @@
 #include <x86-arch.h>
 #include <string.h>
 #include <assert.h>
-#include <windows.h>
 #include <tchar.h>
 #include <Psapi.h>
 #include <stdio.h>
@@ -105,8 +104,6 @@ mdb_inferior_new (MdbServer *server)
 	return new WindowsInferior (server);
 }
 
-static GHashTable *inferior_hash; // thread id -> MdbServer *
-
 #define DEBUG_EVENT_WAIT_TIMEOUT 5000
 #define BP_OPCODE 0xCC  /* INT 3 instruction */
 #define TF_BIT 0x100    /* single-step register bit */
@@ -164,9 +161,7 @@ get_last_error (void)
 void
 MdbInferior::Initialize (void)
 {
-	g_assert (!inferior_hash);
-
-	inferior_hash = g_hash_table_new (NULL, NULL);
+	g_assert (!command_event);
 
 	command_event = CreateEvent (NULL, FALSE, FALSE, NULL);
 	g_assert (command_event);
@@ -332,12 +327,12 @@ MdbInferior::GetTargetInfo (guint32 *target_int_size, guint32 *target_long_size,
 	return ERR_NONE;
 }
 
-static void
-handle_debug_event (DEBUG_EVENT *de)
+void
+MdbServerWindows::HandleDebugEvent (DEBUG_EVENT *de)
 {
 	WindowsInferior *inferior;
 
-	inferior = (WindowsInferior *) g_hash_table_lookup (inferior_hash, GINT_TO_POINTER (de->dwThreadId));
+	inferior = (WindowsInferior *) GetInferiorByThreadId (de->dwThreadId);
 	if (!inferior) {
 		g_warning (G_STRLOC ": Got debug event for unknown thread: %d/%d", de->dwProcessId, de->dwThreadId);
 		if (!ContinueDebugEvent (de->dwProcessId, de->dwThreadId, DBG_CONTINUE)) {
@@ -371,9 +366,10 @@ WindowsInferior::HandleDebugEvent (DEBUG_EVENT *de)
 			ServerEvent *e;
 
 			e = arch->ChildStopped (0);
-			if (e)
+			if (e) {
 				server->SendEvent (e);
-			else
+				g_free (e);
+			} else
 				g_warning (G_STRLOC ": mdb_arch_child_stopped() returned NULL.");
 
 			ResetEvent (wait_event);
@@ -398,7 +394,7 @@ WindowsInferior::HandleDebugEvent (DEBUG_EVENT *de)
 			 */
 			if (GetModuleFileNameEx (process->process_handle, NULL, path, sizeof (path) / sizeof (TCHAR))) {
 				process->exe_path = tstring_to_string (path);
-				server->GetExeReader (process->exe_path);
+				process->OnMainModuleLoaded (process->exe_path);
 			}
 		}
 
@@ -425,7 +421,7 @@ WindowsInferior::HandleDebugEvent (DEBUG_EVENT *de)
 					break;
 			}
 
-			server->GetExeReader (buf);
+			process->OnDllLoaded (buf);
 			break;
 		}
 		break;
@@ -474,7 +470,7 @@ debugging_thread_main (LPVOID dummy_arg)
 			DEBUG_EVENT de;
 
 			if (WaitForDebugEvent (&de, DEBUG_EVENT_WAIT_TIMEOUT)) {
-				handle_debug_event (&de);
+				MdbServerWindows::HandleDebugEvent (&de);
 			}
 		} else {
 			g_warning (G_STRLOC ": WaitForMultipleObjects() returned %d", ret);
@@ -503,6 +499,8 @@ WindowsInferior::Spawn (const gchar *working_directory, const gchar **argv, cons
 		*out_error = NULL;
 	*out_process = NULL;
 	*out_thread_id = 0;
+
+	process = new WindowsProcess (server);
 
 	if (working_directory) {
 		gunichar2* utf16_dir_tmp;
@@ -603,15 +601,13 @@ WindowsInferior::Spawn (const gchar *working_directory, const gchar **argv, cons
 		return ERR_CANNOT_START_TARGET;
 	}
 
-	g_message (G_STRLOC ": SPAWN: %d/%d", pi.dwProcessId, pi.dwThreadId);
-
-	process = new WindowsProcess (server);
-
 	process->process_handle = pi.hProcess;
 	process->process_id = pi.dwProcessId;
 
 	thread_handle = pi.hThread;
 	thread_id = pi.dwThreadId;
+
+	g_message (G_STRLOC ": SPAWN: %d/%d", pi.dwProcessId, pi.dwThreadId);
 
 	*out_process = process;
 	*out_thread_id = pi.dwThreadId;

@@ -11,6 +11,8 @@ namespace Mono.Debugger.MdbServer
 		ThreadManager manager;
 		Process process;
 
+		SingleSteppingEngine main_sse;
+
 		MdbProcess main_process;
 
 		public MdbServer (Connection connection)
@@ -80,6 +82,7 @@ namespace Mono.Debugger.MdbServer
 			int pid = reader.ReadInt ();
 			process = main_process = new MdbProcess (Connection, process_iid);
 
+			main_sse = sse;
 			manager = sse.ThreadManager;
 			this.process = sse.Process;
 
@@ -113,6 +116,22 @@ namespace Mono.Debugger.MdbServer
 			return inferior;
 		}
 
+		void OnDllLoaded (MdbExeReader reader)
+		{
+			Console.WriteLine ("DLL LOADED: {0}", reader.FileName);
+
+			var exe = new ExecutableReader (process, main_sse.TargetMemoryInfo, reader);
+			exe.ReadDebuggingInfo ();
+		}
+
+		void OnThreadCreated (MdbInferior inferior)
+		{
+			Console.WriteLine ("THREAD CREATED: {0}", inferior.ID);
+
+			var sse = process.ThreadCreated (main_process, inferior);
+			sse_by_inferior.Add (inferior.ID, sse);
+		}
+
 		internal void HandleEvent (ServerEvent e)
 		{
 			Console.WriteLine ("SERVER EVENT: {0} {1}", e, DebuggerWaitHandle.CurrentThread);
@@ -126,17 +145,18 @@ namespace Mono.Debugger.MdbServer
 					return;
 				}
 
-				var sse = sse_by_inferior [inferior.ID];
+				var sse = sse_by_inferior[inferior.ID];
 				sse.ProcessEvent (e);
 			}
 
 			switch (e.Type) {
-			case ServerEventType.ThreadCreated:
-				var inferior = (MdbInferior) e.ArgumentObject;
-				Console.WriteLine ("THREAD CREATED: {0}", inferior.ID);
+			case ServerEventType.MainModuleLoaded:
+			case ServerEventType.DllLoaded:
+				OnDllLoaded ((MdbExeReader) e.ArgumentObject);
+				break;
 
-				var sse = process.ThreadCreated (main_process, inferior);
-				sse_by_inferior.Add (inferior.ID, sse);
+			case ServerEventType.ThreadCreated:
+				OnThreadCreated ((MdbInferior) e.ArgumentObject);
 				break;
 			}
 		}

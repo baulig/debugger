@@ -11,8 +11,6 @@ namespace Mono.Debugger.Backend
 {
 	internal class ExecutableReader : DebuggerMarshalByRefObject, IDisposable
 	{
-		DebuggerServer server;
-
 		IExecutableReader reader;
 
 		DebuggingFileReader debug_info;
@@ -28,12 +26,11 @@ namespace Mono.Debugger.Backend
 		TargetAddress end_address = TargetAddress.Null;
 		TargetAddress base_address = TargetAddress.Null;
 
-		public ExecutableReader (OperatingSystemBackend os, TargetMemoryInfo memory_info,
-					 DebuggerServer server, IExecutableReader reader)
+		public ExecutableReader (Process process, TargetMemoryInfo memory_info,
+					 IExecutableReader reader)
 		{
-			this.OperatingSystem = os;
+			this.Process = process;
 			this.TargetMemoryInfo = memory_info;
-			this.server = server;
 			this.reader = reader;
 
 			if (DwarfReader.IsSupported (this))
@@ -43,18 +40,23 @@ namespace Mono.Debugger.Backend
 
 			symfile = new ExeReaderSymbolFile (this);
 
-			Module = os.Process.Session.GetModule (FileName);
+			Module = process.Session.GetModule (FileName);
 			if (Module == null) {
-				Module = os.Process.Session.CreateModule (FileName, symfile);
+				Module = process.Session.CreateModule (FileName, symfile);
 			} else {
 				Module.LoadModule (symfile);
 			}
 
-			os.Process.SymbolTableManager.AddSymbolFile (symfile);
+			process.SymbolTableManager.AddSymbolFile (symfile);
 		}
 
-		public OperatingSystemBackend OperatingSystem {
+		public Process Process {
 			get; private set;
+		}
+
+		public OperatingSystemBackend OperatingSystem
+		{
+			get { return Process.OperatingSystem; }
 		}
 
 		public TargetMemoryInfo TargetMemoryInfo {

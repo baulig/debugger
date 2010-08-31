@@ -425,19 +425,8 @@ BfdReader::DynlinkHandler (MdbInferior *inferior)
 			continue;
 
 		file = inferior->ReadString ((gsize) map.l_name);
-		if (file && *file) {
-			MdbExeReader *reader;
-
-			reader = server->GetExeReader (file);
-			if (reader) {
-				ServerEvent *e = g_new0 (ServerEvent, 1);
-
-				e->type = SERVER_EVENT_DLL_LOADED;
-				e->arg_object = reader;
-				server->SendEvent (e);
-				g_free (e);
-			}
-		}
+		if (file && *file)
+			inferior->GetProcess ()->OnDllLoaded (file);
 		g_free (file);
 	}
 }

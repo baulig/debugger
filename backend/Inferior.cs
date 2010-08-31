@@ -17,7 +17,6 @@ namespace Mono.Debugger.Backend
 {
 	internal class Inferior : TargetAccess, ITargetNotification, IDisposable
 	{
-		protected ExecutableReader exe;
 		protected ThreadManager thread_manager;
 
 		protected readonly ProcessStart start;
@@ -475,34 +474,11 @@ namespace Mono.Debugger.Backend
 
 			target_info = thread_manager.GetTargetMemoryInfo (address_domain);
 
-			exe = new ExecutableReader (process.OperatingSystem, target_info, server, server_process.MainReader);
-			exe.ReadDebuggingInfo ();
-
 			arch = process.Architecture;
 		}
 
 		public BreakpointManager BreakpointManager {
 			get { return breakpoint_manager; }
-		}
-
-		public ExecutableReader Executable {
-			get { return exe; }
-		}
-
-		public TargetAddress SimpleLookup (string name)
-		{
-			return exe.LookupSymbol (name);
-		}
-
-		public TargetAddress GetSectionAddress (string name)
-		{
-			return exe.GetSectionAddress (name);
-		}
-
-		public TargetAddress EntryPoint {
-			get {
-				return exe.EntryPoint;
-			}
 		}
 
 		public override int TargetIntegerSize {
@@ -870,12 +846,6 @@ namespace Mono.Debugger.Backend
 			get {
 				check_disposed ();
 				return arch;
-			}
-		}
-
-		public Module[] Modules {
-			get {
-				return new Module[] { exe.Module };
 			}
 		}
 

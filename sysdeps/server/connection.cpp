@@ -156,7 +156,6 @@ Buffer::GetData (void)
 int
 Buffer::DecodeByte (void)
 {
-	int retval;
 	g_assert (p+1 <= end);
 	return *p++;
 }
@@ -209,7 +208,7 @@ Connection::SendPacket (int command_set, int command, Buffer *data)
 {
 	Buffer *buf;
 	int len, id;
-	gboolean res;
+	bool res;
 
 	id = ++packet_id;
 
@@ -234,7 +233,7 @@ Connection::SendReplyPacket (int id, int error, Buffer *data)
 {
 	Buffer *buf;
 	int len;
-	gboolean res;
+	bool res;
 
 	len = data->GetDataSize () + 11;
 	buf = new Buffer (len);

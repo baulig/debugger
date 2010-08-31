@@ -65,8 +65,16 @@
     <Compile Include="backend\arch\X86_Instruction.cs" />
     <Compile Include="backend\arch\X86_Opcodes.cs" />
     <Compile Include="backend\BreakpointHandle.cs" />
+    <Compile Include="backend\BreakpointManager.cs" />
     <Compile Include="backend\EventQueue.cs" />
     <Compile Include="backend\Inferior.cs" />
+    <Compile Include="backend\mdb-server\Connection.cs" />
+    <Compile Include="backend\mdb-server\MdbBreakpointManager.cs" />
+    <Compile Include="backend\mdb-server\MdbExeReader.cs" />
+    <Compile Include="backend\mdb-server\MdbInferior.cs" />
+    <Compile Include="backend\mdb-server\MdbProcess.cs" />
+    <Compile Include="backend\mdb-server\MdbServer.cs" />
+    <Compile Include="backend\mdb-server\ServerObject.cs" />
     <Compile Include="backend\mono\MetadataHelper.cs" />
     <Compile Include="backend\mono\MonoLanguageBackend.cs" />
     <Compile Include="backend\mono\MonoSymbolFile.cs" />
@@ -83,16 +91,14 @@
     <Compile Include="backend\os\StabsReader.cs" />
     <Compile Include="backend\os\WindowsOperatingSystem.cs" />
     <Compile Include="backend\ProcessStart.cs" />
-    <Compile Include="backend\server\BreakpointManager.cs" />
-    <Compile Include="backend\server\Connection.cs" />
     <Compile Include="backend\server\DebuggerServer.cs" />
-    <Compile Include="backend\server\NativeBreakpointManager.cs" />
-    <Compile Include="backend\server\NativeDebuggerServer.cs" />
-    <Compile Include="backend\server\NativeThreadManager.cs" />
-    <Compile Include="backend\server\RemoteBreakpointManager.cs" />
-    <Compile Include="backend\server\RemoteDebuggerServer.cs" />
-    <Compile Include="backend\server\RemoteExecutableReader.cs" />
-    <Compile Include="backend\server\RemoteThreadManager.cs" />
+    <Compile Include="backend\server\IBreakpointManager.cs" />
+    <Compile Include="backend\server\IDebuggerServer.cs" />
+    <Compile Include="backend\server\IExecutableReader.cs" />
+    <Compile Include="backend\server\IInferior.cs" />
+    <Compile Include="backend\server\IProcess.cs" />
+    <Compile Include="backend\server\IServerObject.cs" />
+    <Compile Include="backend\server\ServerEvent.cs" />
     <Compile Include="backend\SingleSteppingEngine.cs" />
     <Compile Include="backend\SymbolTableManager.cs" />
     <Compile Include="backend\TargetAccess.cs" />
@@ -250,9 +256,13 @@
     <Folder Include="Properties\" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="backend\mdb-server\Makefile.am" />
     <None Include="classes\DebuggerConfiguration.xsd">
       <SubType>Designer</SubType>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="backend\mdb-server\.gitignore" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
