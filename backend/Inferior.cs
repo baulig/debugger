@@ -709,6 +709,10 @@ namespace Mono.Debugger.Backend
 		// </summary>
 		public bool Stop (out ServerEvent new_event)
 		{
+			check_disposed ();
+			new_event = null;
+			return Stop ();
+
 #if FIXME
 			check_disposed ();
 			int status;

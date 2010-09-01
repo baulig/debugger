@@ -328,6 +328,11 @@ MdbInferior::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		break;
 	}
 
+	case CMD_INFERIOR_STOP: {
+		result = Stop ();
+		break;
+	}
+
 	default:
 		return ERR_NOT_IMPLEMENTED;
 	}

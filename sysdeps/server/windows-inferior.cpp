@@ -89,6 +89,8 @@ public:
 
 	ErrorCode SetRegisters (InferiorRegs *regs);
 
+	ErrorCode Stop (void);
+
 	//
 	// Private API.
 	//
@@ -840,4 +842,10 @@ WindowsInferior::SetSignal (guint32 signo, gboolean send_it)
 void
 WindowsProcess::InitializeProcess (MdbInferior *inferior)
 {
+}
+
+ErrorCode
+WindowsInferior::Stop (void)
+{
+	return ERR_NOT_IMPLEMENTED;
 }

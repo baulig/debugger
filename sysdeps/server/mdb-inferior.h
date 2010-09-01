@@ -84,6 +84,8 @@ public:
 
 	virtual ErrorCode SetRegisters (InferiorRegs *regs) = 0;
 
+	virtual ErrorCode Stop (void) = 0;
+
 #if defined(__linux__) || defined(__FreeBSD__)
 	int GetLastSignal (void)
 	{

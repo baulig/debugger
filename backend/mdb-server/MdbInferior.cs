@@ -30,7 +30,8 @@ namespace Mono.Debugger.MdbServer
 			GET_PENDING_SIGNAL = 16,
 			SET_SIGNAL = 17,
 			INIT_AT_ENTRYPOINT = 18,
-			DISASSEMBLE_INSN
+			DISASSEMBLE_INSN = 19,
+			STOP = 20
 		}
 
 		public MdbExeReader InitializeProcess ()
@@ -51,7 +52,14 @@ namespace Mono.Debugger.MdbServer
 
 		public bool Stop ()
 		{
-			throw new NotImplementedException ();
+			try {
+				Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.STOP, new Connection.PacketWriter ().WriteInt (ID));
+				return true;
+			} catch (TargetException ex) {
+				if (ex.Type == TargetError.AlreadyStopped)
+					return false;
+				throw;
+			}
 		}
 
 		public SignalInfo GetSignalInfo ()
@@ -247,7 +255,7 @@ namespace Mono.Debugger.MdbServer
 
 		public ServerCallbackFrame GetCallbackFrame (long stack_pointer, bool exact_match)
 		{
-			throw new NotImplementedException ();
+			return null;
 		}
 
 		public void SetRuntimeInfo (MonoRuntimeHandle runtime)

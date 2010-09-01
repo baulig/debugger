@@ -1019,18 +1019,19 @@ namespace Mono.Debugger.Backend
 		public override void Stop ()
 		{
 			lock (this) {
-				Report.Debug (DebugFlags.EventLoop, "{0} interrupt: {1} {2}",
-					      this, engine_stopped, current_operation);
+				Report.Debug (DebugFlags.EventLoop, "{0} interrupt: {1} {2} {3}",
+					      this, manager.HasThreadEvents, engine_stopped, current_operation);
 
 				if (engine_stopped)
 					return;
 
 				bool stopped = inferior.Stop ();
+				Report.Debug (DebugFlags.EventLoop, "{0} interrupt #1: {1}", this, stopped);
+
 				if (!manager.HasThreadEvents && !stopped)
 					OperationInterrupted ();
 				
-				Report.Debug (DebugFlags.EventLoop, "{0} interrupt #1: {1}",
-					      this, stopped);
+				Report.Debug (DebugFlags.EventLoop, "{0} interrupt #2: {1}", this, stopped);
 			}
 		}
 

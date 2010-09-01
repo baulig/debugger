@@ -110,6 +110,8 @@ public:
 
 	ErrorCode SetRegisters (InferiorRegs *regs);
 
+	ErrorCode Stop (void);
+
 	ServerEvent *HandleLinuxWaitEvent (int status);
 
 	int GetPid (void)
@@ -839,4 +841,30 @@ MdbServerLinux::CreateThread (MdbProcess *process, int pid, bool stopped)
 	process->AddInferior (pid, inferior);
 
 	return inferior;
+}
+
+ErrorCode
+PTraceInferior::Stop (void)
+{
+	ErrorCode result;
+
+	/*
+	 * Try to get the thread's registers.  If we suceed, then it's already stopped
+	 * and still alive.
+	 */
+	result = arch->GetRegisters ();
+	if (!result)
+		return ERR_ALREADY_STOPPED;
+
+	if (syscall (__NR_tkill, pid, SIGSTOP)) {
+		/*
+		 * It's already dead.
+		 */
+		if (errno == ESRCH)
+			return ERR_NO_TARGET;
+		else
+			return ERR_UNKNOWN_ERROR;
+	}
+
+	return ERR_NONE;
 }
