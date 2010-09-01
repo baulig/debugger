@@ -26,6 +26,7 @@
     <ClCompile Include="mdb-exe-reader.cpp" />
     <ClCompile Include="mdb-inferior.cpp" />
     <ClCompile Include="mdb-process.cpp" />
+    <ClCompile Include="mono-runtime.cpp" />
     <ClCompile Include="server-object.cpp" />
     <ClCompile Include="x86-arch.cpp" />
     <ClCompile Include="bfd-reader.cpp" />
@@ -44,6 +45,7 @@
     <ClInclude Include="mdb-process.h" />
     <ClInclude Include="mdb-server-windows.h" />
     <ClInclude Include="mdb-server.h" />
+    <ClInclude Include="mono-runtime.h" />
     <ClInclude Include="server-object.h" />
     <ClInclude Include="x86-arch.h" />
   </ItemGroup>

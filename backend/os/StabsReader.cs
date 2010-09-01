@@ -83,17 +83,21 @@ namespace Mono.Debugger.Backend
 						current_method = null;
 					}
 				} else if (stab_type == 0x44) { // N_SLINE
+#if FIXME
 					Console.WriteLine ("LINE: {0:x} {1:x} {2:x} {3}",
 						stab_other, stab_desc, stab_value, symbol);
+#endif
 					if (current_method != null)
 						current_method.LineNumberTable.AddLine ((int) stab_desc, stab_value);
 				} else if (stab_type == 0x80) { // N_LSYM
 				} else if (stab_type == 0x82) { // N_BINCL
 				} else if (stab_type == 0xA2) { // N_EINCL
 				} else {
+#if FIXME
 					Console.WriteLine ("STAB: {0:x} {1:x} {2:x} {3:x} {4:x}",
 						strtab_idx, stab_type, stab_other, stab_desc, stab_value);
 					;
+#endif
 				}
 			}
 

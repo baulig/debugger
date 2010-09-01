@@ -1,4 +1,5 @@
 #include <mdb-process.h>
+#include <mono-runtime.h>
 
 GHashTable *MdbProcess::inferior_by_thread_id;
 MdbProcess *MdbProcess::main_process;
@@ -111,7 +112,7 @@ MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 }
 
 void
-MdbProcess::OnMainModuleLoaded (MdbExeReader *reader)
+MdbProcess::OnMainModuleLoaded (MdbInferior *inferior, MdbExeReader *reader)
 {
 	ServerEvent *e;
 
@@ -124,19 +125,18 @@ MdbProcess::OnMainModuleLoaded (MdbExeReader *reader)
 	e->arg_object = reader;
 	server->SendEvent (e);
 	g_free (e);
-}
 
-MdbExeReader *
-MdbProcess::OnMainModuleLoaded (const char *filename)
-{
-	MdbExeReader *reader = GetExeReader (filename);
-	if (reader)
-		OnMainModuleLoaded (reader);
-	return reader;
+	CheckLoadedDll (inferior, reader);
 }
 
 void
-MdbProcess::OnDllLoaded (MdbExeReader *reader)
+MdbProcess::CheckLoadedDll (MdbInferior *inferior, MdbExeReader *reader)
+{
+	MonoRuntime::Initialize (inferior, reader);
+}
+
+void
+MdbProcess::OnDllLoaded (MdbInferior *inferior, MdbExeReader *reader)
 {
 	ServerEvent *e;
 
@@ -147,13 +147,6 @@ MdbProcess::OnDllLoaded (MdbExeReader *reader)
 	e->arg_object = reader;
 	server->SendEvent (e);
 	g_free (e);
-}
 
-MdbExeReader *
-MdbProcess::OnDllLoaded (const char *filename)
-{
-	MdbExeReader *reader = GetExeReader (filename);
-	if (reader)
-		OnDllLoaded (reader);
-	return reader;
+	CheckLoadedDll (inferior, reader);
 }

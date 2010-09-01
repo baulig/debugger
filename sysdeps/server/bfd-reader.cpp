@@ -426,7 +426,7 @@ BfdReader::DynlinkHandler (MdbInferior *inferior)
 
 		file = inferior->ReadString ((gsize) map.l_name);
 		if (file && *file)
-			inferior->GetProcess ()->OnDllLoaded (file);
+			inferior->GetProcess ()->OnDllLoaded (inferior, file);
 		g_free (file);
 	}
 }

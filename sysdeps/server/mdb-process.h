@@ -25,11 +25,25 @@ public:
 				 MdbInferior **out_inferior, guint32 *out_thread_id,
 				 gchar **out_error) = 0;
 
-	void OnMainModuleLoaded (MdbExeReader *reader);
-	MdbExeReader *OnMainModuleLoaded (const char *filename);
+	void OnMainModuleLoaded (MdbInferior *inferior, MdbExeReader *reader);
 
-	void OnDllLoaded (MdbExeReader *reader);
-	MdbExeReader *OnDllLoaded (const char *filename);
+	MdbExeReader *OnMainModuleLoaded (MdbInferior *inferior, const char *filename)
+	{
+		MdbExeReader *reader = GetExeReader (filename);
+		if (reader)
+			OnMainModuleLoaded (inferior, reader);
+		return reader;
+	}
+
+	void OnDllLoaded (MdbInferior *inferior, MdbExeReader *reader);
+
+	MdbExeReader *OnDllLoaded (MdbInferior *inferior, const char *filename)
+	{
+		MdbExeReader *reader = GetExeReader (filename);
+		if (reader)
+			OnDllLoaded (inferior, reader);
+		return reader;
+	}
 
 	static MdbProcess *GetMainProcess (void)
 	{
@@ -50,13 +64,14 @@ protected:
 		this->exe_file_hash = g_hash_table_new (NULL, NULL);
 	}
 
-protected:
 	MdbServer *server;
 	static MdbProcess *main_process;
 
 private:
 	GHashTable *exe_file_hash;
 	MdbExeReader *main_reader;
+
+	void CheckLoadedDll (MdbInferior *inferior, MdbExeReader *reader);
 
 	static GHashTable *inferior_by_thread_id;
 };

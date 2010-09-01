@@ -405,7 +405,7 @@ WindowsInferior::HandleDebugEvent (DEBUG_EVENT *de)
 			 */
 			if (GetModuleFileNameEx (process->process_handle, NULL, path, sizeof (path) / sizeof (TCHAR))) {
 				process->exe_path = tstring_to_string (path);
-				process->OnMainModuleLoaded (process->exe_path);
+				process->OnMainModuleLoaded (this, process->exe_path);
 			}
 		}
 
@@ -432,7 +432,7 @@ WindowsInferior::HandleDebugEvent (DEBUG_EVENT *de)
 					break;
 			}
 
-			process->OnDllLoaded (buf);
+			process->OnDllLoaded (this, buf);
 			break;
 		}
 		break;

@@ -92,7 +92,9 @@ server_sources = \
 	mdb-arch.cpp		\
 	mdb-arch.h		\
 	mdb-process.cpp		\
-	mdb-process.h
+	mdb-process.h		\
+	mono-runtime.cpp	\
+	mono-runtime.h
 
 server_cppflags = \
 	-I$(top_srcdir)/sysdeps/bfd \

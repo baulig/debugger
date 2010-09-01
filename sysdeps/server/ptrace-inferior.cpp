@@ -40,7 +40,7 @@ public:
 	void InitializeProcess (MdbInferior *inferior);
 
 private:
-	bool Initialize (int pid);
+	bool Initialize (PTraceInferior *inferior, int pid);
 
 	ErrorCode Spawn (const gchar *working_directory,
 			 const gchar **argv, const gchar **envp,
@@ -274,7 +274,7 @@ PTraceProcess::Spawn (const gchar *working_directory, const gchar **argv, const 
 		return result;
 	}
 
-	if (!Initialize (pid)) {
+	if (!Initialize (inferior, pid)) {
 		delete inferior;
 		return ERR_CANNOT_START_TARGET;
 	}
@@ -797,7 +797,7 @@ PTraceInferior::HandleLinuxWaitEvent (int status)
 }
 
 bool
-PTraceProcess::Initialize (int pid)
+PTraceProcess::Initialize (PTraceInferior *inferior, int pid)
 {
 	char buffer [BUFSIZ+1];
 	gchar *exe_filename;
@@ -821,7 +821,7 @@ PTraceProcess::Initialize (int pid)
 
 	buffer [len] = 0;
 
-	return OnMainModuleLoaded (buffer) != NULL;
+	return OnMainModuleLoaded (inferior, buffer) != NULL;
 }
 
 void
