@@ -48,7 +48,7 @@ typedef enum {
 	CMD_SERVER_GET_ARCH_TYPE = 3,
 	CMD_SERVER_GET_CAPABILITIES = 4,
 	CMD_SERVER_GET_BPM = 5,
-	CMD_SERVER_SPAWN = 6
+	CMD_SERVER_CREATE_PROCESS = 6
 } CmdServer;
 
 typedef enum {
@@ -87,7 +87,8 @@ typedef enum {
 
 typedef enum {
 	CMD_PROCESS_GET_MAIN_READER = 1,
-	CMD_PROCESS_INITIALIZE_PROCESS = 2
+	CMD_PROCESS_INITIALIZE_PROCESS = 2,
+	CMD_PROCESS_SPAWN = 3
 } CmdProcess;
 
 typedef enum {

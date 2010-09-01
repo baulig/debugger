@@ -166,6 +166,8 @@ namespace Mono.Debugger
 
 		IProcess server_process;
 
+		Dictionary<string, ExecutableReader> exe_reader_by_filename;
+
 		MyOperationHost operation_host;
 
 		Process parent;
@@ -191,7 +193,9 @@ namespace Mono.Debugger
 
 			thread_hash = Hashtable.Synchronized (new Hashtable ());
 
-			target_info = manager.GetTargetInfo ();
+			exe_reader_by_filename = new Dictionary<string, ExecutableReader> ();
+
+			target_info = manager.TargetInfo;
 
 			switch (manager.DebuggerServer.ArchType) {
 			case ArchType.I386:
@@ -208,9 +212,10 @@ namespace Mono.Debugger
 			}
 		}
 
-		internal Process (ThreadManager manager, ProcessStart start)
+		internal Process (ThreadManager manager, IProcess server_process, ProcessStart start)
 			: this (manager, start.Session)
 		{
+			this.server_process = server_process;
 			this.start = start;
 
 			is_attached = start.PID != 0;
@@ -476,12 +481,19 @@ namespace Mono.Debugger
 
 		internal CommandResult StartApplication ()
 		{
-			SingleSteppingEngine engine = new SingleSteppingEngine (manager, this, start);
+			string[] args = new string[start.CommandLineArguments.Length + 1];
+			Array.Copy (start.CommandLineArguments, args, start.CommandLineArguments.Length);
+			string[] env = new string[start.Environment.Length + 1];
+			Array.Copy (start.Environment, env, start.Environment.Length);
+
+			var server_inferior = server_process.Spawn (start.WorkingDirectory, args, env);
+
+			var engine = new SingleSteppingEngine (manager, this, server_process, server_inferior);
+			manager.AddEngine (server_inferior, engine);
 
 			initialized = true;
 
 			this.main_thread = engine;
-			this.server_process = engine.Inferior.ProcessHandle;
 			engine.Thread.ThreadFlags |= Thread.Flags.StopOnExit;
 
 			if (thread_hash.Contains (engine.PID))
@@ -495,6 +507,41 @@ namespace Mono.Debugger
 
 			CommandResult result = Debugger.StartOperation (start.Session.Config.ThreadingModel, engine);
 			return engine.StartApplication (result);
+		}
+
+		internal void OnDllLoaded (ExecutableReader reader)
+		{
+			lock (this) {
+				exe_reader_by_filename.Add (reader.FileName, reader);
+			}
+		}
+
+		internal ExecutableReader LookupLibrary (TargetAddress address)
+		{
+			lock (this) {
+				foreach (ExecutableReader reader in exe_reader_by_filename.Values) {
+					if (!reader.IsContinuous)
+						continue;
+
+					if ((address >= reader.StartAddress) && (address < reader.EndAddress))
+						return reader;
+				}
+
+				return null;
+			}
+		}
+
+		public TargetAddress LookupSymbol (string name)
+		{
+			lock (this) {
+				foreach (ExecutableReader reader in exe_reader_by_filename.Values) {
+					TargetAddress symbol = reader.LookupSymbol (name);
+					if (!symbol.IsNull)
+						return symbol;
+				}
+
+				return TargetAddress.Null;
+			}
 		}
 
 		internal void OnProcessExitedEvent ()
@@ -778,11 +825,6 @@ namespace Mono.Debugger
 					return engines;
 				}
 			}
-		}
-
-		public TargetAddress LookupSymbol (string name)
-		{
-			return os.LookupSymbol (name);
 		}
 
 		public Thread[] GetThreads ()
@@ -1152,8 +1194,6 @@ namespace Mono.Debugger
 #endif
 
 			exception_handlers = null;
-
-			manager.RemoveProcess (this);
 		}
 
 		private void Dispose (bool disposing)

@@ -138,11 +138,9 @@ namespace Mono.Debugger.Backend
 					"symbol file `" + NativeReader.FileName + "'");
 
 			if (NativeReader.BaseAddress.IsNull)
-				return new TargetAddress (
-					NativeReader.TargetMemoryInfo.AddressDomain, address);
+				return new TargetAddress (AddressDomain.Global, address);
 			else
-				return new TargetAddress (
-					NativeReader.TargetMemoryInfo.AddressDomain, NativeReader.BaseAddress.Address + address);
+				return NativeReader.BaseAddress + address;
 		}
 
 		protected StabsBinaryReader GetStabReader ()
@@ -159,7 +157,7 @@ namespace Mono.Debugger.Backend
 		{
 			try {
 				byte[] contents = NativeReader.GetSectionContents ((string) user_data);
-				return new TargetBlob (contents, NativeReader.TargetMemoryInfo);
+				return new TargetBlob (contents, NativeReader.TargetInfo);
 			} catch {
 				Report.Debug (DebugFlags.DwarfReader,
 					      "{1} Can't find DWARF 2 debugging info in section `{0}'",

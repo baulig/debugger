@@ -102,8 +102,6 @@ namespace Mono.Debugger.Languages.Native
 
 		public override TargetType LookupType (string name)
 		{
-			os.ReadNativeTypes ();
-
 			ITypeEntry entry = (ITypeEntry) type_hash [name];
 			if (entry == null)
 				return null;

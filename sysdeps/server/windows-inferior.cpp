@@ -15,7 +15,13 @@ class WindowsProcess : public MdbProcess
 {
 public:
 	WindowsProcess (MdbServer *server) : MdbProcess (server)
-	{ }
+	{
+		process_handle = NULL;
+		process_id = 0;
+		argc = 0;
+		argv = NULL;
+		exe_path = NULL;
+	}
 
 	void InitializeProcess (MdbInferior *inferior);
 
@@ -26,15 +32,21 @@ private:
 	gchar **argv;
 	gchar *exe_path;
 
+	ErrorCode Spawn (const gchar *working_directory,
+			 const gchar **argv, const gchar **envp,
+			 MdbInferior **out_inferior, guint32 *out_thread_id,
+			 gchar **out_error);
+
 	friend class WindowsInferior;
 };
 
 class WindowsInferior : public MdbInferior
 {
 public:
-	WindowsInferior (MdbServer *server)
-		: MdbInferior (server)
+	WindowsInferior (WindowsProcess *process)
+		: MdbInferior (process->server)
 	{
+		this->process = process;
 		thread_handle = NULL;
 		thread_id = 0;
 	}
@@ -47,11 +59,6 @@ public:
 	//
 	// MdbInferior
 	//
-
-	ErrorCode Spawn (const gchar *working_directory,
-			 const gchar **argv, const gchar **envp,
-			 MdbProcess **out_process, guint32 *out_thread_id,
-			 gchar **out_error);
 
 	ErrorCode GetSignalInfo (SignalInfo **sinfo);
 
@@ -96,12 +103,14 @@ private:
 
 	HANDLE thread_handle;
 	DWORD thread_id;
+
+	friend class WindowsProcess;
 };
 
-MdbInferior *
-mdb_inferior_new (MdbServer *server)
+MdbProcess *
+mdb_process_new (MdbServer *server)
 {
-	return new WindowsInferior (server);
+	return new WindowsProcess (server);
 }
 
 #define DEBUG_EVENT_WAIT_TIMEOUT 5000
@@ -332,7 +341,7 @@ MdbServerWindows::HandleDebugEvent (DEBUG_EVENT *de)
 {
 	WindowsInferior *inferior;
 
-	inferior = (WindowsInferior *) GetInferiorByThreadId (de->dwThreadId);
+	inferior = (WindowsInferior *) WindowsProcess::GetInferiorByThreadId (de->dwThreadId);
 	if (!inferior) {
 		g_warning (G_STRLOC ": Got debug event for unknown thread: %d/%d", de->dwProcessId, de->dwThreadId);
 		if (!ContinueDebugEvent (de->dwProcessId, de->dwThreadId, DBG_CONTINUE)) {
@@ -481,9 +490,10 @@ debugging_thread_main (LPVOID dummy_arg)
 }
 
 ErrorCode
-WindowsInferior::Spawn (const gchar *working_directory, const gchar **argv, const gchar **envp,
-			MdbProcess **out_process, guint32 *out_thread_id, gchar **out_error)
+WindowsProcess::Spawn (const gchar *working_directory, const gchar **arg_argv, const gchar **arg_envp,
+		       MdbInferior **out_inferior, guint32 *out_thread_id, gchar **out_error)
 {
+	WindowsInferior *inferior;
 	wchar_t* utf16_argv = NULL;
 	wchar_t* utf16_envp = NULL;
 	wchar_t* utf16_working_directory = NULL;
@@ -497,10 +507,7 @@ WindowsInferior::Spawn (const gchar *working_directory, const gchar **argv, cons
 
 	if (out_error)
 		*out_error = NULL;
-	*out_process = NULL;
 	*out_thread_id = 0;
-
-	process = new WindowsProcess (server);
 
 	if (working_directory) {
 		gunichar2* utf16_dir_tmp;
@@ -510,15 +517,14 @@ WindowsInferior::Spawn (const gchar *working_directory, const gchar **argv, cons
 
 		utf16_dir_tmp = g_utf8_to_utf16 (working_directory, -1, NULL, NULL, NULL);
 
-
 		utf16_working_directory = (wchar_t *) g_malloc0 ((len+2)*sizeof (wchar_t));
 		_snwprintf (utf16_working_directory, len, L"%s ", utf16_dir_tmp);
 		g_free (utf16_dir_tmp);
 	}
 
-	if (envp) {
+	if (arg_envp) {
 		guint len = 0;
-		const gchar** envp_temp = envp;
+		const gchar** envp_temp = arg_envp;
 		wchar_t* envp_concat;
 
 		while (*envp_temp) {
@@ -528,7 +534,7 @@ WindowsInferior::Spawn (const gchar *working_directory, const gchar **argv, cons
 		len++; /* add one for double NULL at end */
 		envp_concat = utf16_envp = (wchar_t *) g_malloc0 (len*sizeof (wchar_t));
 
-		envp_temp = envp;
+		envp_temp = arg_envp;
 		while (*envp_temp) {
 			gunichar2* utf16_envp_temp = g_utf8_to_utf16 (*envp_temp, -1, NULL, NULL, NULL);
 			int written = _snwprintf (envp_concat, len, L"%s%s", utf16_envp_temp, L"\0");
@@ -540,11 +546,10 @@ WindowsInferior::Spawn (const gchar *working_directory, const gchar **argv, cons
 		_snwprintf (envp_concat, len, L"%s", L"\0"); /* double NULL at end */
 	}
 
-	if (argv) {
-		gint argc = 0;
+	if (arg_argv) {
 		guint len = 0;
 		gint index = 0;
-		const gchar** argv_temp = argv;
+		const gchar** argv_temp = arg_argv;
 		wchar_t* argv_concat;
 
 		while (*argv_temp) {
@@ -552,15 +557,14 @@ WindowsInferior::Spawn (const gchar *working_directory, const gchar **argv, cons
 			argv_temp++;
 			argc++;
 		}
-		process->argc = argc;
-		process->argv = (gchar **) g_malloc0 ( (argc+1) * sizeof (gpointer));
+		argv = (gchar **) g_malloc0 ( (argc+1) * sizeof (gpointer));
 		argv_concat = utf16_argv = (wchar_t *) g_malloc0 (len*sizeof (wchar_t));
 
-		argv_temp = argv;
+		argv_temp = arg_argv;
 		while (*argv_temp) {
 			gunichar2* utf16_argv_temp = g_utf8_to_utf16 (*argv_temp, -1, NULL, NULL, NULL);
 			int written = _snwprintf (argv_concat, len, L"%s ", utf16_argv_temp);
-			process->argv [index++] = g_strdup (*argv_temp);
+			argv [index++] = g_strdup (*argv_temp);
 			g_free (utf16_argv_temp);
 			argv_concat += written;
 			len -= written;
@@ -601,15 +605,20 @@ WindowsInferior::Spawn (const gchar *working_directory, const gchar **argv, cons
 		return ERR_CANNOT_START_TARGET;
 	}
 
-	process->process_handle = pi.hProcess;
-	process->process_id = pi.dwProcessId;
+	process_handle = pi.hProcess;
+	process_id = pi.dwProcessId;
 
-	thread_handle = pi.hThread;
-	thread_id = pi.dwThreadId;
+	inferior = new WindowsInferior (this);
+
+	inferior->thread_handle = pi.hThread;
+	inferior->thread_id = pi.dwThreadId;
+
+	AddInferior (pi.dwThreadId, inferior);
+	main_process = this;
 
 	g_message (G_STRLOC ": SPAWN: %d/%d", pi.dwProcessId, pi.dwThreadId);
 
-	*out_process = process;
+	*out_inferior = inferior;
 	*out_thread_id = pi.dwThreadId;
 
 	return ERR_NONE;

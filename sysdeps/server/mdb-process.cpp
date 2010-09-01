@@ -1,5 +1,50 @@
 #include <mdb-process.h>
 
+GHashTable *MdbProcess::inferior_by_thread_id;
+MdbProcess *MdbProcess::main_process;
+
+void
+MdbProcess::Initialize (void)
+{
+	inferior_by_thread_id = g_hash_table_new (NULL, NULL);
+}
+
+MdbInferior *
+MdbProcess::GetInferiorByThreadId (guint32 thread_id)
+{
+	return (MdbInferior *) g_hash_table_lookup (inferior_by_thread_id, GUINT_TO_POINTER (thread_id));
+}
+
+void
+MdbProcess::AddInferior (guint32 thread_id, MdbInferior *inferior)
+{
+	g_hash_table_insert (inferior_by_thread_id, GUINT_TO_POINTER (thread_id), inferior);
+}
+
+MdbExeReader *
+MdbProcess::GetExeReader (const char *filename)
+{
+	MdbExeReader *reader;
+
+	reader = (MdbExeReader *) g_hash_table_lookup (exe_file_hash, filename);
+	if (reader)
+		return reader;
+
+	reader = mdb_server_create_exe_reader (filename);
+	g_hash_table_insert (exe_file_hash, g_strdup (filename), reader);
+
+	if (!main_reader)
+		main_reader = reader;
+
+	return reader;
+}
+
+MdbDisassembler *
+MdbProcess::GetDisassembler (MdbInferior *inferior)
+{
+	return main_reader->GetDisassembler (inferior);
+}
+
 ErrorCode
 MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 {
@@ -21,6 +66,40 @@ MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 			return ERR_NO_SUCH_INFERIOR;
 
 		InitializeProcess (inferior);
+		break;
+	}
+
+	case CMD_PROCESS_SPAWN: {
+		char *cwd, **argv, *error;
+		MdbInferior *inferior;
+		guint32 thread_id;
+		ErrorCode result;
+		int argc, i;
+
+		cwd = in->DecodeString ();
+		argc = in->DecodeInt ();
+
+		argv = g_new0 (char *, argc + 1);
+		for (i = 0; i < argc; i++)
+			argv [i] = in->DecodeString ();
+		argv [argc] = NULL;
+
+		if (!*cwd) {
+			g_free (cwd);
+			cwd = g_get_current_dir ();
+		}
+
+		result = Spawn (cwd, (const gchar **) argv, NULL, &inferior, &thread_id, &error);
+		if (result)
+			return result;
+
+		out->AddInt (inferior->GetID ());
+		out->AddInt (thread_id);
+
+		g_free (cwd);
+		for (i = 0; i < argc; i++)
+			g_free (argv [i]);
+		g_free (argv);
 		break;
 	}
 
@@ -50,7 +129,7 @@ MdbProcess::OnMainModuleLoaded (MdbExeReader *reader)
 MdbExeReader *
 MdbProcess::OnMainModuleLoaded (const char *filename)
 {
-	MdbExeReader *reader = server->GetExeReader (filename);
+	MdbExeReader *reader = GetExeReader (filename);
 	if (reader)
 		OnMainModuleLoaded (reader);
 	return reader;
@@ -73,7 +152,7 @@ MdbProcess::OnDllLoaded (MdbExeReader *reader)
 MdbExeReader *
 MdbProcess::OnDllLoaded (const char *filename)
 {
-	MdbExeReader *reader = server->GetExeReader (filename);
+	MdbExeReader *reader = GetExeReader (filename);
 	if (reader)
 		OnDllLoaded (reader);
 	return reader;

@@ -39,8 +39,8 @@ namespace Mono.Debugger
 
 				handle = main.GetBreakpointHandle (this, -1, -1);
 			} else {
-				OperatingSystemBackend os = frame.Thread.Process.OperatingSystem;
-				TargetAddress main = os.LookupSymbol ("main");
+				var process = frame.Thread.Process;
+				TargetAddress main = process.LookupSymbol ("main");
 				if (main.IsNull)
 					return null;
 

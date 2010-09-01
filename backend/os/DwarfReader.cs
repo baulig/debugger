@@ -125,12 +125,12 @@ namespace Mono.Debugger.Backend
 		ArrayList aranges;
 		Hashtable pubnames;
 		// Hashtable pubtypes;
-		TargetMemoryInfo target_info;
+		TargetInfo target_info;
 
 		public DwarfReader (OperatingSystemBackend os, ExecutableReader bfd, Module module)
 			: base (os, bfd, module)
 		{
-			this.target_info = bfd.TargetMemoryInfo;
+			this.target_info = bfd.TargetInfo;
 
 			debug_info_reader = create_reader (".debug_info", false);
 
@@ -199,10 +199,8 @@ namespace Mono.Debugger.Backend
 				return false;
 		}
 
-		public TargetMemoryInfo TargetMemoryInfo {
-			get {
-				return target_info;
-			}
+		public TargetInfo TargetInfo {
+			get { return target_info; }
 		}
 
 		protected TargetAddress GetAddress (long address)
@@ -213,11 +211,9 @@ namespace Mono.Debugger.Backend
 					"symbol file `" + NativeReader.FileName + "'");
 
 			if (NativeReader.BaseAddress.IsNull)
-				return new TargetAddress (
-					NativeReader.TargetMemoryInfo.AddressDomain, address);
+				return new TargetAddress (AddressDomain.Global, address);
 			else
-				return new TargetAddress (
-					NativeReader.TargetMemoryInfo.AddressDomain, NativeReader.BaseAddress.Address + address);
+				return NativeReader.BaseAddress + address;
 		}
 
 		protected ISymbolTable get_symtab_at_offset (long offset)
@@ -734,7 +730,7 @@ namespace Mono.Debugger.Backend
 		{
 			try {
 				byte[] contents = NativeReader.GetSectionContents ((string) user_data);
-				return new TargetBlob (contents, NativeReader.TargetMemoryInfo);
+				return new TargetBlob (contents, NativeReader.TargetInfo);
 			} catch {
 				Report.Debug (DebugFlags.DwarfReader,
 					      "{1} Can't find DWARF 2 debugging info in section `{0}'",
@@ -2923,7 +2919,7 @@ namespace Mono.Debugger.Backend
 						    byte[] data)
 			{
 				TargetBinaryReader locreader = new TargetBinaryReader (
-					data, comp_unit.DwarfReader.TargetMemoryInfo);
+					data, comp_unit.DwarfReader.TargetInfo);
 
 				byte opcode = locreader.ReadByte ();
 				bool is_regoffset;
@@ -3029,7 +3025,7 @@ namespace Mono.Debugger.Backend
 					throw new NotImplementedException ();
 
 				TargetBinaryReader locreader = new TargetBinaryReader (
-					location_block, comp_unit.DwarfReader.TargetMemoryInfo);
+					location_block, comp_unit.DwarfReader.TargetInfo);
 
 				byte opcode = locreader.ReadByte ();
 

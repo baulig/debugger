@@ -42,20 +42,26 @@ public:
 private:
 	bool Initialize (int pid);
 
+	ErrorCode Spawn (const gchar *working_directory,
+			 const gchar **argv, const gchar **envp,
+			 MdbInferior **out_inferior, guint32 *out_thread_id,
+			 gchar **out_error);
+
 	friend class PTraceInferior;
 };
 
 class PTraceInferior : public MdbInferior
 {
 public:
-	PTraceInferior (MdbServer *server)
-		: MdbInferior (server)
+	PTraceInferior (PTraceProcess *process, int pid)
+		: MdbInferior (process->server)
 	{
-		this->pid = -1;
+		this->process = process;
+		this->pid = pid;
 	}
 
-	PTraceInferior (MdbServer *server, PTraceProcess *process, int pid, bool stopped)
-		: MdbInferior (server)
+	PTraceInferior (PTraceProcess *process, int pid, bool stopped)
+		: MdbInferior (process->server)
 	{
 		this->process = process;
 		this->pid = pid;
@@ -74,11 +80,6 @@ public:
 	//
 	// MdbInferior
 	//
-
-	ErrorCode Spawn (const gchar *working_directory,
-			 const gchar **argv, const gchar **envp,
-			 MdbProcess **out_process, guint32 *out_thread_id,
-			 gchar **out_error);
 
 	ErrorCode GetSignalInfo (SignalInfo **sinfo);
 
@@ -139,12 +140,14 @@ private:
 
 	int pid;
 	bool stepping;
+
+	friend class PTraceProcess;
 };
 
-MdbInferior *
-mdb_inferior_new (MdbServer *server)
+MdbProcess *
+mdb_process_new (MdbServer *server)
 {
-	return new PTraceInferior (server);
+	return new PTraceProcess (server);
 }
 
 void
@@ -190,15 +193,16 @@ MdbInferior::GetTargetInfo (guint32 *target_int_size, guint32 *target_long_size,
 }
 
 ErrorCode
-PTraceInferior::Spawn (const gchar *working_directory, const gchar **argv, const gchar **envp,
-		       MdbProcess **out_process, guint32 *out_thread_id, gchar **out_error)
+PTraceProcess::Spawn (const gchar *working_directory, const gchar **argv, const gchar **envp,
+		      MdbInferior **out_inferior, guint32 *out_thread_id, gchar **out_error)
 {
-	int fd[2], ret, len, i;
+	PTraceInferior *inferior;
+	int fd[2], ret, pid, len, i;
 	ErrorCode result;
 
 	if (out_error)
 		*out_error = NULL;
-	*out_process = NULL;
+	*out_inferior = NULL;
 	*out_thread_id = 0;
 
 	pipe (fd);
@@ -255,19 +259,28 @@ PTraceInferior::Spawn (const gchar *working_directory, const gchar **argv, const
 
 	close (fd [0]);
 
-	if (!WaitForNewThread ())
+	inferior = new PTraceInferior (this, pid);
+
+	if (!inferior->WaitForNewThread ()) {
+		delete inferior;
 		return ERR_INTERNAL_ERROR;
+	}
 
-	result = SetupInferior ();
-	if (result)
+	result = inferior->SetupInferior ();
+	if (result) {
+		delete inferior;
 		return result;
+	}
 
-	process = new PTraceProcess (server);
-
-	if (!process->Initialize (pid))
+	if (!Initialize (pid)) {
+		delete inferior;
 		return ERR_CANNOT_START_TARGET;
+	}
 
-	*out_process = process;
+	AddInferior (pid, inferior);
+	main_process = this;
+
+	*out_inferior = inferior;
 	*out_thread_id = pid;
 
 	return ERR_NONE;
@@ -821,9 +834,9 @@ PTraceProcess::InitializeProcess (MdbInferior *inferior)
 MdbInferior *
 MdbServerLinux::CreateThread (MdbProcess *process, int pid, bool stopped)
 {
-	PTraceInferior *inferior = new PTraceInferior (this, (PTraceProcess *) process, pid, stopped);
+	PTraceInferior *inferior = new PTraceInferior ((PTraceProcess *) process, pid, stopped);
 
-	AddInferior (pid, inferior);
+	process->AddInferior (pid, inferior);
 
 	return inferior;
 }

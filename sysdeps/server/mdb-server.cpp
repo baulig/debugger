@@ -45,8 +45,6 @@ int WSAAPI getnameinfo(const struct sockaddr*,socklen_t,char*,DWORD,
 #endif
 #endif
 
-GHashTable *MdbServer::inferior_by_thread_id;
-
 void
 MdbServer::SendEvent (ServerEvent *e)
 {
@@ -69,7 +67,7 @@ main (int argc, char *argv[])
 		exit (-1);
 	}
 
-	MdbServer::inferior_by_thread_id = g_hash_table_new (NULL, NULL);
+	MdbProcess::Initialize ();
 
 	MdbInferior::Initialize ();
 
@@ -151,122 +149,6 @@ MdbServer::MainLoopIteration (void)
 	return connection->HandleIncomingRequest (this);
 }
 
-MdbExeReader *
-MdbServer::GetExeReader (const char *filename)
-{
-	MdbExeReader *reader;
-
-	reader = (MdbExeReader *) g_hash_table_lookup (exe_file_hash, filename);
-	if (reader)
-		return reader;
-
-	reader = mdb_server_create_exe_reader (filename);
-	g_hash_table_insert (exe_file_hash, g_strdup (filename), reader);
-
-	if (!main_reader)
-		main_reader = reader;
-
-	return reader;
-}
-
-MdbDisassembler *
-MdbServer::GetDisassembler (MdbInferior *inferior)
-{
-	return main_reader->GetDisassembler (inferior);
-}
-
-MdbInferior *
-MdbServer::GetInferiorByThreadId (guint32 thread_id)
-{
-	return (MdbInferior *) g_hash_table_lookup (inferior_by_thread_id, GUINT_TO_POINTER (thread_id));
-}
-
-void
-MdbServer::AddInferior (guint32 thread_id, MdbInferior *inferior)
-{
-	g_hash_table_insert (inferior_by_thread_id, GUINT_TO_POINTER (thread_id), inferior);
-}
-
-#if WINDOWS
-
-typedef struct {
-	MdbInferior *inferior;
-	const gchar *cwd;
-	const gchar **argv;
-	const gchar **envp;
-	ErrorCode result;
-	MdbProcess *process;
-	guint32 thread_id;
-	gchar *error;
-} SpawnData;
-
-static void
-spawn_proxy (gpointer user_data)
-{
-	SpawnData *data = (SpawnData *) user_data;
-
-	data->result = data->inferior->Spawn (data->cwd, data->argv, data->envp, &data->process, &data->thread_id, &data->error);
-}
-#endif
-
-ErrorCode
-MdbServer::Spawn (const gchar *working_directory, const gchar **argv, const gchar **envp,
-		  MdbProcess **out_process, MdbInferior **out_inferior,
-		  guint32 *out_thread_id, gchar **out_error)
-{
-	MdbInferior *inferior;
-	ErrorCode result;
-	guint32 thread_id;
-	gchar *error;
-
-	inferior = mdb_inferior_new (this);
-
-#if WINDOWS
-	{
-		SpawnData *data = g_new0 (SpawnData, 1);
-		InferiorDelegate delegate;
-
-		data->inferior = inferior;
-		data->cwd = working_directory;
-		data->argv = argv;
-		data->envp = envp;
-
-		delegate.func = spawn_proxy;
-		delegate.user_data = data;
-
-		if (!InferiorCommand (&delegate))
-			result = ERR_NOT_STOPPED;
-		else {
-			result = data->result;
-			main_process = data->process;
-			thread_id = data->thread_id;
-			error = data->error;
-		}
-	}
-#else
-	result = inferior->Spawn (working_directory, argv, envp, &main_process, &thread_id, &error);
-#endif
-
-	if (result) {
-		*out_process = NULL;
-		*out_inferior = NULL;
-		*out_thread_id = 0;
-		if (out_error)
-			*out_error = error;
-		delete inferior;
-		return result;
-	}
-
-	g_hash_table_insert (inferior_by_thread_id, GUINT_TO_POINTER (thread_id), inferior);
-
-	*out_process = main_process;
-	*out_inferior = inferior;
-	*out_thread_id = thread_id;
-	if (out_error)
-		*out_error = error;
-	return ERR_NONE;
-}
-
 ErrorCode
 MdbServer::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 {
@@ -306,41 +188,12 @@ MdbServer::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		break;
 	}
 
-	case CMD_SERVER_SPAWN: {
-		char *cwd, **argv, *error;
-		MdbInferior *inferior;
+	case CMD_SERVER_CREATE_PROCESS: {
 		MdbProcess *process;
-		guint32 thread_id;
-		ErrorCode result;
-		int argc, i;
 
-		cwd = in->DecodeString ();
-		argc = in->DecodeInt ();
-
-		argv = g_new0 (char *, argc + 1);
-		for (i = 0; i < argc; i++)
-			argv [i] = in->DecodeString ();
-		argv [argc] = NULL;
-
-		if (!*cwd) {
-			g_free (cwd);
-			cwd = g_get_current_dir ();
-		}
-
-		result = Spawn (cwd, (const gchar **) argv, NULL, &process, &inferior, &thread_id, &error);
-		if (result)
-			return result;
-
+		process = mdb_process_new (this);
 		out->AddInt (process->GetID ());
-		out->AddInt (inferior->GetID ());
-		out->AddInt (thread_id);
-
-		g_free (cwd);
-		for (i = 0; i < argc; i++)
-			g_free (argv [i]);
-		g_free (argv);
 		break;
-
 	}
 
 	default:

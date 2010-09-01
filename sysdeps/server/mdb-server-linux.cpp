@@ -116,7 +116,7 @@ MdbServerLinux::HandleExtendedWaitEvent (MdbProcess *process, int pid, int statu
 			return true;
 		}
 
-		new_inferior = GetInferiorByThreadId (new_pid);
+		new_inferior = MdbProcess::GetInferiorByThreadId (new_pid);
 
 		//
 		// We already got a stop event for this new thread.
@@ -212,7 +212,7 @@ MdbServerLinux::HandleLinuxWaitEvent (void)
 	} else if (pid == 0)
 		return;
 
-	inferior = GetInferiorByThreadId (pid);
+	inferior = MdbProcess::GetInferiorByThreadId (pid);
 
 	if (!inferior) {
 		//
@@ -221,7 +221,7 @@ MdbServerLinux::HandleLinuxWaitEvent (void)
 		// PTRACE_EVENT_CLONE.
 		//
 
-		process = GetMainProcess ();
+		process = MdbProcess::GetMainProcess ();
 
 		if (WIFSTOPPED (status)) {
 			ServerEvent *e;

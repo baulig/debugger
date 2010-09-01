@@ -27,13 +27,11 @@ namespace Mono.Debugger.Backend
 			this.debugger = debugger;
 			this.debugger_server = server;
 
-			thread_hash = Hashtable.Synchronized (new Hashtable ());
-			engine_hash = Hashtable.Synchronized (new Hashtable ());
-			processes = ArrayList.Synchronized (new ArrayList ());
-
 			address_domain = AddressDomain.Global;
 
 			sse_by_inferior = new Dictionary<int, SingleSteppingEngine> ();
+			process_by_id = new Dictionary<int, Process> ();
+			exe_reader_by_id = new Dictionary<int, ExecutableReader> ();
 
 			event_queue = new DebuggerEventQueue<Event> ("event_queue");
 
@@ -42,9 +40,6 @@ namespace Mono.Debugger.Backend
 		}
 
 		protected readonly Debugger debugger;
-		protected Hashtable thread_hash;
-		protected Hashtable engine_hash;
-		protected ArrayList processes;
 
 		protected readonly AddressDomain address_domain;
 		protected readonly DebuggerServer debugger_server;
@@ -87,7 +82,7 @@ namespace Mono.Debugger.Backend
 			public void Dispose ()
 			{
 				if (ready_event != null) {
-					ready_event.Dispose ();
+					((IDisposable) ready_event).Dispose ();
 					ready_event = null;
 				}
 			}
@@ -142,6 +137,9 @@ namespace Mono.Debugger.Backend
 		}
 
 		Dictionary<int, SingleSteppingEngine> sse_by_inferior;
+		Dictionary<int, Process> process_by_id;
+		Dictionary<int, ExecutableReader> exe_reader_by_id;
+
 		Process main_process;
 
 		internal void AddEngine (IInferior inferior, SingleSteppingEngine sse)
@@ -151,12 +149,14 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		void OnDllLoaded (IExecutableReader reader)
+		void OnDllLoaded (Process process, IExecutableReader reader)
 		{
 			Console.WriteLine ("DLL LOADED: {0}", reader.FileName);
 
-			var exe = new ExecutableReader (main_process, null, reader);
+			var exe = new ExecutableReader (process, TargetInfo, reader);
+			exe_reader_by_id.Add (reader.ID, exe);
 			exe.ReadDebuggingInfo ();
+			process.OnDllLoaded (exe);
 		}
 
 		void OnThreadCreated (IInferior inferior)
@@ -188,7 +188,8 @@ namespace Mono.Debugger.Backend
 			switch (e.Type) {
 			case ServerEventType.MainModuleLoaded:
 			case ServerEventType.DllLoaded:
-				OnDllLoaded ((IExecutableReader) e.ArgumentObject);
+				var process = (IProcess) e.Sender;
+				OnDllLoaded (process_by_id [process.ID], (IExecutableReader) e.ArgumentObject);
 				break;
 
 			case ServerEventType.ThreadCreated:
@@ -206,21 +207,18 @@ namespace Mono.Debugger.Backend
 		}
 #endif
 
+#if FIXME
 		internal void AddEngine (SingleSteppingEngine engine)
 		{
 			thread_hash.Add (engine.PID, engine);
 			engine_hash.Add (engine.ID, engine);
 		}
 
-		internal void RemoveProcess (Process process)
-		{
-			processes.Remove (process);
-		}
-
 		internal SingleSteppingEngine GetEngine (int id)
 		{
 			return (SingleSteppingEngine) engine_hash [id];
 		}
+#endif
 
 		public bool HasTarget {
 			get { return debugger_server != null; }
@@ -293,8 +291,6 @@ namespace Mono.Debugger.Backend
 
 			if ((cevent.Type == ServerEventType.Exited) ||
 			    (cevent.Type == ServerEventType.Signaled)) {
-				thread_hash.Remove (engine.PID);
-				engine_hash.Remove (engine.ID);
 				engine.OnThreadExited (cevent);
 				resume_target = false;
 				return true;
@@ -317,20 +313,16 @@ namespace Mono.Debugger.Backend
 		}
 
 		internal bool InBackgroundThread {
-			get { return true; }
+			get { return ST.Thread.CurrentThread == engine_thread; }
 		}
 
 		internal DebuggerServer DebuggerServer {
 			get { return debugger_server; }
 		}
 
-		internal object SendCommand (SingleSteppingEngine sse, TargetAccessDelegate target, object user_data)
+		object DoSendCommand (TargetDelegate dlg)
 		{
 			event_queue.Lock ();
-
-			var dlg = new TargetDelegate (delegate {
-				return target (sse.Thread, user_data);
-			});
 
 			var e = new Event (dlg);
 			event_queue.Enqueue (e);
@@ -343,12 +335,23 @@ namespace Mono.Debugger.Backend
 			return e.Wait ();
 		}
 
+		internal object SendCommand (SingleSteppingEngine sse, TargetAccessDelegate target, object user_data)
+		{
+			return DoSendCommand (delegate {
+				return target (sse.Thread, user_data);
+			});
+		}
+
 		public Process StartApplication (ProcessStart start, out CommandResult result)
 		{
-			Process process = main_process = new Process (this, start);
-			processes.Add (process);
+			var server_process = debugger_server.CreateProcess ();
 
-			result = process.StartApplication ();
+			var process = main_process = new Process (this, server_process, start);
+			process_by_id.Add (server_process.ID, process);
+
+			result = (CommandResult) DoSendCommand (delegate {
+				return process.StartApplication ();
+			});
 
 			return process;
 		}
@@ -366,14 +369,13 @@ namespace Mono.Debugger.Backend
 			throw new TargetException (error);
 		}
 
-		public TargetInfo GetTargetInfo ()
-		{
-			return debugger_server.GetTargetInfo ();
+		public TargetInfo TargetInfo {
+			get { return debugger_server.TargetInfo; }
 		}
 
 		public TargetMemoryInfo GetTargetMemoryInfo (AddressDomain domain)
 		{
-			return new TargetMemoryInfo (debugger_server.GetTargetInfo (), domain);
+			return new TargetMemoryInfo (TargetInfo, domain);
 		}
 
 		public bool HasThreadEvents {
@@ -399,6 +401,7 @@ namespace Mono.Debugger.Backend
 
 		public OperatingSystemBackend CreateOperatingSystemBackend (Process process)
 		{
+#if FIXME
 			switch (debugger_server.Type) {
 			case ServerType.LinuxPTrace:
 				return new LinuxOperatingSystem (process);
@@ -409,6 +412,9 @@ namespace Mono.Debugger.Backend
 			default:
 				throw new NotSupportedException (String.Format ("Unknown server type {0}.", debugger_server.Type));
 			}
+#else
+			return new OperatingSystemBackend (process);
+#endif
 		}
 
 
@@ -423,8 +429,7 @@ namespace Mono.Debugger.Backend
 
 		protected virtual void DoDispose ()
 		{
-			Process[] procs = new Process [processes.Count];
-			processes.CopyTo (procs, 0);
+			var procs = process_by_id.Values.ToArray ();
 
 			for (int i = 0; i < procs.Length; i++)
 				procs [i].Dispose ();

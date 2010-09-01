@@ -29,11 +29,6 @@ public:
 	static ErrorCode GetTargetInfo (guint32 *out_target_int_size, guint32 *out_target_long_size,
 					guint32 *out_target_address_size, guint32 *out_is_bigendian);
 
-	virtual ErrorCode Spawn (const gchar *working_directory,
-				 const gchar **argv, const gchar **envp,
-				 MdbProcess **out_process, guint32 *out_thread_id,
-				 gchar **out_error) = 0;
-
 	virtual ErrorCode GetSignalInfo (SignalInfo **sinfo) = 0;
 
 	virtual ErrorCode GetApplication (gchar **out_exe_file, gchar **out_cwd,
@@ -131,7 +126,5 @@ protected:
 
 	friend MdbArch *mdb_arch_new (MdbInferior *inferior);
 };
-
-extern MdbInferior *mdb_inferior_new (MdbServer *server);
 
 #endif

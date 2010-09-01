@@ -1,6 +1,7 @@
 using System;
 
 using Mono.Debugger.Server;
+using Mono.Debugger.Backend;
 
 namespace Mono.Debugger.MdbServer
 {
@@ -25,7 +26,8 @@ namespace Mono.Debugger.MdbServer
 
 		enum CmdProcess {
 			GET_MAIN_READER = 1,
-			INITIALIZE_PROCESS = 2
+			INITIALIZE_PROCESS = 2,
+			SPAWN =3
 		}
 
 		public MdbExeReader MainReader {
@@ -49,6 +51,40 @@ namespace Mono.Debugger.MdbServer
 		void IProcess.InitializeProcess (IInferior inferior)
 		{
 			InitializeProcess ((MdbInferior) inferior);
+		}
+
+		public MdbInferior Spawn (string cwd, string[] argv, string[] envp)
+		{
+			var writer = new Connection.PacketWriter ();
+			writer.WriteId (ID);
+			writer.WriteString (cwd ?? "");
+
+			int argc = argv.Length;
+			if (argv[argc - 1] == null)
+				argc--;
+			writer.WriteInt (argc);
+			for (int i = 0; i < argc; i++)
+				writer.WriteString (argv[i] ?? "dummy");
+			var reader = Connection.SendReceive (CommandSet.PROCESS, (int) CmdProcess.SPAWN, writer);
+			int inferior_iid = reader.ReadInt ();
+			int pid = reader.ReadInt ();
+
+			return new MdbInferior (Connection, inferior_iid);
+		}
+
+		IInferior IProcess.Spawn (string cwd, string[] argv, string[] envp)
+		{
+			return Spawn (cwd, argv, envp);
+		}
+
+		public MdbInferior Attach (int pid)
+		{
+			throw new NotImplementedException ();
+		}
+
+		IInferior IProcess.Attach (int pid)
+		{
+			return Attach (pid);
 		}
 	}
 }

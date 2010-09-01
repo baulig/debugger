@@ -9,6 +9,10 @@ namespace Mono.Debugger
 		public readonly byte[] Contents;
 		public readonly TargetMemoryInfo TargetMemoryInfo;
 
+		public TargetBlob (byte[] contents, TargetInfo target_info)
+			: this (contents, new TargetMemoryInfo (target_info, AddressDomain.Global))
+		{ }
+
 		public TargetBlob (byte[] contents, TargetMemoryInfo target_info)
 		{
 			this.Contents = contents;

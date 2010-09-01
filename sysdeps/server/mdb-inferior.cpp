@@ -89,7 +89,7 @@ gchar *
 MdbInferior::DisassembleInstruction (guint64 address, guint32 *out_insn_size)
 {
 	if (!disassembler)
-		disassembler = server->GetDisassembler (this);
+		disassembler = GetProcess ()->GetDisassembler (this);
 
 	return disassembler->DisassembleInstruction (address, out_insn_size);
 }

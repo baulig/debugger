@@ -50,9 +50,6 @@ namespace Mono.Debugger.Server
 			get;
 		}
 
-		IInferior Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp,
-				 out IProcess process);
-
-		IInferior Attach (SingleSteppingEngine sse, int pid, out IProcess process);
+		IProcess CreateProcess ();
 	}
 }

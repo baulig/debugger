@@ -8,6 +8,10 @@ namespace Mono.Debugger
 	[Serializable]
 	public class TargetBinaryReader : TargetBinaryAccess
 	{
+		public TargetBinaryReader (byte[] contents, TargetInfo target_info)
+			: base (new TargetBlob (contents, target_info))
+		{ }
+
 		public TargetBinaryReader (byte[] contents, TargetMemoryInfo target_info)
 			: base (new TargetBlob (contents, target_info))
 		{ }

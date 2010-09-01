@@ -304,6 +304,23 @@ inferior_command_proxy (gpointer user_data)
 	data->ret = data->inferior->ProcessCommand (data->command, data->id, data->in, data->out);
 }
 
+typedef struct {
+	int command;
+	int id;
+	MdbProcess *process;
+	Buffer *in;
+	Buffer *out;
+	ErrorCode ret;
+} ProcessData;
+
+static void
+process_command_proxy (gpointer user_data)
+{
+	ProcessData *data = (ProcessData *) user_data;
+
+	data->ret = data->process->ProcessCommand (data->command, data->id, data->in, data->out);
+}
+
 #endif
 
 bool
@@ -365,7 +382,7 @@ Connection::HandleIncomingRequest (MdbServer *server)
 	case CMD_SET_INFERIOR: {
 #if WINDOWS
 		InferiorDelegate delegate;
-		InferiorData *inferior_data;
+		InferiorData inferior_data;
 #endif
 		MdbInferior *inferior;
 		int iid;
@@ -379,21 +396,19 @@ Connection::HandleIncomingRequest (MdbServer *server)
 		}
 
 #if WINDOWS
-		inferior_data = g_new0 (InferiorData, 1);
-
-		inferior_data->command = command;
-		inferior_data->id = id;
-		inferior_data->inferior = inferior;
-		inferior_data->in = in;
-		inferior_data->out = buf;
+		inferior_data.command = command;
+		inferior_data.id = id;
+		inferior_data.inferior = inferior;
+		inferior_data.in = in;
+		inferior_data.out = buf;
 
 		delegate.func = inferior_command_proxy;
-		delegate.user_data = inferior_data;
+		delegate.user_data = &inferior_data;
 
 		if (!server->InferiorCommand (&delegate))
 			err = ERR_NOT_STOPPED;
 		else
-			err = inferior_data->ret;
+			err = inferior_data.ret;
 
 		break;
 #else
@@ -435,6 +450,10 @@ Connection::HandleIncomingRequest (MdbServer *server)
 	}
 
 	case CMD_SET_PROCESS: {
+#if WINDOWS
+		InferiorDelegate delegate;
+		ProcessData process_data;
+#endif
 		MdbProcess *process;
 		int iid;
 
@@ -446,7 +465,23 @@ Connection::HandleIncomingRequest (MdbServer *server)
 			break;
 		}
 
+#if WINDOWS
+		process_data.command = command;
+		process_data.id = id;
+		process_data.process = process;
+		process_data.in = in;
+		process_data.out = buf;
+
+		delegate.func = process_command_proxy;
+		delegate.user_data = &process_data;
+
+		if (!server->InferiorCommand (&delegate))
+			err = ERR_NOT_STOPPED;
+		else
+			err = process_data.ret;
+#else
 		err = process->ProcessCommand (command, id, in, buf);
+#endif
 		break;
 	}
 

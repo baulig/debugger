@@ -26,11 +26,10 @@ namespace Mono.Debugger.Backend
 		TargetAddress end_address = TargetAddress.Null;
 		TargetAddress base_address = TargetAddress.Null;
 
-		public ExecutableReader (Process process, TargetMemoryInfo memory_info,
-					 IExecutableReader reader)
+		public ExecutableReader (Process process, TargetInfo target_info, IExecutableReader reader)
 		{
 			this.Process = process;
-			this.TargetMemoryInfo = memory_info;
+			this.TargetInfo = target_info;
 			this.reader = reader;
 
 			if (DwarfReader.IsSupported (this))
@@ -59,7 +58,7 @@ namespace Mono.Debugger.Backend
 			get { return Process.OperatingSystem; }
 		}
 
-		public TargetMemoryInfo TargetMemoryInfo {
+		public TargetInfo TargetInfo {
 			get; private set;
 		}
 
@@ -85,7 +84,7 @@ namespace Mono.Debugger.Backend
 
 		TargetAddress create_address (long addr)
 		{
-			return addr != 0 ? new TargetAddress (TargetMemoryInfo.AddressDomain, addr) : TargetAddress.Null;
+			return addr != 0 ? new TargetAddress (AddressDomain.Global, addr) : TargetAddress.Null;
 		}
 
 		public bool IsContinuous {

@@ -50,7 +50,7 @@ namespace Mono.Debugger.MdbServer
 			GET_ARCH_TYPE = 3,
 			GET_CAPABILITIES = 4,
 			GET_BPM = 5,
-			SPAWN = 6
+			CREATE_PROCESS = 6
 		}
 
 		public TargetInfo TargetInfo {
@@ -102,56 +102,15 @@ namespace Mono.Debugger.MdbServer
 			get { return BreakpointManager; }
 		}
 
-		public MdbInferior Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp,
-					  out MdbProcess process)
+		public MdbProcess CreateProcess ()
 		{
-			var writer = new Connection.PacketWriter ();
-			writer.WriteString (cwd ?? "");
-
-			int argc = argv.Length;
-			if (argv [argc-1] == null)
-				argc--;
-			writer.WriteInt (argc);
-			for (int i = 0; i < argc; i++)
-				writer.WriteString (argv [i] ?? "dummy");
-			var reader = Connection.SendReceive (CommandSet.SERVER, (int)CmdServer.SPAWN, writer);
-			int process_iid = reader.ReadInt ();
-			int inferior_iid = reader.ReadInt ();
-			int pid = reader.ReadInt ();
-			process = main_process = new MdbProcess (Connection, process_iid);
-
-			main_sse = sse;
-			manager = sse.ThreadManager;
-			this.process = sse.Process;
-
-			var inferior = new MdbInferior (Connection, inferior_iid);
-			manager.AddEngine (inferior, sse);
-
-			Console.WriteLine ("SPAWN: {0}", inferior_iid);
-
-			return inferior;
+			var proc_iid = Connection.SendReceive (CommandSet.SERVER, (int) CmdServer.CREATE_PROCESS, null).ReadInt ();
+			return new MdbProcess (Connection, proc_iid);
 		}
 
-		IInferior IDebuggerServer.Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp,
-						 out IProcess process)
+		IProcess IDebuggerServer.CreateProcess ()
 		{
-			MdbProcess mdb_process;
-			var inferior = Spawn (sse, cwd, argv, envp, out mdb_process);
-			process = mdb_process;
-			return inferior;
-		}
-
-		public MdbInferior Attach (SingleSteppingEngine sse, int pid, out MdbProcess process)
-		{
-			throw new NotImplementedException ();
-		}
-
-		IInferior IDebuggerServer.Attach (SingleSteppingEngine sse, int pid, out IProcess process)
-		{
-			MdbProcess mdb_process;
-			var inferior = Attach (sse, pid, out mdb_process);
-			process = mdb_process;
-			return inferior;
+			return CreateProcess ();
 		}
 	}
 }

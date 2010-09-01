@@ -66,10 +66,6 @@ class MdbServer : public ServerObject
 public:
 	static bool Initialize (void);
 
-	MdbExeReader *GetExeReader (const char *filename);
-
-	MdbDisassembler *GetDisassembler (MdbInferior *inferior);
-
 	BreakpointManager *GetBreakpointManager (void)
 	{
 		return bpm;
@@ -81,33 +77,16 @@ public:
 	bool InferiorCommand (InferiorDelegate *delegate);
 #endif
 
-	ErrorCode Spawn (const gchar *working_directory,
-			 const gchar **argv, const gchar **envp,
-			 MdbProcess **out_process, MdbInferior **out_inferior,
-			 guint32 *out_thread_id, gchar **out_error);
-
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
 protected:
-	static MdbInferior *GetInferiorByThreadId (guint32 thread_id);
-
-	static void AddInferior (guint32 thread_id, MdbInferior *inferior);
-
 	virtual void MainLoop (int conn_fd) = 0;
-
-	MdbProcess *GetMainProcess (void)
-	{
-		return main_process;
-	}
 
 	bool MainLoopIteration (void);
 
 	MdbServer (Connection *connection) : ServerObject (SERVER_OBJECT_KIND_SERVER)
 	{
 		this->connection = connection;
-		exe_file_hash = g_hash_table_new (NULL, NULL);
-		main_reader = NULL;
-		main_process = NULL;
 
 		bpm = new BreakpointManager ();
 	}
@@ -115,16 +94,9 @@ protected:
 	friend int main (int argc, char *argv []);
 
 private:
-	MdbExeReader *main_reader;
-	GHashTable *exe_file_hash;
-
 	BreakpointManager *bpm;
 
-	MdbProcess *main_process;
-
 	Connection *connection;
-
-	static GHashTable *inferior_by_thread_id;
 };
 
 extern MdbServer *mdb_server_new (Connection *connection);
