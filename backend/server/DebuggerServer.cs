@@ -17,19 +17,17 @@ namespace Mono.Debugger.Server
 	{
 		IDebuggerServer server;
 
-		protected DebuggerServer (Debugger debugger, IDebuggerServer server)
+		protected DebuggerServer (Debugger debugger, IPEndPoint endpoint)
 		{
-			this.server = server;
-
 			Debugger = debugger;
 			ThreadManager = new ThreadManager (debugger, this);
+
+			server = Connection.Connect (ThreadManager, endpoint);
 		}
 
 		public static DebuggerServer Connect (Debugger debugger, IPEndPoint endpoint)
 		{
-			var server = Connection.Connect (endpoint);
-
-			return new DebuggerServer (debugger, server);
+			return new DebuggerServer (debugger, endpoint);
 		}
 
 		public Debugger Debugger {

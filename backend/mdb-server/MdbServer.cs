@@ -17,16 +17,31 @@ namespace Mono.Debugger.MdbServer
 
 		public MdbServer (Connection connection)
 			: base (connection, -1, ServerObjectKind.Server)
+		{ }
+
+		bool initialized;
+		TargetInfo target_info;
+		ServerType server_type;
+		ArchType arch_type;
+		ServerCapabilities capabilities;
+		MdbBreakpointManager bpm;
+
+		void initialize ()
 		{
-			var info_reader = connection.SendReceive (CommandSet.SERVER, (int)CmdServer.GET_TARGET_INFO, null);
-			TargetInfo = new TargetInfo (info_reader.ReadInt (), info_reader.ReadInt (), info_reader.ReadInt (), info_reader.ReadByte () != 0);
+			if (initialized)
+				return;
 
-			ServerType = (ServerType) connection.SendReceive (CommandSet.SERVER, (int)CmdServer.GET_SERVER_TYPE, null).ReadInt ();
-			ArchType = (ArchType) connection.SendReceive (CommandSet.SERVER, (int)CmdServer.GET_ARCH_TYPE, null).ReadInt ();
-			Capabilities = (ServerCapabilities) connection.SendReceive (CommandSet.SERVER, (int)CmdServer.GET_CAPABILITIES, null).ReadInt ();
+			var info_reader = Connection.SendReceive (CommandSet.SERVER, (int) CmdServer.GET_TARGET_INFO, null);
+			target_info = new TargetInfo (info_reader.ReadInt (), info_reader.ReadInt (), info_reader.ReadInt (), info_reader.ReadByte () != 0);
 
-			var bpm_iid = connection.SendReceive (CommandSet.SERVER, (int)CmdServer.GET_BPM, null).ReadInt ();
-			BreakpointManager = new MdbBreakpointManager (connection, bpm_iid);
+			server_type = (ServerType) Connection.SendReceive (CommandSet.SERVER, (int) CmdServer.GET_SERVER_TYPE, null).ReadInt ();
+			arch_type = (ArchType) Connection.SendReceive (CommandSet.SERVER, (int) CmdServer.GET_ARCH_TYPE, null).ReadInt ();
+			capabilities = (ServerCapabilities) Connection.SendReceive (CommandSet.SERVER, (int) CmdServer.GET_CAPABILITIES, null).ReadInt ();
+
+			var bpm_iid = Connection.SendReceive (CommandSet.SERVER, (int) CmdServer.GET_BPM, null).ReadInt ();
+			bpm = new MdbBreakpointManager (Connection, bpm_iid);
+
+			initialized = true;
 		}
 
 		enum CmdServer {
@@ -39,30 +54,53 @@ namespace Mono.Debugger.MdbServer
 		}
 
 		public TargetInfo TargetInfo {
-			get; private set;
+			get {
+				lock (this) {
+					initialize ();
+					return target_info;
+				}
+			}
 		}
 
 		public ServerType ServerType {
-			get; private set;
+			get {
+				lock (this) {
+					initialize ();
+					return server_type;
+				}
+			}
 		}
 
 		public ArchType ArchType {
-			get; private set;
+			get {
+				lock (this) {
+					initialize ();
+					return arch_type;
+				}
+			}
 		}
 
 		public ServerCapabilities Capabilities {
-			get; private set;
+			get {
+				lock (this) {
+					initialize ();
+					return capabilities;
+				}
+			}
 		}
 
 		public MdbBreakpointManager BreakpointManager {
-			get; private set;
+			get {
+				lock (this) {
+					initialize ();
+					return bpm;
+				}
+			}
 		}
 
 		IBreakpointManager IDebuggerServer.BreakpointManager {
 			get { return BreakpointManager; }
 		}
-
-		Dictionary<int,SingleSteppingEngine> sse_by_inferior = new Dictionary<int,SingleSteppingEngine> ();
 
 		public MdbInferior Spawn (SingleSteppingEngine sse, string cwd, string[] argv, string[] envp,
 					  out MdbProcess process)
@@ -87,7 +125,7 @@ namespace Mono.Debugger.MdbServer
 			this.process = sse.Process;
 
 			var inferior = new MdbInferior (Connection, inferior_iid);
-			sse_by_inferior.Add (inferior_iid, sse);
+			manager.AddEngine (inferior, sse);
 
 			Console.WriteLine ("SPAWN: {0}", inferior_iid);
 
@@ -114,51 +152,6 @@ namespace Mono.Debugger.MdbServer
 			var inferior = Attach (sse, pid, out mdb_process);
 			process = mdb_process;
 			return inferior;
-		}
-
-		void OnDllLoaded (MdbExeReader reader)
-		{
-			Console.WriteLine ("DLL LOADED: {0}", reader.FileName);
-
-			var exe = new ExecutableReader (process, main_sse.TargetMemoryInfo, reader);
-			exe.ReadDebuggingInfo ();
-		}
-
-		void OnThreadCreated (MdbInferior inferior)
-		{
-			Console.WriteLine ("THREAD CREATED: {0}", inferior.ID);
-
-			var sse = process.ThreadCreated (main_process, inferior);
-			sse_by_inferior.Add (inferior.ID, sse);
-		}
-
-		internal void HandleEvent (ServerEvent e)
-		{
-			Console.WriteLine ("SERVER EVENT: {0} {1}", e, DebuggerWaitHandle.CurrentThread);
-
-			if (e.Sender.Kind == ServerObjectKind.Inferior) {
-				var inferior = (MdbInferior) e.Sender;
-				Console.WriteLine ("INFERIOR EVENT: {0}", inferior.ID);
-
-				if (!sse_by_inferior.ContainsKey (inferior.ID)) {
-					Console.WriteLine ("UNKNOWN INFERIOR !");
-					return;
-				}
-
-				var sse = sse_by_inferior[inferior.ID];
-				sse.ProcessEvent (e);
-			}
-
-			switch (e.Type) {
-			case ServerEventType.MainModuleLoaded:
-			case ServerEventType.DllLoaded:
-				OnDllLoaded ((MdbExeReader) e.ArgumentObject);
-				break;
-
-			case ServerEventType.ThreadCreated:
-				OnThreadCreated ((MdbInferior) e.ArgumentObject);
-				break;
-			}
 		}
 	}
 }

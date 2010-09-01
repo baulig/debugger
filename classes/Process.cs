@@ -164,6 +164,8 @@ namespace Mono.Debugger
 		ThreadServant main_thread;
 		Hashtable thread_hash;
 
+		IProcess server_process;
+
 		MyOperationHost operation_host;
 
 		Process parent;
@@ -333,7 +335,7 @@ namespace Mono.Debugger
 			get { return operation_host; }
 		}
 
-		internal SingleSteppingEngine ThreadCreated (IProcess server_process, IInferior server_inferior)
+		internal SingleSteppingEngine ThreadCreated (IInferior server_inferior)
 		{
 			var sse = new SingleSteppingEngine (manager, this, server_process, server_inferior);
 			OnThreadCreatedEvent (sse);
@@ -479,6 +481,7 @@ namespace Mono.Debugger
 			initialized = true;
 
 			this.main_thread = engine;
+			this.server_process = engine.Inferior.ProcessHandle;
 			engine.Thread.ThreadFlags |= Thread.Flags.StopOnExit;
 
 			if (thread_hash.Contains (engine.PID))

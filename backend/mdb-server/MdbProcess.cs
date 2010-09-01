@@ -8,11 +8,19 @@ namespace Mono.Debugger.MdbServer
 	{
 		public MdbProcess (Connection connection, int id)
 			: base (connection, id, ServerObjectKind.Process)
+		{ }
+
+		bool initialized;
+		MdbExeReader main_reader;
+
+		void initialize ()
 		{
-#if FIXME
-			int reader_iid = connection.SendReceive (CommandSet.PROCESS, (int)CmdProcess.GET_MAIN_READER, new Connection.PacketWriter ().WriteInt (ID)).ReadInt ();
-			MainReader = new MdbExeReader (connection, reader_iid);
-#endif
+			if (initialized)
+				return;
+
+			int reader_iid = Connection.SendReceive (CommandSet.PROCESS, (int) CmdProcess.GET_MAIN_READER, new Connection.PacketWriter ().WriteInt (ID)).ReadInt ();
+			main_reader = new MdbExeReader (Connection, reader_iid);
+			initialized = true;
 		}
 
 		enum CmdProcess {
@@ -21,7 +29,12 @@ namespace Mono.Debugger.MdbServer
 		}
 
 		public MdbExeReader MainReader {
-			get; private set;
+			get { 
+				lock (this) {
+					initialize ();
+					return main_reader;
+				}
+			}
 		}
 
 		IExecutableReader IProcess.MainReader {

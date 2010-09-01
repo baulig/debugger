@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ST = System.Threading;
 using SD = System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -103,11 +104,15 @@ namespace Mono.Debugger.Backend
 		{ }
 	}
 
-	internal class DebuggerEventQueue : DebuggerMutex
+	internal class DebuggerEventQueue<T> : DebuggerMutex
 	{
+		Queue<T> queue;
+
 		public DebuggerEventQueue (string name)
 			: base (name)
-		{ }
+		{
+			queue = new Queue<T> ();
+		}
 
 		public void Wait ()
 		{
@@ -127,6 +132,29 @@ namespace Mono.Debugger.Backend
 		{
 			Debug ("{0} signal {1}", CurrentThread, Name);
 			ST.Monitor.Pulse (this);
+		}
+
+		public int Count
+		{
+			get {
+				lock (queue) {
+					return queue.Count;
+				}
+			}
+		}
+
+		public T Dequeue ()
+		{
+			lock (queue) {
+				return queue.Dequeue ();
+			}
+		}
+
+		public void Enqueue (T item)
+		{
+			lock (queue) {
+				queue.Enqueue (item);
+			}
 		}
 
 		protected override void DoDispose ()

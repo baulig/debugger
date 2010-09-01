@@ -76,6 +76,13 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
+		internal IProcess ProcessHandle {
+			get {
+				check_disposed ();
+				return server_process;
+			}
+		}
+
 		protected Inferior (ThreadManager thread_manager, Process process,
 				    SingleSteppingEngine sse, ProcessStart start,
 				    BreakpointManager bpm, DebuggerErrorHandler error_handler,

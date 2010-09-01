@@ -55,6 +55,7 @@ namespace Mono.Debugger.MdbServer
 		const string HANDSHAKE_STRING = "9da91832-87f3-4cde-a92f-6384fec6536e";
 		const int HEADER_LENGTH = 11;
 
+		ThreadManager manager;
 		MdbServer server;
 
 		Socket socket;
@@ -373,14 +374,16 @@ namespace Mono.Debugger.MdbServer
 			socket.Send (packet);
 		}
 
-		public static MdbServer Connect (IPEndPoint endpoint)
+		public static MdbServer Connect (ThreadManager manager, IPEndPoint endpoint)
 		{
-			var connection = new Connection (endpoint);
+			var connection = new Connection (manager, endpoint);
 			return connection.server;
 		}
 
-		protected Connection (IPEndPoint endpoint)
+		protected Connection (ThreadManager manager, IPEndPoint endpoint)
 		{
+			this.manager = manager;
+
 			socket = new Socket (AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 			socket.Connect (endpoint);
 
@@ -403,15 +406,10 @@ namespace Mono.Debugger.MdbServer
 			reply_cbs = new Dictionary<int, ReplyCallback> ();
 			reply_packets_monitor = new Object ();
 
-			wait_queue = new DebuggerEventQueue ("event_queue");
+			server = new MdbServer (this);
 
 			receiver_thread = new ST.Thread (new ST.ThreadStart (receiver_thread_main));
 			receiver_thread.Start ();
-
-			wait_thread = new ST.Thread (new ST.ThreadStart (wait_thread_main));
-			wait_thread.Start ();
-
-			server = new MdbServer (this);
 		}
 
 		public void Close ()
@@ -419,30 +417,6 @@ namespace Mono.Debugger.MdbServer
 			disconnected = true;
 			socket.Close ();
 			receiver_thread.Join ();
-		}
-
-		DebuggerEventQueue wait_queue;
-		ServerEvent current_event;
-		Queue<ServerEvent> event_queue = new Queue<ServerEvent> ();
-
-		void wait_thread_main ()
-		{
-			while (!disconnected) {
-				wait_queue.Lock ();
-
-				if (event_queue.Count == 0)
-					wait_queue.Wait ();
-
-				var e = event_queue.Dequeue ();
-
-				wait_queue.Unlock ();
-
-				try {
-					server.HandleEvent (e);
-				} catch (Exception ex) {
-					Console.WriteLine ("FUCK: {0}", ex);
-				}
-			}
 		}
 
 		void receiver_thread_main ()
@@ -513,20 +487,7 @@ namespace Mono.Debugger.MdbServer
 						opt_data = r.ReadData (opt_data_size);
 
 					var e = new ServerEvent (type, sender, arg, data1, data2, arg_object, opt_data);
-
-					//
-					// Don't block the receiver thread.
-					//
-
-					wait_queue.Lock ();
-
-					event_queue.Enqueue (e);
-
-					if (event_queue.Count == 1)
-						wait_queue.Signal ();
-
-					wait_queue.Unlock ();
-
+					manager.OnServerEvent (e);
 					return true;
 				}
 			}

@@ -32,6 +32,13 @@ namespace Mono.Debugger.Backend
 			processes = ArrayList.Synchronized (new ArrayList ());
 
 			address_domain = AddressDomain.Global;
+
+			sse_by_inferior = new Dictionary<int, SingleSteppingEngine> ();
+
+			event_queue = new DebuggerEventQueue<Event> ("event_queue");
+
+			engine_thread = new ST.Thread (new ST.ThreadStart (engine_thread_main));
+			engine_thread.Start ();
 		}
 
 		protected readonly Debugger debugger;
@@ -40,8 +47,155 @@ namespace Mono.Debugger.Backend
 		protected ArrayList processes;
 
 		protected readonly AddressDomain address_domain;
-
 		protected readonly DebuggerServer debugger_server;
+
+		#region Main Event Loop
+
+		delegate object TargetDelegate ();
+
+		class Event : IDisposable
+		{
+			public readonly ServerEvent ServerEvent;
+			public readonly TargetDelegate Delegate;
+
+			ST.ManualResetEvent ready_event;
+			object result;
+
+			public Event (ServerEvent e)
+			{
+				this.ServerEvent = e;
+			}
+
+			public Event (TargetDelegate dlg)
+			{
+				this.Delegate = dlg;
+				ready_event = new ST.ManualResetEvent (false);
+			}
+
+			public object Wait ()
+			{
+				ready_event.WaitOne ();
+				return result;
+			}
+
+			public void RunDelegate ()
+			{
+				result = Delegate ();
+				ready_event.Set ();
+			}
+
+			public void Dispose ()
+			{
+				if (ready_event != null) {
+					ready_event.Dispose ();
+					ready_event = null;
+				}
+			}
+		}
+
+		ST.Thread engine_thread;
+		DebuggerEventQueue<Event> event_queue;
+
+		void engine_thread_main ()
+		{
+			while (true) {
+				try {
+					engine_thread_iteration ();
+				} catch (Exception ex) {
+					Console.WriteLine ("EVENT THREAD EX: {0}", ex);
+				}
+			}
+		}
+
+		void engine_thread_iteration ()
+		{
+			event_queue.Lock ();
+
+			if (event_queue.Count == 0)
+				event_queue.Wait ();
+
+			var e = event_queue.Dequeue ();
+
+			event_queue.Unlock ();
+
+			lock (this) {
+				if (e.ServerEvent != null)
+					HandleEvent (e.ServerEvent);
+				else
+					e.RunDelegate ();
+				e.Dispose ();
+			}
+		}
+
+		#endregion
+
+		internal void OnServerEvent (ServerEvent e)
+		{
+			event_queue.Lock ();
+
+			event_queue.Enqueue (new Event (e));
+
+			if (event_queue.Count == 1)
+				event_queue.Signal ();
+
+			event_queue.Unlock ();
+		}
+
+		Dictionary<int, SingleSteppingEngine> sse_by_inferior;
+		Process main_process;
+
+		internal void AddEngine (IInferior inferior, SingleSteppingEngine sse)
+		{
+			lock (this) {
+				sse_by_inferior.Add (inferior.ID, sse);
+			}
+		}
+
+		void OnDllLoaded (IExecutableReader reader)
+		{
+			Console.WriteLine ("DLL LOADED: {0}", reader.FileName);
+
+			var exe = new ExecutableReader (main_process, null, reader);
+			exe.ReadDebuggingInfo ();
+		}
+
+		void OnThreadCreated (IInferior inferior)
+		{
+			Console.WriteLine ("THREAD CREATED: {0}", inferior.ID);
+
+			var sse = main_process.ThreadCreated (inferior);
+			sse_by_inferior.Add (inferior.ID, sse);
+		}
+
+		protected void HandleEvent (ServerEvent e)
+		{
+			Console.WriteLine ("SERVER EVENT: {0} {1}", e, DebuggerWaitHandle.CurrentThread);
+
+			if (e.Sender.Kind == ServerObjectKind.Inferior) {
+				var inferior = (IInferior) e.Sender;
+				Console.WriteLine ("INFERIOR EVENT: {0}", inferior.ID);
+
+				if (!sse_by_inferior.ContainsKey (inferior.ID)) {
+					Console.WriteLine ("UNKNOWN INFERIOR !");
+					return;
+				}
+
+				var sse = sse_by_inferior[inferior.ID];
+				sse.ProcessEvent (e);
+				return;
+			}
+
+			switch (e.Type) {
+			case ServerEventType.MainModuleLoaded:
+			case ServerEventType.DllLoaded:
+				OnDllLoaded ((IExecutableReader) e.ArgumentObject);
+				break;
+
+			case ServerEventType.ThreadCreated:
+				OnThreadCreated ((IInferior) e.ArgumentObject);
+				break;
+			}
+		}
 
 #if DISABLED
 		public Process OpenCoreFile (ProcessStart start, out Thread[] threads)
@@ -172,12 +326,26 @@ namespace Mono.Debugger.Backend
 
 		internal object SendCommand (SingleSteppingEngine sse, TargetAccessDelegate target, object user_data)
 		{
-			return target (sse.Thread, user_data);
+			event_queue.Lock ();
+
+			var dlg = new TargetDelegate (delegate {
+				return target (sse.Thread, user_data);
+			});
+
+			var e = new Event (dlg);
+			event_queue.Enqueue (e);
+
+			if (event_queue.Count == 1)
+				event_queue.Signal ();
+
+			event_queue.Unlock ();
+
+			return e.Wait ();
 		}
 
 		public Process StartApplication (ProcessStart start, out CommandResult result)
 		{
-			Process process = new Process (this, start);
+			Process process = main_process = new Process (this, start);
 			processes.Add (process);
 
 			result = process.StartApplication ();
