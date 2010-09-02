@@ -128,7 +128,8 @@ namespace Mono.Debugger.Backend
 
 			TargetState old_state = change_target_state (TargetState.Busy);
 			try {
-				server_inferior.CallMethod (method.Address, data1, data2, callback_arg);
+				var data = new InvocationData (method.Address, callback_arg, data1, data2);
+				server_inferior.CallMethod (data);
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -142,21 +143,23 @@ namespace Mono.Debugger.Backend
 
 			TargetState old_state = change_target_state (TargetState.Running);
 			try {
-				server_inferior.CallMethod (method.Address, arg1, arg2, arg3, arg4, callback_arg);
+				var data = new InvocationData (method.Address, callback_arg, arg1, arg2, arg3, arg4);
+				server_inferior.CallMethod (data);
 			} catch {
 				change_target_state (old_state);
 				throw;
 			}
 		}
 
-		public void CallMethod (TargetAddress method, byte[] data, long callback_arg)
+		public void CallMethodWithContext (TargetAddress method, long callback_arg)
 		{
 			check_disposed ();
 
 			TargetState old_state = change_target_state (TargetState.Running);
 
 			try {
-				server_inferior.CallMethod (method.Address, data, callback_arg);
+				var data = new InvocationData (method.Address, callback_arg);
+				server_inferior.CallMethod (data);
 			} catch {
 				change_target_state (old_state);
 				throw;
@@ -176,7 +179,8 @@ namespace Mono.Debugger.Backend
 			else
 				blob = obj.Location.ReadBuffer (this, obj.Type.Size);
 
-			server_inferior.CallMethod (method.Address, method_argument, address, blob, callback_arg);
+			var data = new InvocationData (method.Address, callback_arg, address, blob);
+			server_inferior.CallMethod (data);
 		}
 
 		public void RuntimeInvoke (TargetAddress invoke_method,

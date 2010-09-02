@@ -4,6 +4,8 @@
 #include <mdb-inferior.h>
 #include <mdb-exe-reader.h>
 
+class MonoRuntime;
+
 class MdbProcess : public ServerObject
 {
 public:
@@ -50,6 +52,11 @@ public:
 		return main_process;
 	}
 
+	MonoRuntime *GetMonoRuntime (void)
+	{
+		return mono_runtime;
+	}
+
 	static MdbInferior *GetInferiorByThreadId (guint32 thread_id);
 	static void AddInferior (guint32 thread_id, MdbInferior *inferior);
 
@@ -62,6 +69,7 @@ protected:
 		this->server = server;
 		this->main_reader = NULL;
 		this->exe_file_hash = g_hash_table_new (NULL, NULL);
+		this->mono_runtime = NULL;
 	}
 
 	MdbServer *server;
@@ -70,6 +78,8 @@ protected:
 private:
 	GHashTable *exe_file_hash;
 	MdbExeReader *main_reader;
+
+	MonoRuntime *mono_runtime;
 
 	void CheckLoadedDll (MdbInferior *inferior, MdbExeReader *reader);
 

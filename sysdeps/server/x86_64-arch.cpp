@@ -38,8 +38,6 @@
 #define INFERIOR_REG_FS(r)		r.regs.fs
 #define INFERIOR_REG_GS(r)		r.regs.gs
 
-#define AMD64_RED_ZONE_SIZE 128
-
 #else
 #error "Unknown operating systrem."
 #endif
@@ -116,4 +114,55 @@ X86Arch::SetRegisterValues (const guint64 *values)
 	INFERIOR_REG_GS (current_regs) = values [DEBUGGER_REG_GS];
 
 	return SetRegisters ();
+}
+
+bool
+X86Arch::Marshal_Generic (InvocationData *invocation, CallbackData *cdata)
+{
+	MonoRuntime *runtime = inferior->GetProcess ()->GetMonoRuntime ();
+	GenericInvocationData data;
+	gconstpointer data_ptr = NULL;
+	int data_size = 0;
+	gsize new_rsp;
+
+	memset (&data, 0, sizeof (data));
+	data.invocation_type = invocation->type;
+	data.callback_id = (guint32) invocation->callback_id;
+	data.method_address = invocation->method_address;
+	data.arg1 = invocation->arg1;
+	data.arg2 = invocation->arg2;
+	data.arg3 = invocation->arg3;
+
+	if (invocation->type == 	INVOCATION_TYPE_LONG_LONG_LONG_STRING) {
+		data_ptr = invocation->string_arg;
+		data_size = strlen (invocation->string_arg) + 1;
+	}
+
+	new_rsp = INFERIOR_REG_RSP (current_regs) - sizeof (data) - data_size - 2 * sizeof (gsize) - AMD64_RED_ZONE_SIZE;
+
+	if (data_ptr) {
+		data.data_size = data_size;
+		data.data_arg_ptr = new_rsp + 2 * sizeof (gsize) + sizeof (data);
+
+		if (inferior->WriteMemory (data.data_arg_ptr, data_size, data_ptr))
+			return false;
+	}
+
+	cdata->call_address = new_rsp + 2 * sizeof (gsize);
+	cdata->stack_pointer = new_rsp;
+
+	if (inferior->PokeWord (new_rsp, cdata->call_address))
+		return false;
+	if (inferior->PokeWord (new_rsp + sizeof (gsize), 0x000000CC))
+		return false;
+	if (inferior->WriteMemory (new_rsp + 2 * sizeof (gsize), sizeof (data), &data))
+		return false;
+
+	INFERIOR_REG_RSP (current_regs) = new_rsp;
+	INFERIOR_REG_RDI (current_regs) = new_rsp + 2 * sizeof (gsize);
+	INFERIOR_REG_RIP (current_regs) = runtime->GetGenericInvocationFunc ();
+
+	g_message (G_STRLOC ": %Lx - %Lx", INFERIOR_REG_RIP (current_regs), new_rsp);
+
+	return true;
 }

@@ -215,14 +215,18 @@ namespace Mono.Debugger.Backend.Mono
 			class_entry_by_token = Hashtable.Synchronized (new Hashtable ());
 
 			Index = memory.ReadInteger (address);
-			address += int_size;
+			address += address_size; // int_size;
 			TargetAddress image_file_addr = memory.ReadAddress (address);
 			address += address_size;
-			ImageFile = memory.ReadString (image_file_addr);
 			MonoImage = memory.ReadAddress (address);
 			address += address_size;
 			TargetAddress type_table_ptr = memory.ReadAddress (address);
 			address += address_size;
+
+			Console.WriteLine ("MONO SYMBOL FILE: {0} {1} {2} {3}", Index, image_file_addr,
+					   MonoImage, type_table_ptr);
+
+			ImageFile = memory.ReadString (image_file_addr);
 
 			TypeTable = MonoTypeTable.CreateTypeTable (this, memory, type_table_ptr);
 

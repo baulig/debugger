@@ -132,7 +132,22 @@ MdbProcess::OnMainModuleLoaded (MdbInferior *inferior, MdbExeReader *reader)
 void
 MdbProcess::CheckLoadedDll (MdbInferior *inferior, MdbExeReader *reader)
 {
-	MonoRuntime::Initialize (inferior, reader);
+	ServerEvent *e;
+
+	if (mono_runtime)
+		return;
+
+	mono_runtime = MonoRuntime::Initialize (inferior, reader);
+	if (!mono_runtime)
+		return;
+
+	e = g_new0 (ServerEvent, 1);
+
+	e->type = SERVER_EVENT_MONO_RUNTIME_LOADED;
+	e->sender = this;
+	e->arg_object = mono_runtime;
+	server->SendEvent (e);
+	g_free (e);
 }
 
 void

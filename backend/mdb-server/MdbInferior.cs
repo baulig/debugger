@@ -31,7 +31,8 @@ namespace Mono.Debugger.MdbServer
 			SET_SIGNAL = 17,
 			INIT_AT_ENTRYPOINT = 18,
 			DISASSEMBLE_INSN = 19,
-			STOP = 20
+			STOP = 20,
+			CALL_METHOD = 21
 		}
 
 		public MdbExeReader InitializeProcess ()
@@ -209,28 +210,6 @@ namespace Mono.Debugger.MdbServer
 			return reader.ReadString ();
 		}
 
-		public void CallMethod (long method_address, long arg1, long arg2, long callback_arg)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public void CallMethod (long method_address, long arg1, long arg2, long arg3,
-					string string_arg, long callback_arg)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public void CallMethod (long method_address, byte[] data, long callback_arg)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public void CallMethod (long method_address, long arg1, long arg2,
-					byte[] data, long callback_arg)
-		{
-			throw new NotImplementedException ();
-		}
-
 		public void MarkRuntimeInvokeFrame ()
 		{
 			throw new NotImplementedException ();
@@ -286,6 +265,21 @@ namespace Mono.Debugger.MdbServer
 		public void Kill ()
 		{
 			throw new NotImplementedException ();
+		}
+
+		public void CallMethod (InvocationData data)
+		{
+			var writer = new Connection.PacketWriter ();
+			writer.WriteInt (ID);
+			writer.WriteByte ((byte) data.Type);
+			writer.WriteLong (data.MethodAddress);
+			writer.WriteLong (data.CallbackID);
+			writer.WriteLong (data.Arg1);
+			writer.WriteLong (data.Arg2);
+			writer.WriteLong (data.Arg3);
+			writer.WriteString (data.StringArg);
+
+			Connection.SendReceive (CommandSet.INFERIOR, (int) CmdInferior.CALL_METHOD, writer);
 		}
 	}
 }

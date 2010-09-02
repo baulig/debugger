@@ -75,6 +75,76 @@ namespace Mono.Debugger.Server
 		}
 	}
 
+	internal enum InvocationType
+	{
+		LongLong = 1,
+		LongLongLongString,
+		LongData,
+		Context
+	}
+
+	[StructLayout (LayoutKind.Sequential)]
+	internal struct InvocationData
+	{
+		public readonly InvocationType Type;
+		public readonly long MethodAddress;
+		public readonly long CallbackID;
+		public readonly long Arg1;
+		public readonly long Arg2;
+		public readonly long Arg3;
+		public readonly string StringArg;
+		public readonly byte[] DataArg;
+
+		public InvocationData (long method, long id, long arg1, long arg2)
+		{
+			Type = InvocationType.LongLong;
+			MethodAddress = method;
+			CallbackID = id;
+			Arg1 = arg1;
+			Arg2 = arg2;
+			Arg3 = 0;
+			StringArg = null;
+			DataArg = null;
+		}
+
+		public InvocationData (long method, long id, long arg1, long arg2,
+				       long arg3, string string_arg)
+		{
+			Type = InvocationType.LongLongLongString;
+			MethodAddress = method;
+			CallbackID = id;
+			Arg1 = arg1;
+			Arg2 = arg2;
+			Arg3 = arg3;
+			StringArg = string_arg;
+			DataArg = null;
+		}
+
+		public InvocationData (long method, long id, long arg1, byte[] data)
+		{
+			Type = InvocationType.LongData;
+			MethodAddress = method;
+			CallbackID = id;
+			Arg1 = arg1;
+			Arg2 = 0;
+			Arg3 = 0;
+			StringArg = null;
+			DataArg = data;
+		}
+
+		public InvocationData (long method, long id)
+		{
+			Type = InvocationType.Context;
+			MethodAddress = method;
+			CallbackID = id;
+			Arg1 = 0;
+			Arg2 = 0;
+			Arg3 = 0;
+			StringArg = null;
+			DataArg = null;
+		}
+	}
+
 	internal abstract class MonoRuntimeHandle
 	{ }
 
@@ -125,16 +195,6 @@ namespace Mono.Debugger.Server
 
 		string DisassembleInstruction (long address, out int insn_size);
 
-		void CallMethod (long method_address, long arg1, long arg2, long callback_arg);
-
-		void CallMethod (long method_address, long arg1, long arg2, long arg3,
-				 string string_arg, long callback_arg);
-
-		void CallMethod (long method_address, byte[] data, long callback_arg);
-
-		void CallMethod (long method_address, long arg1, long arg2,
-				 byte[] data, long callback_arg);
-
 		void MarkRuntimeInvokeFrame ();
 
 		void AbortInvoke (long rti_id);
@@ -158,5 +218,7 @@ namespace Mono.Debugger.Server
 		void DetachAfterFork ();
 
 		void Kill ();
+
+		void CallMethod (InvocationData data);
 	}
 }

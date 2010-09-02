@@ -155,7 +155,6 @@ namespace Mono.Debugger
 		OperatingSystemBackend os;
 		NativeLanguage native_language;
 		SymbolTableManager symtab_manager;
-		MonoThreadManager mono_manager;
 		BreakpointManager breakpoint_manager;
 		Dictionary<int,ExceptionCatchPoint> exception_handlers;
 		ProcessStart start;
@@ -165,6 +164,7 @@ namespace Mono.Debugger
 		Hashtable thread_hash;
 
 		IProcess server_process;
+		MonoRuntimeManager mono_manager;
 
 		Dictionary<string, ExecutableReader> exe_reader_by_filename;
 
@@ -308,7 +308,7 @@ namespace Mono.Debugger
 			get { return start; }
 		}
 
-		internal MonoThreadManager MonoManager {
+		internal MonoRuntimeManager MonoManager {
 			get { return mono_manager; }
 		}
 
@@ -588,20 +588,9 @@ namespace Mono.Debugger
 				OnProcessExitedEvent ();
 		}
 
-		internal void InitializeMono (Inferior inferior, TargetAddress mdb_debug_info)
+		internal void InitializeMono (IMonoRuntime handle)
 		{
-			MonoRuntimeFound = true;
-			mono_manager = MonoThreadManager.Initialize (this, inferior, mdb_debug_info, is_attached);
-
-			InitializeThreads (inferior, !is_attached);
-
-			if (mono_manager == null)
-				return;
-
-			mono_manager.InitializeThreads (inferior);
-
-			if (is_attached)
-				mono_manager.InitializeAfterAttach (inferior);
+			mono_manager = new MonoRuntimeManager (this, handle);
 		}
 
 		internal void InitializeThreads (Inferior inferior, bool resume_threads)

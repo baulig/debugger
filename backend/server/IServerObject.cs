@@ -6,7 +6,8 @@ namespace Mono.Debugger.Server
 		Inferior,
 		Process,
 		ExeReader,
-		BreakpointManager
+		BreakpointManager,
+		MonoRuntime
 	};
 
 	internal interface IServerObject

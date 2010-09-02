@@ -25,6 +25,7 @@ namespace Mono.Debugger.Server
 
 		MainModuleLoaded = 0x50,
 		DllLoaded,
+		MonoRuntimeLoaded,
 
 		UnhandledException = 0x70,
 		ThrowException,

@@ -1,4 +1,6 @@
 #include <x86-arch.h>
+#include <mono-runtime.h>
+#include <string.h>
 
 struct _CallbackData
 {
@@ -11,7 +13,9 @@ struct _CallbackData
 	gsize pushed_registers;
 	gsize data_pointer;
 	guint32 data_size;
+#if defined(__linux__) || defined(__FreeBSD__)
 	int saved_signal;
+#endif
 	gboolean debug;
 	gboolean is_rti;
 };
@@ -173,6 +177,7 @@ X86Arch::ChildStopped (int stopsig)
 	CodeBufferData *cbuffer = NULL;
 	CallbackData *cdata;
 	BreakpointInfo *breakpoint;
+	MonoRuntime *mono_runtime;
 	BreakpointManager *bpm;
 	bool is_callback;
 	ServerEvent *e;
@@ -207,7 +212,7 @@ X86Arch::ChildStopped (int stopsig)
 	}
 
 	if (is_callback) {
-		gsize exc_object;
+		gsize exc_object = 0;
 
 		if (cdata->pushed_registers) {
 			guint32 pushed_regs [9];
@@ -310,22 +315,31 @@ X86Arch::ChildStopped (int stopsig)
 	}
 #endif
 
-#if 0
-	if (server->mono_runtime &&
-	    ((gsize) INFERIOR_REG_RIP (current_regs) - 1 == server->mono_runtime->notification_address)) {
-		guint32 addr = (gsize) INFERIOR_REG_RSP (current_regs) + 4;
+	mono_runtime = inferior->GetProcess ()->GetMonoRuntime ();
+
+	if (mono_runtime &&
+	    (INFERIOR_REG_RIP (current_regs) - 1 == mono_runtime->GetNotificationAddress ())) {
+#if defined(__i386__)
+		gsize addr = INFERIOR_REG_RSP (current_regs) + sizeof (gsize);
 		guint64 data [3];
 
-		if (mdb_inferior_read_memory (server, addr, 24, &data))
+		g_message (G_STRLOC ": %Lx", addr);
+
+		if (inferior->ReadMemory (addr, 24, &data))
 			return e;
 
 		e->arg = data [0];
 		e->data1 = data [1];
 		e->data2 = data [2];
+#else
+		e->arg = INFERIOR_REG_RDI (current_regs);
+		e->data1 = INFERIOR_REG_RSI (current_regs);
+		e->data2 = INFERIOR_REG_RDX (current_regs);
+#endif
+
 		e->type = SERVER_EVENT_NOTIFICATION;
 		return e;
 	}
-#endif
 
 	for (i = 0; i < DR_NADDR; i++) {
 		if (X86_DR_WATCH_HIT (current_regs, i)) {
@@ -399,3 +413,35 @@ X86Arch::GetRegisterCount (void)
 	return DEBUGGER_REG_LAST;
 }
 
+ErrorCode
+X86Arch::CallMethod (InvocationData *invocation)
+{
+	CallbackData *cdata;
+	ErrorCode result;
+
+	g_message (G_STRLOC ": CallMethod(): %d", invocation->type);
+
+	cdata = g_new0 (CallbackData, 1);
+	memcpy (&cdata->saved_regs, &current_regs, sizeof (InferiorRegs));
+	cdata->callback_argument = invocation->callback_id;
+
+#if defined(__linux__) || defined(__FreeBSD__)
+	cdata->saved_signal = inferior->GetLastSignal ();
+	inferior->SetLastSignal (0);
+#endif
+
+	if (!Marshal_Generic (invocation, cdata)) {
+		g_free (cdata);
+		return ERR_UNKNOWN_ERROR;
+	}
+
+	result = SetRegisters ();
+	if (result) {
+		g_free (cdata);
+		return result;
+	}
+
+	g_ptr_array_add (callback_stack, cdata);
+
+	return inferior->Continue ();
+}

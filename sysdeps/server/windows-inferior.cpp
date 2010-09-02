@@ -43,12 +43,12 @@ private:
 class WindowsInferior : public MdbInferior
 {
 public:
-	WindowsInferior (WindowsProcess *process)
+	WindowsInferior (WindowsProcess *process, DWORD thread_id, HANDLE thread_handle)
 		: MdbInferior (process->server)
 	{
 		this->process = process;
-		thread_handle = NULL;
-		thread_id = 0;
+		this->thread_id = thread_id;
+		this->thread_handle = thread_handle;
 	}
 
 	MdbProcess *GetProcess (void)
@@ -91,6 +91,8 @@ public:
 
 	ErrorCode Stop (void);
 
+	ErrorCode CallMethod (InvocationData *data);
+
 	//
 	// Private API.
 	//
@@ -105,8 +107,6 @@ private:
 
 	HANDLE thread_handle;
 	DWORD thread_id;
-
-	friend class WindowsProcess;
 };
 
 MdbProcess *
@@ -423,12 +423,12 @@ WindowsInferior::HandleDebugEvent (DEBUG_EVENT *de)
 				wchar_t w_buf [1024];
 				size_t ret;
 
-				if (ReadMemory (exc_code, 300, w_buf))
+				if (ReadMemory (exc_code, 100, w_buf))
 					break;
 
-				ret = wcstombs (buf, w_buf, 300);
+				ret = wcstombs (buf, w_buf, 100);
 			} else {
-				if (ReadMemory (exc_code, 300, buf))
+				if (ReadMemory (exc_code, 100, buf))
 					break;
 			}
 
@@ -444,6 +444,21 @@ WindowsInferior::HandleDebugEvent (DEBUG_EVENT *de)
 		e->sender = this;
 		e->arg = de->u.ExitProcess.dwExitCode;
 		e->type = SERVER_EVENT_EXITED;
+		server->SendEvent (e);
+		g_free (e);
+		break;
+	}
+
+	case CREATE_THREAD_DEBUG_EVENT: {
+		ServerEvent *e = g_new0 (ServerEvent, 1);
+		MdbInferior *inferior;
+
+		inferior = new WindowsInferior (process, de->dwThreadId, de->u.CreateThread.hThread);
+
+		e->sender = process;
+		e->arg_object = inferior;
+		e->type = SERVER_EVENT_THREAD_CREATED;
+		e->arg = de->dwThreadId;
 		server->SendEvent (e);
 		g_free (e);
 		break;
@@ -610,10 +625,7 @@ WindowsProcess::Spawn (const gchar *working_directory, const gchar **arg_argv, c
 	process_handle = pi.hProcess;
 	process_id = pi.dwProcessId;
 
-	inferior = new WindowsInferior (this);
-
-	inferior->thread_handle = pi.hThread;
-	inferior->thread_id = pi.dwThreadId;
+	inferior = new WindowsInferior (this, pi.dwThreadId, pi.hThread);
 
 	AddInferior (pi.dwThreadId, inferior);
 	main_process = this;
@@ -849,3 +861,10 @@ WindowsInferior::Stop (void)
 {
 	return ERR_NOT_IMPLEMENTED;
 }
+
+ErrorCode
+WindowsInferior::CallMethod (InvocationData *data)
+{
+	return arch->CallMethod (data);
+}
+

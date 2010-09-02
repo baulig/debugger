@@ -11,6 +11,27 @@ class MdbArch;
 class MdbDisassembler;
 class MdbProcess;
 
+enum InvocationType {
+	INVOCATION_TYPE_LONG_LONG = 1,
+	INVOCATION_TYPE_LONG_LONG_LONG_STRING,
+	INVOCATION_TYPE_DATA,
+	INVOCATION_TYPE_LONG_LONG_DATA,
+	INVOCATION_TYPE_FINALIZER,
+	INVOCATION_TYPE_RUNTIME_INVOKE
+};
+
+typedef struct {
+	InvocationType type;
+	guint64 method_address;
+	guint64 callback_id;
+	guint64 arg1;
+	guint64 arg2;
+	guint64 arg3;
+	gchar *string_arg;
+	int data_size;
+	guint8* data;
+} InvocationData;
+
 class MdbInferior : public ServerObject
 {
 public:
@@ -99,6 +120,8 @@ public:
 
 	virtual ServerEvent *HandleLinuxWaitEvent (int status) = 0;
 #endif
+
+	virtual ErrorCode CallMethod (InvocationData *data) = 0;
 
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 

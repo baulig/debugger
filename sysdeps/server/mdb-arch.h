@@ -26,6 +26,8 @@ public:
 	virtual ErrorCode GetRegisters (void) = 0;
 	virtual ErrorCode SetRegisters (void) = 0;
 
+	virtual ErrorCode CallMethod (InvocationData *data) = 0;
+
 protected:
 	MdbArch (MdbInferior *inferior)
 	{

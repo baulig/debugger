@@ -1,6 +1,7 @@
 #include <mdb-inferior.h>
 #include <mdb-exe-reader.h>
 #include <mdb-arch.h>
+#include <stdio.h>
 
 ErrorCode
 MdbInferior::GetFrame (StackFrame *out_frame)
@@ -330,6 +331,23 @@ MdbInferior::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 
 	case CMD_INFERIOR_STOP: {
 		result = Stop ();
+		break;
+	}
+
+	case CMD_INFERIOR_CALL_METHOD: {
+		InvocationData *data = g_new0 (InvocationData, 1);
+
+		data->type = (InvocationType) in->DecodeByte ();
+		data->method_address = in->DecodeLong ();
+		data->callback_id = in->DecodeLong ();
+		data->arg1 = in->DecodeLong ();
+		data->arg2 = in->DecodeLong ();
+		data->arg3 = in->DecodeLong ();
+		data->string_arg = in->DecodeString ();
+
+		result = CallMethod (data);
+		g_free (data->string_arg);
+		g_free (data);
 		break;
 	}
 

@@ -167,9 +167,29 @@ namespace Mono.Debugger.Backend
 			sse_by_inferior.Add (inferior.ID, sse);
 		}
 
+		void OnMonoRuntimeLoaded (Process process, IMonoRuntime runtime)
+		{
+			process.InitializeMono (runtime);
+		}
+
 		protected void HandleEvent (ServerEvent e)
 		{
 			Console.WriteLine ("SERVER EVENT: {0} {1}", e, DebuggerWaitHandle.CurrentThread);
+
+			switch (e.Type) {
+			case ServerEventType.MainModuleLoaded:
+			case ServerEventType.DllLoaded:
+				OnDllLoaded (process_by_id [e.Sender.ID], (IExecutableReader) e.ArgumentObject);
+				return;
+
+			case ServerEventType.ThreadCreated:
+				OnThreadCreated ((IInferior) e.ArgumentObject);
+				return;
+
+			case ServerEventType.MonoRuntimeLoaded:
+				OnMonoRuntimeLoaded (process_by_id [e.Sender.ID], (IMonoRuntime) e.ArgumentObject);
+				return;
+			}
 
 			if (e.Sender.Kind == ServerObjectKind.Inferior) {
 				var inferior = (IInferior) e.Sender;
@@ -185,17 +205,7 @@ namespace Mono.Debugger.Backend
 				return;
 			}
 
-			switch (e.Type) {
-			case ServerEventType.MainModuleLoaded:
-			case ServerEventType.DllLoaded:
-				var process = (IProcess) e.Sender;
-				OnDllLoaded (process_by_id [process.ID], (IExecutableReader) e.ArgumentObject);
-				break;
-
-			case ServerEventType.ThreadCreated:
-				OnThreadCreated ((IInferior) e.ArgumentObject);
-				break;
-			}
+			Console.WriteLine ("UNKNOWN EVENT: {0}", e);
 		}
 
 #if DISABLED
@@ -232,34 +242,13 @@ namespace Mono.Debugger.Backend
 		internal bool HandleChildEvent (SingleSteppingEngine engine, Inferior inferior,
 						ref ServerEvent cevent, out bool resume_target)
 		{
-			if (cevent.Type == ServerEventType.None) {
-				resume_target = true;
-				return true;
+			if (cevent.Type == ServerEventType.Notification) {
+				return engine.Process.MonoManager.HandleEvent (engine, inferior, ref cevent, out resume_target);
 			}
 
-#if FIXME
-			if (cevent.Type == ServerEventType.ThreadCreated) {
-				int pid = (int) cevent.Argument;
-				inferior.Process.ThreadCreated (inferior, pid, false, true);
-				GetPendingSigstopForNewThread (pid);
-				resume_target = true;
-				return true;
-			}
-
-			if (cevent.Type == ServerEventType.Forked) {
-				inferior.Process.ChildForked (inferior, (int) cevent.Argument);
-				resume_target = true;
-				return true;
-			}
-
-			if (cevent.Type == ServerEventType.Execd) {
-				thread_hash.Remove (engine.PID);
-				engine_hash.Remove (engine.ID);
-				inferior.Process.ChildExecd (engine, inferior);
-				resume_target = false;
-				return true;
-			}
-#endif
+			//
+			// FIXME: This should be done in the server.
+			//
 
 			if (cevent.Type == ServerEventType.Stopped) {
 				if (inferior.HasSignals) {
@@ -278,25 +267,8 @@ namespace Mono.Debugger.Backend
 				}
 			}
 
-			if (inferior.Process.OperatingSystem.CheckForPendingMonoInit (inferior)) {
-				resume_target = true;
-				return true;
-			}
-
-			bool retval = false;
 			resume_target = false;
-			if (inferior.Process.MonoManager != null)
-				retval = inferior.Process.MonoManager.HandleChildEvent (
-					engine, inferior, ref cevent, out resume_target);
-
-			if ((cevent.Type == ServerEventType.Exited) ||
-			    (cevent.Type == ServerEventType.Signaled)) {
-				engine.OnThreadExited (cevent);
-				resume_target = false;
-				return true;
-			}
-
-			return retval;
+			return false;
 		}
 
 		internal bool GetPendingSigstopForNewThread (int pid)

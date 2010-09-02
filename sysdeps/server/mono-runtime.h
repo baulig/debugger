@@ -4,10 +4,30 @@
 #include <mdb-inferior.h>
 #include <mdb-exe-reader.h>
 
+struct GenericInvocationData
+{
+	guint32 invocation_type;
+	guint32 callback_id;
+
+	guint64 method_address;
+	guint64 arg1;
+	guint64 arg2;
+	guint64 arg3;
+
+	guint32 data_size;
+	guint32 dummy;
+
+	gsize data_arg_ptr;
+};
+
 class MonoRuntime : public ServerObject
 {
 public:
 	static MonoRuntime *Initialize (MdbInferior *inferior, MdbExeReader *exe);
+
+	virtual gsize GetNotificationAddress (void) = 0;
+
+	virtual gsize GetGenericInvocationFunc (void) = 0;
 
 protected:
 	MonoRuntime (MdbProcess *process, MdbExeReader *exe)
@@ -16,8 +36,6 @@ protected:
 		this->process = process;
 		this->exe = exe;
 	}
-
-	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
 private:
 	MdbProcess *process;

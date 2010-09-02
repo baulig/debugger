@@ -5027,7 +5027,7 @@ namespace Mono.Debugger.Backend
 		protected override void DoExecute ()
 		{
 			Report.Debug (DebugFlags.SSE, "{0} executing return: {1} {2}\n{2}", sse, Mode, level, Backtrace.Print ());
-			inferior.CallMethod (sse.MonoDebuggerInfo.RunFinally, null, ID);
+			inferior.CallMethodWithContext (sse.MonoDebuggerInfo.RunFinally, ID);
 		}
 
 		protected override EventResult CallbackCompleted (long data1, long data2, out TargetEventArgs args)
@@ -5071,7 +5071,7 @@ namespace Mono.Debugger.Backend
 		protected override void DoExecute ()
 		{
 			Report.Debug (DebugFlags.SSE, "{0} abort runtime invoke", sse);
-			inferior.CallMethod (sse.MonoDebuggerInfo.AbortRuntimeInvoke, null, ID);
+			inferior.CallMethodWithContext (sse.MonoDebuggerInfo.AbortRuntimeInvoke, ID);
 		}
 
 		protected override EventResult CallbackCompleted (long data1, long data2, out TargetEventArgs args)

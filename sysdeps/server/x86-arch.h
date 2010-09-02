@@ -111,6 +111,8 @@ typedef struct _CallbackData CallbackData;
 #define X86_DR_WATCH_HIT(r,i) \
   (INFERIOR_REG_DR_STATUS(r) & (1 << (i)))
 
+#define AMD64_RED_ZONE_SIZE 128
+
 #if defined(WINDOWS)
 
 #include <windows.h>
@@ -155,7 +157,7 @@ class X86Arch : public MdbArch
 public:
 	X86Arch (MdbInferior *inferior) : MdbArch (inferior)
 	{
-		callback_stack = NULL;
+		callback_stack = g_ptr_array_new ();
 		code_buffer = NULL;
 		hw_bpm = NULL;
 	}
@@ -172,6 +174,8 @@ public:
 	int GetRegisterCount (void);
 	ErrorCode GetRegisterValues (guint64 *values);
 	ErrorCode SetRegisterValues (const guint64 *values);
+
+	ErrorCode CallMethod (InvocationData *data);
 
 protected:
 	ErrorCode
@@ -193,6 +197,8 @@ protected:
 
 		return (CallbackData *) g_ptr_array_index (callback_stack, callback_stack->len - 1);
 	}
+
+	bool Marshal_Generic (InvocationData *data, CallbackData *cdata);
 
 	InferiorRegs current_regs;
 

@@ -3,7 +3,8 @@ CURDIR="`pwd`"
 MINGW=i386-mingw32msvc
 CROSS_DIR=/opt/cross/$MINGW
 COPY_DLLS=""
-INSTALL_DESTDIR="$CURDIR/BUILD/windows"
+WINDOWS_INSTALL_DIR="$CURDIR/BUILD/INSTALL/windows"
+HOST_INSTALL_DIR="$CURDIR/BUILD/INSTALL/host"
 TEMPORARY_PKG_CONFIG_DIR=/tmp/$RANDOM-pkg-config-$RANDOM
 ORIGINAL_PATH="$PATH"
 
@@ -82,14 +83,18 @@ function build ()
 
 function doinstall ()
 {
-    if [ -d "$INSTALL_DIR" ]; then
-	rm -rf "$INSTALL_DIR"
+    if [ -d "$WINDOWS_INSTALL_DIR" ]; then
+	rm -rf "$WINDOWS_INSTALL_DIR"
     fi
+    if [ -d "$HOST_INSTALL_DIR" ]; then
+	rm -rf "$HOST_INSTALL_DIR"
+    fi
+
     cd "$CURDIR/BUILD/cross-windows"
-    make DESTDIR="$INSTALL_DESTDIR" USE_BATCH_FILES=yes install
+    make DESTDIR="$WINDOWS_INSTALL_DIR" USE_BATCH_FILES=yes install
 
     cd "$CURDIR/BUILD/host"
-    make DESTDIR="$INSTALL_DESTDIR" USE_BATCH_FILES=yes install
+    make DESTDIR="$HOST_INSTALL_DIR" USE_BATCH_FILES=yes install
 }
 
 function usage ()

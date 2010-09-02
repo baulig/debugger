@@ -68,6 +68,9 @@ namespace Mono.Debugger.MdbServer
 				case ServerObjectKind.BreakpointManager:
 					obj = new MdbBreakpointManager (connection, id);
 					break;
+				case ServerObjectKind.MonoRuntime:
+					obj = new MonoRuntime (connection, id);
+					break;
 				default:
 					throw new InvalidOperationException ();
 				}

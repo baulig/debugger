@@ -112,6 +112,8 @@ public:
 
 	ErrorCode Stop (void);
 
+	ErrorCode CallMethod (InvocationData *data);
+
 	ServerEvent *HandleLinuxWaitEvent (int status);
 
 	int GetPid (void)
@@ -868,3 +870,10 @@ PTraceInferior::Stop (void)
 
 	return ERR_NONE;
 }
+
+ErrorCode
+PTraceInferior::CallMethod (InvocationData *data)
+{
+	return arch->CallMethod (data);
+}
+

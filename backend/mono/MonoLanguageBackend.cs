@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Threading;
 using C = Mono.CompilerServices.SymbolWriter;
 
+using Mono.Debugger.Server;
 using Mono.Debugger.Backend;
 using Mono.Debugger.Languages;
 using Mono.Debugger.Languages.Mono;
@@ -459,6 +460,8 @@ namespace Mono.Debugger.Backend.Mono
 
 		void read_mono_debugger_info (TargetMemoryAccess memory)
 		{
+			Console.WriteLine ("READ DEBUGGER INFO: {0}", info.MonoMetadataInfo);
+
 			runtime = MetadataHelper.Create (memory, info);
 
 			trampolines = new TargetAddress [info.MonoTrampolineNum];
@@ -687,6 +690,8 @@ namespace Mono.Debugger.Backend.Mono
 		MonoSymbolFile load_symfile (TargetMemoryAccess memory, TargetAddress address)
 		{
 			MonoSymbolFile symfile = null;
+
+			Console.WriteLine ("LOAD SYMFILE: {0}", address);
 
 			if (symfile_hash.Contains (address))
 				return (MonoSymbolFile) symfile_hash [address];

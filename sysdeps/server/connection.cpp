@@ -1,6 +1,9 @@
 #include <connection.h>
 #include <mdb-inferior.h>
+#include <mono-runtime.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 
 #ifdef HAVE_SYS_SOCKET_H
@@ -321,6 +324,23 @@ process_command_proxy (gpointer user_data)
 	data->ret = data->process->ProcessCommand (data->command, data->id, data->in, data->out);
 }
 
+typedef struct {
+	int command;
+	int id;
+	MonoRuntime *runtime;
+	Buffer *in;
+	Buffer *out;
+	ErrorCode ret;
+} RuntimeData;
+
+static void
+runtime_command_proxy (gpointer user_data)
+{
+	RuntimeData *data = (RuntimeData *) user_data;
+
+	data->ret = data->runtime->ProcessCommand (data->command, data->id, data->in, data->out);
+}
+
 #endif
 
 bool
@@ -481,6 +501,42 @@ Connection::HandleIncomingRequest (MdbServer *server)
 			err = process_data.ret;
 #else
 		err = process->ProcessCommand (command, id, in, buf);
+#endif
+		break;
+	}
+
+	case CMD_SET_MONO_RUNTIME: {
+#if WINDOWS
+		InferiorDelegate delegate;
+		RuntimeData runtime_data;
+#endif
+		MonoRuntime *runtime;
+		int iid;
+
+		iid = in->DecodeID ();
+		runtime = (MonoRuntime *) ServerObject::GetObjectByID (iid, SERVER_OBJECT_KIND_MONO_RUNTIME);
+
+		if (!runtime) {
+			err = ERR_NO_SUCH_MONO_RUNTIME;
+			break;
+		}
+
+#if WINDOWS
+		runtime_data.command = command;
+		runtime_data.id = id;
+		runtime_data.runtime = runtime;
+		runtime_data.in = in;
+		runtime_data.out = buf;
+
+		delegate.func = runtime_command_proxy;
+		delegate.user_data = &runtime_data;
+
+		if (!server->InferiorCommand (&delegate))
+			err = ERR_NOT_STOPPED;
+		else
+			err = runtime_data.ret;
+#else
+		err = runtime->ProcessCommand (command, id, in, buf);
 #endif
 		break;
 	}

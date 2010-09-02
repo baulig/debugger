@@ -74,11 +74,12 @@
     <Compile Include="backend\mdb-server\MdbInferior.cs" />
     <Compile Include="backend\mdb-server\MdbProcess.cs" />
     <Compile Include="backend\mdb-server\MdbServer.cs" />
+    <Compile Include="backend\mdb-server\MonoRuntime.cs" />
     <Compile Include="backend\mdb-server\ServerObject.cs" />
+    <Compile Include="backend\MonoRuntimeManager.cs" />
     <Compile Include="backend\mono\MetadataHelper.cs" />
     <Compile Include="backend\mono\MonoLanguageBackend.cs" />
     <Compile Include="backend\mono\MonoSymbolFile.cs" />
-    <Compile Include="backend\mono\MonoThreadManager.cs" />
     <Compile Include="backend\os\Bfd.cs" />
     <Compile Include="backend\os\BfdDisassembler.cs" />
     <Compile Include="backend\os\DarwinOperatingSystem.cs" />
@@ -96,6 +97,7 @@
     <Compile Include="backend\server\IDebuggerServer.cs" />
     <Compile Include="backend\server\IExecutableReader.cs" />
     <Compile Include="backend\server\IInferior.cs" />
+    <Compile Include="backend\server\IMonoRuntime.cs" />
     <Compile Include="backend\server\IProcess.cs" />
     <Compile Include="backend\server\IServerObject.cs" />
     <Compile Include="backend\server\ServerEvent.cs" />

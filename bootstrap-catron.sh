@@ -2,7 +2,7 @@
 
 PREFIX=`pwd`/BUILD
 
-if test -e sysdeps/server/mdb-server.c; then
+if test -e sysdeps/server/mdb-server.cpp; then
 	echo Building
 else
 	echo You must run this from the Mono directory.
@@ -49,12 +49,8 @@ CFLAGS="-DARM_FPU_NONE=1 -DPAGE_SIZE=0x400 -DS_IWRITE=S_IWUSR -D__POSIX_VISIBLE=
 CXXFLAGS="-DARM_FPU_NONE=1 -DPAGE_SIZE=0x400 -DS_IWRITE=S_IWUSR -D__POSIX_VISIBLE=201002 -D__ARM_ARCH_5__ -D__ARM_ARCH_5T__ -D__ARM_ARCH_5TE__ -DPLATFORM_ANDROID -Dlinux -D__linux__ -DSK_RELEASE -DNDEBUG -UDEBUG -march=armv5te -fpic -g -I$NDK_PLATFORM_ARCH/usr/include/ -I$HACK_INC"
 LDFLAGS="-Wl,-T,$TOOLCHAIN/arm-eabi/lib/ldscripts/armelf.x,-rpath-link=$NDK_PLATFORM_ARCH/usr/lib,-dynamic-linker=/system/bin/linker -L$NDK_PLATFORM_ARCH/usr/lib -ldl -lm -llog -lc"
 
-#pushd BUILD/arm
-#/work/sources/binutils-2.20/bfd/configure --host=arm-eabi-linux CC="$CC" CXX="$CXX" CPP="$CPP" CXXCPP="$CXXCPP" LD=$LD AR=$AR AS=$AS RANLIB=$R#ANLIB STRIP=$STRIP CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" PATH="$PATH" --prefix="$PREFIX/arm/install"
-#make all install
-
 pushd BUILD/arm
-../../configure --with-backend=server-only --host=arm-eabi-linux CC="$CC" CXX="$CXX" CPP="$CPP" CXXCPP="$CXXCPP" LD=$LD AR=$AR AS=$AS RANLIB=$RANLIB STRIP=$STRIP CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" PATH="$PATH" --prefix="$PREFIX/arm/install"
+../../configure --with-backend=server-only --host=arm-eabi-linux CC="$CC" CXX="$CXX" CPP="$CPP" CXXCPP="$CXXCPP" LD=$LD AR=$AR AS=$AS RANLIB=$RANLIB STRIP=$STRIP CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" PATH="$PATH" --prefix="$PREFIX/INSTALL/arm"
 make all install
 popd
 
