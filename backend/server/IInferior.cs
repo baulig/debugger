@@ -179,7 +179,7 @@ namespace Mono.Debugger.Server
 
 		void Continue ();
 
-		void Resume ();
+		void ResumeStepping ();
 
 		long[] GetRegisters ();
 
@@ -202,8 +202,6 @@ namespace Mono.Debugger.Server
 		void RuntimeInvoke (long invoke_method, long method_address, int num_params,
 				    byte[] blob, int[] blob_offsets, long[] addresses,
 				    long callback_arg, bool debug);
-
-		void ExecuteInstruction (byte[] instruction, bool update_ip);
 
 		ServerCallbackFrame GetCallbackFrame (long stack_pointer, bool exact_match);
 

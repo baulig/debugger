@@ -196,6 +196,7 @@ MdbServerLinux::HandleLinuxWaitEvent (void)
 	MdbProcess *process;
 	int pid, status;
 	ServerEvent *e;
+	bool remain_stopped;
 
 #if DEBUG_WAIT
 	g_message (G_STRLOC ": HandleLinuxWaitEvent()");
@@ -259,12 +260,18 @@ MdbServerLinux::HandleLinuxWaitEvent (void)
 	g_message (G_STRLOC ": normal event => %d - %x - %p", pid, status, inferior);
 #endif
 
-	e = inferior->HandleLinuxWaitEvent (status);
+	e = inferior->HandleLinuxWaitEvent (status, &remain_stopped);
 #if DEBUG_WAIT
 	g_message (G_STRLOC ": normal event => %d - %x - %p - %p", pid, status, inferior, e);
 #endif
 	if (e) {
 		SendEvent (e);
 		g_free (e);
+	}
+
+	if (!remain_stopped) {
+		if (inferior->ResumeStepping ()) {
+			g_warning (G_STRLOC ": Can't resume after wait event.");
+		}
 	}
 }

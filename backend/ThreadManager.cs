@@ -104,7 +104,12 @@ namespace Mono.Debugger.Backend
 
 		void engine_thread_iteration ()
 		{
+			Report.Debug (DebugFlags.Wait, "Engine thread waiting");
+
 			event_queue.Lock ();
+
+			Report.Debug (DebugFlags.Wait, "Engine thread done waiting: {0}",
+				      event_queue.Count);
 
 			if (event_queue.Count == 0)
 				event_queue.Wait ();
@@ -113,12 +118,16 @@ namespace Mono.Debugger.Backend
 
 			event_queue.Unlock ();
 
-			lock (this) {
+			Report.Debug (DebugFlags.Wait, "Engine thread got event: {0}",
+				      e.ServerEvent != null ? e.ServerEvent.ToString () : "<delegate>");
+
+			try {
 				if (e.ServerEvent != null)
 					HandleEvent (e.ServerEvent);
 				else
 					e.RunDelegate ();
-				e.Dispose ();
+			} catch (Exception ex) {
+				Console.WriteLine ("SERVER EVENT EX: {0}", ex);
 			}
 		}
 
@@ -126,14 +135,21 @@ namespace Mono.Debugger.Backend
 
 		internal void OnServerEvent (ServerEvent e)
 		{
+			Report.Debug (DebugFlags.Wait, "Server event: {0}", e);
+
 			event_queue.Lock ();
 
 			event_queue.Enqueue (new Event (e));
+
+			Report.Debug (DebugFlags.Wait, "Server event #1: {0} / {1}", e,
+				      event_queue.Count);
 
 			if (event_queue.Count == 1)
 				event_queue.Signal ();
 
 			event_queue.Unlock ();
+
+			Report.Debug (DebugFlags.Wait, "Server event #2");
 		}
 
 		Dictionary<int, SingleSteppingEngine> sse_by_inferior;
@@ -174,7 +190,24 @@ namespace Mono.Debugger.Backend
 
 		protected void HandleEvent (ServerEvent e)
 		{
-			Console.WriteLine ("SERVER EVENT: {0} {1}", e, DebuggerWaitHandle.CurrentThread);
+			Console.WriteLine ("SERVER EVENT: {0} {1} {2}", e,
+					   e.Sender != null ? e.Sender.ID : 0,
+					   DebuggerWaitHandle.CurrentThread);
+
+			switch (e.Type) {
+			case ServerEventType.MainModuleLoaded:
+			case ServerEventType.DllLoaded:
+				OnDllLoaded (process_by_id [e.Sender.ID], (IExecutableReader) e.ArgumentObject);
+				return;
+
+			case ServerEventType.ThreadCreated:
+				OnThreadCreated ((IInferior) e.ArgumentObject);
+				return;
+
+			case ServerEventType.MonoRuntimeLoaded:
+				OnMonoRuntimeLoaded (process_by_id [e.Sender.ID], (IMonoRuntime) e.ArgumentObject);
+				return;
+			}
 
 			switch (e.Type) {
 			case ServerEventType.MainModuleLoaded:
@@ -296,15 +329,16 @@ namespace Mono.Debugger.Backend
 		{
 			event_queue.Lock ();
 
-			var e = new Event (dlg);
-			event_queue.Enqueue (e);
+			using (var e = new Event (dlg)) {
+				event_queue.Enqueue (e);
 
-			if (event_queue.Count == 1)
-				event_queue.Signal ();
+				if (event_queue.Count == 1)
+					event_queue.Signal ();
 
-			event_queue.Unlock ();
+				event_queue.Unlock ();
 
-			return e.Wait ();
+				return e.Wait ();
+			}
 		}
 
 		internal object SendCommand (SingleSteppingEngine sse, TargetAccessDelegate target, object user_data)

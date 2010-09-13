@@ -847,11 +847,7 @@ namespace Mono.Debugger
 				Report.Debug (DebugFlags.Threads,
 					      "Acquiring global thread lock: {0}", caller);
 
-				foreach (ThreadServant thread in thread_hash.Values) {
-					if (thread == caller)
-						continue;
-					thread.AcquireThreadLock ();
-				}
+				server_process.Suspend (caller.Inferior.InferiorHandle);
 
 				has_thread_lock = true;
 
@@ -870,11 +866,7 @@ namespace Mono.Debugger
 				Report.Debug (DebugFlags.Threads,
 					      "Releasing global thread lock: {0}", caller);
 
-				foreach (ThreadServant thread in thread_hash.Values) {
-					if (thread == caller)
-						continue;
-					thread.ReleaseThreadLock ();
-				}
+				server_process.Resume (caller.Inferior.InferiorHandle);
 
 				has_thread_lock = false;
 

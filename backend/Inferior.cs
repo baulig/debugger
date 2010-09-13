@@ -231,13 +231,6 @@ namespace Mono.Debugger.Backend
 				length, blob, blob_offsets, addresses, callback_arg, debug);
 		}
 
-		public void ExecuteInstruction (byte[] instruction, bool update_ip)
-		{
-			check_disposed ();
-
-			server_inferior.ExecuteInstruction (instruction, update_ip);
-		}
-
 		public void MarkRuntimeInvokeFrame ()
 		{
 			server_inferior.MarkRuntimeInvokeFrame ();
@@ -691,13 +684,13 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		public void Resume ()
+		public void ResumeStepping ()
 		{
 			check_disposed ();
 
 			TargetState old_state = change_target_state (TargetState.Running);
 			try {
-				server_inferior.Resume ();
+				server_inferior.ResumeStepping ();
 			} catch {
 				change_target_state (old_state);
 				throw;

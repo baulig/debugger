@@ -104,6 +104,32 @@ MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		break;
 	}
 
+	case CMD_PROCESS_SUSPEND: {
+		MdbInferior *inferior;
+		int iid;
+
+		iid = in->DecodeID ();
+		inferior = (MdbInferior *) ServerObject::GetObjectByID (iid, SERVER_OBJECT_KIND_INFERIOR);
+
+		if (!inferior)
+			return ERR_NO_SUCH_INFERIOR;
+
+		return SuspendProcess (inferior);
+	}
+
+	case CMD_PROCESS_RESUME: {
+		MdbInferior *inferior;
+		int iid;
+
+		iid = in->DecodeID ();
+		inferior = (MdbInferior *) ServerObject::GetObjectByID (iid, SERVER_OBJECT_KIND_INFERIOR);
+
+		if (!inferior)
+			return ERR_NO_SUCH_INFERIOR;
+
+		return ResumeProcess (inferior);
+	}
+
 	default:
 		return ERR_NOT_IMPLEMENTED;
 	}
@@ -164,4 +190,28 @@ MdbProcess::OnDllLoaded (MdbInferior *inferior, MdbExeReader *reader)
 	g_free (e);
 
 	CheckLoadedDll (inferior, reader);
+}
+
+typedef struct {
+	InferiorForeachFunc func;
+	gpointer user_data;
+} ForeachDelegate;
+
+static void
+inferior_foreach (gpointer key, gpointer value, gpointer user_data)
+{
+	MdbInferior *inferior = (MdbInferior *) value;
+	ForeachDelegate *dlg = (ForeachDelegate *) user_data;
+
+	dlg->func (inferior, dlg->user_data);
+}
+
+void
+MdbProcess::ForeachInferior (InferiorForeachFunc func, gpointer user_data)
+{
+	ForeachDelegate dlg;
+
+	dlg.func = func;
+	dlg.user_data = user_data;
+	g_hash_table_foreach (inferior_by_thread_id, inferior_foreach, &dlg);
 }

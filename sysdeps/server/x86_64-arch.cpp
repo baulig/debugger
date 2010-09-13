@@ -148,8 +148,10 @@ X86Arch::Marshal_Generic (InvocationData *invocation, CallbackData *cdata)
 			return false;
 	}
 
-	cdata->call_address = new_rsp + 2 * sizeof (gsize);
+	cdata->call_address = new_rsp + sizeof (gsize);
 	cdata->stack_pointer = new_rsp;
+
+	cdata->callback = invocation->callback;
 
 	if (inferior->PokeWord (new_rsp, cdata->call_address))
 		return false;
@@ -161,8 +163,6 @@ X86Arch::Marshal_Generic (InvocationData *invocation, CallbackData *cdata)
 	INFERIOR_REG_RSP (current_regs) = new_rsp;
 	INFERIOR_REG_RDI (current_regs) = new_rsp + 2 * sizeof (gsize);
 	INFERIOR_REG_RIP (current_regs) = runtime->GetGenericInvocationFunc ();
-
-	g_message (G_STRLOC ": %Lx - %Lx", INFERIOR_REG_RIP (current_regs), new_rsp);
 
 	return true;
 }

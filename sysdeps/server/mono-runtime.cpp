@@ -1,7 +1,8 @@
 #include <mono-runtime.h>
+#include <mdb-arch.h>
 
-#define MONO_DEBUGGER_MAJOR_VERSION                     81
-#define MONO_DEBUGGER_MINOR_VERSION                     6
+#define MONO_DEBUGGER_MAJOR_VERSION                     82
+#define MONO_DEBUGGER_MINOR_VERSION                     0
 #define MONO_DEBUGGER_MAGIC                             0x7aff65af4253d427ULL
 
 typedef struct {
@@ -54,7 +55,7 @@ typedef struct {
 	guint32 breakpoint_array_size;
 
 	gsize get_method_signature_ptr;
-	gsize init_code_buffer;
+	gsize init_code_buffer_ptr;
 
 #if !defined(HOST_WIN32)
 	gsize thread_vtable_ptr_ptr;
@@ -128,36 +129,36 @@ typedef struct {
 	int mono_vtable_vtable_offset;
 } MonoDebuggerMetadataInfo;
 
+typedef struct {
+	gsize thread_info_ptr;
+	gsize tid, lmf_addr;
+} RuntimeInferiorData;
+
+class MonoRuntimeImpl;
+
+typedef struct {
+	MonoRuntimeImpl *runtime;
+	guint8 *instruction;
+	int insn_size;
+	bool update_ip;
+	gsize code_address;
+	int slot;
+} ExecuteInsnData;
+
+#define EXECUTABLE_CODE_CHUNK_SIZE		16
+
 static bool initialize_breakpoint_handler (MdbInferior *inferior, BreakpointInfo *breakpoint);
+static void execute_insn_handler (MdbInferior *inferior, gsize arg1, gsize arg2, gpointer user_data);
+static void execute_insn_done (MdbInferior *inferior, gsize rip, G_GNUC_UNUSED gsize dummy, gpointer user_data);
 
 class MonoRuntimeImpl : public MonoRuntime
 {
-protected:
-	MonoRuntimeImpl (MdbProcess *process, MdbExeReader *exe, gsize info_ptr)
-		: MonoRuntime (process, exe)
-	{
-		this->debugger_info_ptr = info_ptr;
-		this->debugger_info = NULL;
-		this->initialize_bpt = NULL;
-		this->executable_code_buffer;
-		this->thread_abort_signal = 0;
-	}
+public:
+	void HandleNotification (MdbInferior *inferior, NotificationType type, gsize arg1, gsize arg2);
 
-	bool Initialize (MdbInferior *inferior);
-
-private:
-	gsize debugger_info_ptr;
-	MonoDebuggerInfo *debugger_info;
-
-	BreakpointInfo *initialize_bpt;
-
-	gsize executable_code_buffer;
-	guint32 thread_abort_signal;
+	ErrorCode SetExtendedNotifications (MdbInferior *inferior, NotificationType type, bool enable);
 
 	void OnInitializeBreakpoint (MdbInferior *inferior);
-	friend bool initialize_breakpoint_handler (MdbInferior *inferior, BreakpointInfo *breakpoint);
-
-	friend MonoRuntime *MonoRuntime::Initialize (MdbInferior *inferior, MdbExeReader *exe);
 
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
@@ -170,6 +171,56 @@ private:
 	{
 		return debugger_info->generic_invocation_func;
 	}
+
+	ErrorCode EnableBreakpoint (MdbInferior *inferior, BreakpointInfo *breakpoint);
+	ErrorCode DisableBreakpoint (MdbInferior *inferior, BreakpointInfo *breakpoint);
+
+	ErrorCode ExecuteInstruction (MdbInferior *inferior, const guint8 *instruction,
+				      guint32 size, bool update_ip);
+
+protected:
+	MonoRuntimeImpl (MdbProcess *process, MdbExeReader *exe, gsize info_ptr)
+		: MonoRuntime (process, exe)
+	{
+		this->debugger_info_ptr = info_ptr;
+		this->debugger_info = NULL;
+		this->initialize_bpt = NULL;
+		this->executable_code_buffer_ptr = 0;
+		this->thread_abort_signal = 0;
+
+		this->inferior_data_hash = g_hash_table_new (NULL, NULL);
+	}
+
+	bool Initialize (MdbInferior *inferior);
+
+	friend bool initialize_breakpoint_handler (MdbInferior *inferior, BreakpointInfo *breakpoint);
+	friend MonoRuntime *MonoRuntime::Initialize (MdbInferior *inferior, MdbExeReader *exe);
+
+private:
+	gsize debugger_info_ptr;
+	MonoDebuggerInfo *debugger_info;
+
+	BreakpointInfo *initialize_bpt;
+
+	guint32 thread_abort_signal;
+
+	GHashTable *inferior_data_hash;
+
+	guint8 *breakpoint_table_bitfield;
+	int FindBreakpointTableSlot (void);
+
+	gsize executable_code_buffer_ptr;
+	guint32 executable_code_chunk_size;
+	guint32 executable_code_total_chunks;
+	guint8 *executable_code_bitfield;
+	guint32 executable_code_last_slot;
+
+	int FindCodeBufferSlot (void);
+
+	friend void execute_insn_handler (MdbInferior *inferior, gsize arg1, gsize arg2, gpointer user_data);
+	friend void execute_insn_done (MdbInferior *inferior, gsize rip, G_GNUC_UNUSED gsize dummy, gpointer user_data);
+
+	ErrorCode DoExecuteInstruction (MdbInferior *inferior, ExecuteInsnData *data);
 };
 
 MonoRuntime *
@@ -219,13 +270,12 @@ MonoRuntimeImpl::OnInitializeBreakpoint (MdbInferior *inferior)
 {
 	g_message (G_STRLOC);
 
-	if (inferior->PeekWord (debugger_info->executable_code_buffer_ptr, &executable_code_buffer))
+	if (inferior->PeekWord (debugger_info->executable_code_buffer_ptr, &executable_code_buffer_ptr))
 		return;
-
 	if (inferior->ReadMemory (debugger_info->thread_abort_signal_ptr, 4, &thread_abort_signal))
 		return;
 
-	g_message (G_STRLOC ": %Lx - %Lx", executable_code_buffer, debugger_info->notification_function_ptr);
+	g_message (G_STRLOC ": %Lx - %Lx", executable_code_buffer_ptr, debugger_info->notification_function_ptr);
 }
 
 static bool
@@ -251,8 +301,6 @@ MonoRuntimeImpl::Initialize (MdbInferior *inferior)
 		return false;
 	}
 
-	g_message (G_STRLOC);
-
 	if (inferior->InsertBreakpoint (debugger_info->initialize_ptr, &initialize_bpt)) {
 		g_warning (G_STRLOC);
 		return false;
@@ -260,6 +308,12 @@ MonoRuntimeImpl::Initialize (MdbInferior *inferior)
 
 	initialize_bpt->handler = initialize_breakpoint_handler;
 	initialize_bpt->user_data = this;
+
+	breakpoint_table_bitfield = (guint8 *) g_malloc0 (debugger_info->breakpoint_array_size);
+
+	executable_code_chunk_size = EXECUTABLE_CODE_CHUNK_SIZE;
+	executable_code_total_chunks = debugger_info->executable_code_buffer_size / EXECUTABLE_CODE_CHUNK_SIZE;
+	executable_code_bitfield = (guint8 *) g_malloc0 (executable_code_total_chunks);
 
 	return true;
 }
@@ -287,7 +341,7 @@ MonoRuntimeImpl::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		out->AddLong (debugger_info->abort_runtime_invoke_ptr);
 		out->AddLong (debugger_info->run_finally_ptr);
 
-		out->AddLong (debugger_info->init_code_buffer);
+		out->AddLong (debugger_info->init_code_buffer_ptr);
 		out->AddLong (debugger_info->create_string_ptr);
 
 		out->AddInt (debugger_info->mono_trampoline_num);
@@ -301,9 +355,278 @@ MonoRuntimeImpl::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		out->AddLong (debugger_info->generic_invocation_func);
 		break;
 
+	case CMD_MONO_RUNTIME_SET_EXTENDED_NOTIFICATIONS: {
+		MdbInferior *inferior;
+		NotificationType type;
+		bool enable;
+		int iid;
+
+		iid = in->DecodeID ();
+		inferior = (MdbInferior *) ServerObject::GetObjectByID (iid, SERVER_OBJECT_KIND_INFERIOR);
+
+		if (!inferior)
+			return ERR_NO_SUCH_INFERIOR;
+
+		type = (NotificationType) in->DecodeInt ();
+		enable = in->DecodeByte () != 0;
+		return SetExtendedNotifications (inferior, type, enable);
+	}
+
+	case CMD_MONO_RUNTIME_EXECUTE_INSTRUCTION: {
+		MdbInferior *inferior;
+ 		const guint8 *instruction;
+		bool update_ip;
+		int iid, size;
+
+		iid = in->DecodeID ();
+		inferior = (MdbInferior *) ServerObject::GetObjectByID (iid, SERVER_OBJECT_KIND_INFERIOR);
+
+		if (!inferior)
+			return ERR_NO_SUCH_INFERIOR;
+
+		size = in->DecodeInt ();
+		instruction = in->DecodeBuffer (size);
+
+		update_ip = in->DecodeByte() != 0;
+
+		return ExecuteInstruction (inferior, instruction, size, update_ip);
+	}
+
 	default:
 		return ERR_NOT_IMPLEMENTED;
 	}
 
 	return ERR_NONE;
 }
+
+int
+MonoRuntimeImpl::FindBreakpointTableSlot ()
+{
+	guint32 i;
+
+	for (i = 1; i < debugger_info->breakpoint_array_size; i++) {
+		if (breakpoint_table_bitfield [i])
+			continue;
+
+		breakpoint_table_bitfield [i] = 1;
+		return i;
+	}
+
+	return -1;
+}
+
+ErrorCode
+MonoRuntimeImpl::EnableBreakpoint (MdbInferior *inferior, BreakpointInfo *breakpoint)
+{
+	guint64 table_address, index_address;
+	ErrorCode result;
+	int slot;
+
+	slot = FindBreakpointTableSlot ();
+	if (slot < 0)
+		return ERR_INTERNAL_ERROR;
+
+	breakpoint->runtime_table_slot = slot;
+
+	table_address = debugger_info->mono_breakpoint_info_ptr + 2 * sizeof (gsize) * slot;
+	index_address = debugger_info->mono_breakpoint_info_index_ptr + sizeof (gsize) * slot;
+
+	result = inferior->PokeWord (table_address, breakpoint->address);
+	if (result)
+		return result;
+
+	result = inferior->PokeWord (table_address + 4, (gsize) breakpoint->saved_insn);
+	if (result)
+		return result;
+
+	result = inferior->PokeWord (index_address, (gsize) slot);
+	if (result)
+		return result;
+
+	return ERR_NONE;
+}
+
+ErrorCode
+MonoRuntimeImpl::DisableBreakpoint (MdbInferior *inferior, BreakpointInfo *breakpoint)
+{
+	guint64 index_address;
+	ErrorCode result;
+	int slot;
+
+	slot = breakpoint->runtime_table_slot;
+	index_address = debugger_info->mono_breakpoint_info_index_ptr + sizeof (gsize) * slot;
+
+	result = inferior->PokeWord (index_address, 0);
+	if (result)
+		return result;
+
+	breakpoint_table_bitfield [slot] = 0;
+
+	return ERR_NONE;
+}
+
+int
+MonoRuntimeImpl::FindCodeBufferSlot (void)
+{
+	guint32 i;
+
+	for (i = executable_code_last_slot + 1; i < executable_code_total_chunks; i++) {
+		if (executable_code_bitfield [i])
+			continue;
+
+		executable_code_bitfield [i] = 1;
+		executable_code_last_slot = i;
+		return i;
+	}
+
+	executable_code_last_slot = 0;
+	for (i = 0; i < executable_code_total_chunks; i++) {
+		if (executable_code_bitfield [i])
+			continue;
+
+		executable_code_bitfield [i] = 1;
+		executable_code_last_slot = i;
+		return i;
+	}
+
+	return -1;
+}
+
+static void
+execute_insn_handler (MdbInferior *inferior, gsize arg1, gsize arg2, gpointer user_data)
+{
+	ExecuteInsnData *data = (ExecuteInsnData *) user_data;
+	ErrorCode result;
+
+	g_message (G_STRLOC ": %Lx - %Lx", arg1, arg2);
+
+	data->runtime->executable_code_buffer_ptr = arg1;
+
+	result = data->runtime->DoExecuteInstruction (inferior, data);
+
+	g_message (G_STRLOC ": %d", result);
+}
+
+static void
+execute_insn_done (MdbInferior *inferior, gsize rip, G_GNUC_UNUSED gsize dummy, gpointer user_data)
+{
+	ExecuteInsnData *data = (ExecuteInsnData *) user_data;
+
+	g_message (G_STRLOC);
+
+	data->runtime->executable_code_bitfield [data->slot] = 0;
+
+	g_free (data->instruction);
+	g_free (data);
+}
+
+ErrorCode
+MonoRuntimeImpl::ExecuteInstruction (MdbInferior *inferior, const guint8 *instruction,
+				     guint32 size, bool update_ip)
+{
+	ExecuteInsnData *data;
+	ErrorCode result;
+
+	if (size > executable_code_chunk_size)
+		return ERR_UNKNOWN_ERROR;
+
+	data = g_new0 (ExecuteInsnData, 1);
+
+	data->runtime = this;
+	data->instruction = (guint8 *) g_memdup (instruction, size);
+	data->insn_size = size;
+	data->update_ip = update_ip;
+
+	if (!executable_code_buffer_ptr) {
+		InvocationData *invocation = g_new0 (InvocationData, 1);
+
+		g_message (G_STRLOC ": %Lx", debugger_info->init_code_buffer_ptr);
+
+		invocation->type = INVOCATION_TYPE_LONG_LONG;
+		invocation->method_address = debugger_info->init_code_buffer_ptr;
+		invocation->callback = new InferiorCallback (execute_insn_handler, data);
+
+		result = inferior->CallMethod (invocation);
+		if (result)
+			return result;
+
+		return ERR_NONE;
+	}
+
+	return DoExecuteInstruction (inferior, data);
+}
+
+ErrorCode
+MonoRuntimeImpl::DoExecuteInstruction (MdbInferior *inferior, ExecuteInsnData *data)
+{
+	ErrorCode result;
+	int slot;
+
+	if (!executable_code_buffer_ptr)
+		return ERR_NO_CODE_BUFFER;
+
+	slot = FindCodeBufferSlot ();
+	if (slot < 0)
+		return ERR_UNKNOWN_ERROR;
+
+	data->code_address = executable_code_buffer_ptr + slot * executable_code_chunk_size;
+
+	result = inferior->WriteMemory (data->code_address, data->insn_size, data->instruction);
+	if (result)
+		return result;
+
+	return inferior->GetArch ()->ExecuteInstruction (
+		inferior, data->code_address, data->insn_size, data->update_ip,
+		new InferiorCallback (execute_insn_done, data));
+}
+
+ErrorCode
+MonoRuntimeImpl::SetExtendedNotifications (MdbInferior *inferior, NotificationType type, bool enable)
+{
+	RuntimeInferiorData *data;
+	gsize notifications;
+	ErrorCode result;
+
+	data = (RuntimeInferiorData *) g_hash_table_lookup (inferior_data_hash, inferior);
+	if (!data)
+		return ERR_NO_SUCH_INFERIOR;
+
+	result = inferior->PeekWord (data->thread_info_ptr + 24, &notifications);
+	if (result)
+		return result;
+
+	if (enable)
+		notifications |= (gsize) type;
+	else
+		notifications &= ~(gsize) type;
+
+	return inferior->PokeWord (data->thread_info_ptr + 24, notifications);
+}
+
+void
+MonoRuntimeImpl::HandleNotification (MdbInferior *inferior, NotificationType type, gsize arg1, gsize arg2)
+{
+	g_message (G_STRLOC ": HandleNotification(): %d - %Lx - %Lx", type, arg1, arg2);
+
+	switch (type) {
+	case NOTIFICATION_THREAD_CREATED: {
+		RuntimeInferiorData *data = g_new0 (RuntimeInferiorData, 1);
+
+		data->thread_info_ptr = arg2;
+
+		if (inferior->PeekWord (arg2, &data->tid) || inferior->PeekWord (arg2 + 8, &data->lmf_addr)) {
+			g_warning (G_STRLOC);
+			g_free (data);
+			break;
+		}
+
+		g_message (G_STRLOC ": %p - %Lx - %Lx - %Lx", data, data->thread_info_ptr, data->tid, data->lmf_addr);
+		g_hash_table_insert (inferior_data_hash, inferior, data);
+		break;
+	}
+
+	default:
+		break;
+	}
+}
+

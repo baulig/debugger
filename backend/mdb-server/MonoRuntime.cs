@@ -12,7 +12,9 @@ namespace Mono.Debugger.MdbServer
 		{ }
 
 		enum CmdMonoRuntime {
-			GET_DEBUGGER_INFO = 1
+			GET_DEBUGGER_INFO = 1,
+			SET_EXTENDED_NOTIFICATIONS = 2,
+			EXECUTE_INSTRUCTION = 3
 		}
 
 		public MonoDebuggerInfo GetDebuggerInfo ()
@@ -52,6 +54,29 @@ namespace Mono.Debugger.MdbServer
 			info.GenericInvocationFunc = new TargetAddress (AddressDomain.Global, reader.ReadLong ());
 
 			return info;
+		}
+
+		public void SetExtendedNotifications (IInferior inferior, NotificationType type, bool enable)
+		{
+			var writer = new Connection.PacketWriter ();
+			writer.WriteId (ID);
+			writer.WriteId (inferior.ID);
+			writer.WriteInt ((int) type);
+			writer.WriteByte (enable ? (byte)1 : (byte)0);
+
+			Connection.SendReceive (CommandSet.MONO_RUNTIME, (int) CmdMonoRuntime.SET_EXTENDED_NOTIFICATIONS, writer);
+		}
+
+		public void ExecuteInstruction (IInferior inferior, byte[] instruction, bool update_ip)
+		{
+			var writer = new Connection.PacketWriter ();
+			writer.WriteId (ID);
+			writer.WriteId (inferior.ID);
+			writer.WriteInt (instruction.Length);
+			writer.WriteData (instruction);
+			writer.WriteByte (update_ip ? (byte)1 : (byte)0);
+
+			Connection.SendReceive (CommandSet.MONO_RUNTIME, (int) CmdMonoRuntime.EXECUTE_INSTRUCTION, writer);
 		}
 	}
 }

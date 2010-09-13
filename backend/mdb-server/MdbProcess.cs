@@ -27,7 +27,9 @@ namespace Mono.Debugger.MdbServer
 		enum CmdProcess {
 			GET_MAIN_READER = 1,
 			INITIALIZE_PROCESS = 2,
-			SPAWN =3
+			SPAWN = 3,
+			SUSPEND = 4,
+			RESUME = 5
 		}
 
 		public MdbExeReader MainReader {
@@ -85,6 +87,16 @@ namespace Mono.Debugger.MdbServer
 		IInferior IProcess.Attach (int pid)
 		{
 			return Attach (pid);
+		}
+
+		public void Suspend (IInferior caller)
+		{
+			Connection.SendReceive (CommandSet.PROCESS, (int) CmdProcess.SUSPEND, new Connection.PacketWriter ().WriteId (ID).WriteId (caller.ID));
+		}
+
+		public void Resume (IInferior caller)
+		{
+			Connection.SendReceive (CommandSet.PROCESS, (int) CmdProcess.RESUME, new Connection.PacketWriter ().WriteId (ID).WriteId (caller.ID));
 		}
 	}
 }

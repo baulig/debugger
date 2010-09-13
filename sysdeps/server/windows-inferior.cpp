@@ -37,6 +37,10 @@ private:
 			 MdbInferior **out_inferior, guint32 *out_thread_id,
 			 gchar **out_error);
 
+	ErrorCode SuspendProcess (MdbInferior *inferior);
+
+	ErrorCode ResumeProcess (MdbInferior *inferior);
+
 	friend class WindowsInferior;
 };
 
@@ -69,7 +73,7 @@ public:
 
 	ErrorCode Continue (void);
 
-	ErrorCode Resume (void);
+	ErrorCode ResumeStepping (void);
 
 	ErrorCode GetRegisterCount (guint32 *out_count);
 
@@ -92,6 +96,10 @@ public:
 	ErrorCode Stop (void);
 
 	ErrorCode CallMethod (InvocationData *data);
+
+	ErrorCode SuspendThread (void);
+
+	ErrorCode ResumeThread (void);
 
 	//
 	// Private API.
@@ -125,7 +133,7 @@ static HANDLE ready_event;
 static HANDLE wait_event;
 static HANDLE command_mutex;
 
-static InferiorDelegate *inferior_delegate;
+static ServerDelegate *inferior_delegate;
 
 static DWORD WINAPI debugging_thread_main (LPVOID dummy_arg);
 
@@ -191,7 +199,7 @@ MdbInferior::Initialize (void)
 }
 
 bool
-MdbServer::InferiorCommand (InferiorDelegate *delegate)
+MdbServer::InferiorCommand (ServerDelegate *delegate)
 {
 	if (WaitForSingleObject (command_mutex, 0) != 0) {
 		g_warning (G_STRLOC ": Failed to acquire command mutex !");
@@ -219,7 +227,7 @@ show_debug_event (DEBUG_EVENT *debug_event)
 		if (exception_code== EXCEPTION_BREAKPOINT || exception_code == EXCEPTION_SINGLE_STEP)
 			return;
 		// DecodeException (e,tampon);
-		g_debug ( "ExceptionCode: %d at address 0x%p",exception_code, 
+		g_debug ( "ExceptionCode: %x at address 0x%p", exception_code, 
 			  debug_event->u.Exception.ExceptionRecord.ExceptionAddress);
 
 		if (debug_event->u.Exception.dwFirstChance != 0)
@@ -374,17 +382,38 @@ WindowsInferior::HandleDebugEvent (DEBUG_EVENT *de)
 			   exception_code, exception_addr, de->u.Exception.dwFirstChance);
 
 		if ((exception_code == EXCEPTION_BREAKPOINT) || (exception_code == EXCEPTION_SINGLE_STEP)) {
+			bool remain_stopped;
 			ServerEvent *e;
 
-			e = arch->ChildStopped (0);
+			e = arch->ChildStopped (0, &remain_stopped);
 			if (e) {
 				server->SendEvent (e);
 				g_free (e);
-			} else
+			} else if (remain_stopped) {
 				g_warning (G_STRLOC ": mdb_arch_child_stopped() returned NULL.");
+			}
 
-			ResetEvent (wait_event);
-			return;
+			if (remain_stopped) {
+				ResetEvent (wait_event);
+				return;
+			}
+		} else {
+			g_warning (G_STRLOC ": Got unknown exception event !");
+			if (de->u.Exception.ExceptionRecord.ExceptionFlags == EXCEPTION_NONCONTINUABLE) {
+				g_warning (G_STRLOC ": Non-continuable!");
+			}
+
+			if (!de->u.Exception.dwFirstChance) {
+				ServerEvent *e = g_new0 (ServerEvent, 1);
+				e->sender = this;
+				e->type = SERVER_EVENT_STOPPED;
+				e->arg = de->u.Exception.ExceptionRecord.ExceptionCode;
+				server->SendEvent (e);
+				g_free (e);
+
+				ResetEvent (wait_event);
+				return;
+			}
 		}
 
 		g_message (G_STRLOC ": resuming from exception (%x/%x)", de->dwProcessId, de->dwThreadId);
@@ -484,7 +513,7 @@ debugging_thread_main (LPVOID dummy_arg)
 		ret = WaitForMultipleObjects (2, wait_handles, FALSE, INFINITE);
 
 		if (ret == 0) { /* command_event */
-			InferiorDelegate *delegate;
+			ServerDelegate *delegate;
 
 			delegate = inferior_delegate;
 			inferior_delegate = NULL;
@@ -815,9 +844,9 @@ WindowsInferior::GetSignalInfo (SignalInfo **sinfo)
 }
 
 ErrorCode
-WindowsInferior::Resume (void)
+WindowsInferior::ResumeStepping (void)
 {
-	return ERR_NOT_IMPLEMENTED;
+	return Continue ();
 }
 
 ErrorCode
@@ -868,3 +897,26 @@ WindowsInferior::CallMethod (InvocationData *data)
 	return arch->CallMethod (data);
 }
 
+ErrorCode
+WindowsInferior::SuspendThread (void)
+{
+	return ERR_NOT_IMPLEMENTED;
+}
+
+ErrorCode
+WindowsInferior::ResumeThread (void)
+{
+	return ERR_NOT_IMPLEMENTED;
+}
+
+ErrorCode
+WindowsProcess::SuspendProcess (MdbInferior *caller)
+{
+	return ERR_NOT_IMPLEMENTED;
+}
+
+ErrorCode
+WindowsProcess::ResumeProcess (MdbInferior *caller)
+{
+	return ERR_NOT_IMPLEMENTED;
+}

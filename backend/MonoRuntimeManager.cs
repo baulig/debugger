@@ -26,25 +26,18 @@ namespace Mono.Debugger.Backend
 			debugger_info = runtime.GetDebuggerInfo ();
 		}
 
-		internal bool HasCodeBuffer {
-			get;
-			private set;
+		public void SetExtendedNotifications (Inferior inferior, NotificationType type, bool enable)
+		{
+			runtime.SetExtendedNotifications (inferior.InferiorHandle, type, enable);
 		}
 
-		internal void InitCodeBuffer (Inferior inferior, TargetAddress code_buffer)
+		public void ExecuteInstruction (Inferior inferior, byte[] instruction, bool update_ip)
 		{
-#if FIXME
-			HasCodeBuffer = true;
-			inferior.DebuggerServer.InitializeCodeBuffer (
-				mono_runtime_info, code_buffer.Address,
-				debugger_info.ExecutableCodeBufferSize);
-#else
-			throw new NotImplementedException ();
-#endif
+			runtime.ExecuteInstruction (inferior.InferiorHandle, instruction, update_ip);
 		}
 
 		internal bool CanExecuteCode {
-			get { return false; }
+			get { return true; }
 		}
 
 		public MonoDebuggerInfo MonoDebuggerInfo {

@@ -187,8 +187,8 @@ MdbInferior::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		result = Continue ();
 		break;
 
-	case CMD_INFERIOR_RESUME:
-		result = Resume ();
+	case CMD_INFERIOR_RESUME_STEPPING:
+		result = ResumeStepping ();
 		break;
 
 	case CMD_INFERIOR_INSERT_BREAKPOINT: {
@@ -266,6 +266,23 @@ MdbInferior::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		break;
 	}
 
+	case CMD_INFERIOR_SET_REGISTERS: {
+		guint32 count, i;
+		guint64 *regs;
+
+		result = GetRegisterCount (&count);
+		if (result)
+			return result;
+
+		regs = g_new0 (guint64, count);
+		for (i = 0; i < count; i++)
+			regs [i] = in->DecodeLong ();
+
+		result = SetRegisters (regs);
+		g_free (regs);
+		break;
+	}
+
 	case CMD_INFERIOR_READ_MEMORY: {
 		guint64 address;
 		guint32 size;
@@ -277,8 +294,10 @@ MdbInferior::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		data = (guint8 *) g_malloc (size);
 
 		result = ReadMemory (address, size, data);
-		if (!result)
+		if (!result) {
+			arch->RemoveBreakpointsFromTargetMemory (address, size, data);
 			out->AddData (data, size);
+		}
 
 		g_free (data);
 		break;

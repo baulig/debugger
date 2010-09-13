@@ -158,7 +158,7 @@ public:
 	X86Arch (MdbInferior *inferior) : MdbArch (inferior)
 	{
 		callback_stack = g_ptr_array_new ();
-		code_buffer = NULL;
+		current_code_buffer = NULL;
 		hw_bpm = NULL;
 	}
 
@@ -166,7 +166,7 @@ public:
 	ErrorCode EnableBreakpoint (BreakpointInfo *breakpoint);
 	ErrorCode DisableBreakpoint (BreakpointInfo *breakpoint);
 
-	ServerEvent *ChildStopped (int stopsig);
+	ServerEvent *ChildStopped (int stopsig, bool *out_remain_stopped);
 	ErrorCode GetFrame (StackFrame *out_frame);
 
 	void RemoveBreakpointsFromTargetMemory (guint64 start, guint32 size, gpointer buffer);
@@ -176,6 +176,9 @@ public:
 	ErrorCode SetRegisterValues (const guint64 *values);
 
 	ErrorCode CallMethod (InvocationData *data);
+
+	ErrorCode ExecuteInstruction (MdbInferior *inferior, gsize code_address, int insn_size,
+				      bool update_ip, InferiorCallback *callback);
 
 protected:
 	ErrorCode
@@ -203,7 +206,7 @@ protected:
 	InferiorRegs current_regs;
 
 	GPtrArray *callback_stack;
-	CodeBufferData *code_buffer;
+	CodeBufferData *current_code_buffer;
 	BreakpointManager *hw_bpm;
 };
 

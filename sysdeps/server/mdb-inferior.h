@@ -11,6 +11,23 @@ class MdbArch;
 class MdbDisassembler;
 class MdbProcess;
 
+class InferiorCallback {
+public:
+	void Invoke (MdbInferior *inferior, gsize arg1, gsize arg2)
+	{
+		func (inferior, arg1, arg2, user_data);
+	}
+
+	InferiorCallback (void (*func) (MdbInferior *, gsize, gsize, gpointer), gpointer user_data)
+	{
+		this->func = func;
+		this->user_data = user_data;
+	}
+protected:
+	gpointer user_data;
+	void (* func) (MdbInferior *, gsize, gsize, gpointer);
+};
+
 enum InvocationType {
 	INVOCATION_TYPE_LONG_LONG = 1,
 	INVOCATION_TYPE_LONG_LONG_LONG_STRING,
@@ -30,6 +47,7 @@ typedef struct {
 	gchar *string_arg;
 	int data_size;
 	guint8* data;
+	InferiorCallback *callback;
 } InvocationData;
 
 class MdbInferior : public ServerObject
@@ -61,7 +79,7 @@ public:
 
 	virtual ErrorCode Continue (void) = 0;
 
-	virtual ErrorCode Resume (void) = 0;
+	virtual ErrorCode ResumeStepping (void) = 0;
 
 	ErrorCode InsertBreakpoint (guint64 address, BreakpointInfo **out_breakpoint);
 
@@ -107,6 +125,10 @@ public:
 
 	virtual ErrorCode Stop (void) = 0;
 
+	virtual ErrorCode SuspendThread (void) = 0;
+
+	virtual ErrorCode ResumeThread (void) = 0;
+
 #if defined(__linux__) || defined(__FreeBSD__)
 	int GetLastSignal (void)
 	{
@@ -118,7 +140,7 @@ public:
 		this->last_signal = last_signal;
 	}
 
-	virtual ServerEvent *HandleLinuxWaitEvent (int status) = 0;
+	virtual ServerEvent *HandleLinuxWaitEvent (int status, bool *out_remain_stopped) = 0;
 #endif
 
 	virtual ErrorCode CallMethod (InvocationData *data) = 0;

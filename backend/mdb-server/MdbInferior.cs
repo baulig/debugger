@@ -23,16 +23,17 @@ namespace Mono.Debugger.MdbServer
 			REMOVE_BREAKPOINT = 9,
 			STEP = 10,
 			CONTINUE = 11,
-			RESUME = 12,
+			RESUME_STEPPING = 12,
 			GET_REGISTERS = 13,
-			READ_MEMORY = 14,
-			WRITE_MEMORY = 15,
-			GET_PENDING_SIGNAL = 16,
-			SET_SIGNAL = 17,
-			INIT_AT_ENTRYPOINT = 18,
+			SET_REGISTERS = 14,
+			READ_MEMORY = 15,
+			WRITE_MEMORY = 16,
+			GET_PENDING_SIGNAL = 17,
+			SET_SIGNAL = 18,
 			DISASSEMBLE_INSN = 19,
 			STOP = 20,
-			CALL_METHOD = 21
+			CALL_METHOD = 21,
+			EXECUTE_INSTRUCTION = 22
 		}
 
 		public MdbExeReader InitializeProcess ()
@@ -161,9 +162,9 @@ namespace Mono.Debugger.MdbServer
 			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.CONTINUE, new Connection.PacketWriter ().WriteInt (ID));
 		}
 
-		public void Resume ()
+		public void ResumeStepping ()
 		{
-			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.RESUME, new Connection.PacketWriter ().WriteInt (ID));
+			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.RESUME_STEPPING, new Connection.PacketWriter ().WriteInt (ID));
 		}
 
 		public long[] GetRegisters ()
@@ -179,7 +180,11 @@ namespace Mono.Debugger.MdbServer
 
 		public void SetRegisters (long[] regs)
 		{
-			throw new NotImplementedException ();
+			var writer = new Connection.PacketWriter ();
+			writer.WriteId (ID);
+			foreach (long reg in regs)
+				writer.WriteLong (reg);
+			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.SET_REGISTERS, writer);
 		}
 
 		public byte[] ReadMemory (long address, int size)
@@ -223,11 +228,6 @@ namespace Mono.Debugger.MdbServer
 		public void RuntimeInvoke (long invoke_method, long method_address, int num_params,
 					   byte[] blob, int[] blob_offsets, long[] addresses,
 					   long callback_arg, bool debug)
-		{
-			throw new NotImplementedException ();
-		}
-
-		public void ExecuteInstruction (byte[] instruction, bool update_ip)
 		{
 			throw new NotImplementedException ();
 		}

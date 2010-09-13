@@ -10,12 +10,12 @@ public:
 	MdbServerLinux (Connection *connection) : MdbServer (connection)
 	{ }
 
+	bool HandleExtendedWaitEvent (MdbProcess *process, int pid, int status);
+
 protected:
 	static MdbInferior *GetInferiorByPid (int pid);
 
 	MdbInferior *CreateThread (MdbProcess *process, int pid, bool wait_for_it);
-
-	bool HandleExtendedWaitEvent (MdbProcess *process, int pid, int status);
 
 	void HandleLinuxWaitEvent (void);
 

@@ -137,6 +137,8 @@ X86Arch::Marshal_Generic (InvocationData *invocation, CallbackData *cdata)
 	cdata->call_address = new_rsp + 2 * sizeof (gsize);
 	cdata->stack_pointer = new_rsp;
 
+	cdata->callback = invocation->callback;
+
 	if (inferior->PokeWord (new_rsp, cdata->call_address))
 		return false;
 	if (inferior->PokeWord (new_rsp + sizeof (gsize), new_rsp + 3 * sizeof (gsize)))

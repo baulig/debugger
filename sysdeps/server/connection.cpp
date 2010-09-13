@@ -206,6 +206,18 @@ Buffer::DecodeString (void)
 	return s;
 }
 
+const guint8 *
+Buffer::DecodeBuffer (int size)
+{
+	const guint8 *retval;
+
+	g_assert (p + size <= end);
+	retval = p;
+	p += size;
+
+	return retval;
+}
+
 bool
 Connection::SendPacket (int command_set, int command, Buffer *data)
 {
@@ -401,7 +413,7 @@ Connection::HandleIncomingRequest (MdbServer *server)
 
 	case CMD_SET_INFERIOR: {
 #if WINDOWS
-		InferiorDelegate delegate;
+		ServerDelegate delegate;
 		InferiorData inferior_data;
 #endif
 		MdbInferior *inferior;
@@ -471,7 +483,7 @@ Connection::HandleIncomingRequest (MdbServer *server)
 
 	case CMD_SET_PROCESS: {
 #if WINDOWS
-		InferiorDelegate delegate;
+		ServerDelegate delegate;
 		ProcessData process_data;
 #endif
 		MdbProcess *process;
@@ -507,7 +519,7 @@ Connection::HandleIncomingRequest (MdbServer *server)
 
 	case CMD_SET_MONO_RUNTIME: {
 #if WINDOWS
-		InferiorDelegate delegate;
+		ServerDelegate delegate;
 		RuntimeData runtime_data;
 #endif
 		MonoRuntime *runtime;

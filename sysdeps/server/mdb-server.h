@@ -32,7 +32,7 @@ typedef enum {
 typedef struct {
 	void (* func) (gpointer user_data);
 	gpointer user_data;
-} InferiorDelegate;
+} ServerDelegate;
 
 typedef struct {
 	guint64 address;
@@ -74,7 +74,7 @@ public:
 	void SendEvent (ServerEvent *e);
 
 #if WINDOWS
-	bool InferiorCommand (InferiorDelegate *delegate);
+	bool InferiorCommand (ServerDelegate *delegate);
 #endif
 
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);

@@ -11,5 +11,9 @@ namespace Mono.Debugger.Server
 		IInferior Spawn (string cwd, string[] argv, string[] envp);
 
 		IInferior Attach (int pid);
+
+		void Suspend (IInferior caller);
+
+		void Resume (IInferior caller);
 	}
 }

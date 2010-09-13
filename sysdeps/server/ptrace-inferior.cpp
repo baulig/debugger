@@ -47,6 +47,10 @@ private:
 			 MdbInferior **out_inferior, guint32 *out_thread_id,
 			 gchar **out_error);
 
+	ErrorCode SuspendProcess (MdbInferior *caller);
+
+	ErrorCode ResumeProcess (MdbInferior *caller);
+
 	friend class PTraceInferior;
 };
 
@@ -58,6 +62,10 @@ public:
 	{
 		this->process = process;
 		this->pid = pid;
+
+		this->stopped = false;
+		this->stop_requested = false;
+		this->stepping = false;
 	}
 
 	PTraceInferior (PTraceProcess *process, int pid, bool stopped)
@@ -65,6 +73,10 @@ public:
 	{
 		this->process = process;
 		this->pid = pid;
+
+		this->stopped = false;
+		this->stop_requested = false;
+		this->stepping = false;
 
 		if (!stopped)
 			WaitForNewThread ();
@@ -90,7 +102,7 @@ public:
 
 	ErrorCode Continue (void);
 
-	ErrorCode Resume (void);
+	ErrorCode ResumeStepping (void);
 
 	ErrorCode GetRegisterCount (guint32 *out_count);
 
@@ -112,9 +124,16 @@ public:
 
 	ErrorCode Stop (void);
 
+	ErrorCode SuspendThread (void);
+
+	ErrorCode ResumeThread (void);
+
 	ErrorCode CallMethod (InvocationData *data);
 
-	ServerEvent *HandleLinuxWaitEvent (int status);
+	ErrorCode ExecuteInstruction (const guint8 *instruction, guint32 size,
+				      bool update_ip);
+
+	ServerEvent *HandleLinuxWaitEvent (int status, bool *out_remain_stopped);
 
 	int GetPid (void)
 	{
@@ -144,6 +163,9 @@ private:
 
 	int pid;
 	bool stepping;
+
+	bool stopped;
+	bool stop_requested;
 
 	friend class PTraceProcess;
 };
@@ -514,7 +536,7 @@ PTraceInferior::Continue (void)
 }
 
 ErrorCode
-PTraceInferior::Resume (void)
+PTraceInferior::ResumeStepping (void)
 {
 	if (stepping)
 		return Step ();
@@ -747,25 +769,34 @@ PTraceInferior::SetRegisters (const guint64 *values)
 }
 
 ServerEvent *
-PTraceInferior::HandleLinuxWaitEvent (int status)
+PTraceInferior::HandleLinuxWaitEvent (int status, bool *out_remain_stopped)
 {
 	ServerEvent *e;
 
 	if (WIFSTOPPED (status)) {
 		int stopsig;
 
+		stopped = true;
+
 		stopsig = WSTOPSIG (status);
 		if (stopsig == SIGCONT)
 			stopsig = 0;
 
 		if (stopsig == SIGSTOP) {
+			if (stop_requested) {
+				stopped = false;
+				stop_requested = false;
+				ResumeStepping ();
+				return NULL;
+			}
+
 			e = g_new0 (ServerEvent, 1);
 			e->sender = this;
 			e->type = SERVER_EVENT_INTERRUPTED;
 			return e;
 		}
 
-		return arch->ChildStopped (stopsig);
+		return arch->ChildStopped (stopsig, out_remain_stopped);
 	} else if (WIFEXITED (status)) {
 		e = g_new0 (ServerEvent, 1);
 		e->sender = this;
@@ -872,8 +903,160 @@ PTraceInferior::Stop (void)
 }
 
 ErrorCode
+PTraceInferior::SuspendThread (void)
+{
+	MdbServerLinux *linux_server = (MdbServerLinux *) server;
+	ErrorCode result;
+	int ret, status;
+
+	/*
+	 * Try to get the thread's registers.  If we suceed, then it's already stopped
+	 * and still alive.
+	 */
+	result = arch->GetRegisters ();
+	if (!result) {
+		stopped = true;
+		return ERR_ALREADY_STOPPED;
+	}
+
+	if (syscall (__NR_tkill, pid, SIGSTOP)) {
+		/*
+		 * It's already dead.
+		 */
+		if (errno == ESRCH)
+			return ERR_NO_TARGET;
+		else
+			return ERR_UNKNOWN_ERROR;
+	}
+
+	g_message (G_STRLOC ": suspend: %d", pid);
+	ret = waitpid (pid, &status, WUNTRACED | __WALL | __WCLONE);
+	g_message (G_STRLOC ": suspend done: %d - %d / %x", pid, ret, status);
+	if (ret != pid)
+		return ERR_UNKNOWN_ERROR;
+
+	if (linux_server->HandleExtendedWaitEvent (process, pid, status)) {
+		stopped = true;
+		return ERR_NONE;
+	}
+
+	if (WIFEXITED (status)) {
+		ServerEvent *e = g_new0 (ServerEvent, 1);
+		e->sender = this;
+
+		e->type = SERVER_EVENT_EXITED;
+		e->arg = WEXITSTATUS (status);
+		server->SendEvent (e);
+		g_free (e);
+		return ERR_INFERIOR_EXITED;
+	} else if (WIFSIGNALED (status)) {
+		ServerEvent *e = g_new0 (ServerEvent, 1);
+		e->sender = this;
+
+		if ((WTERMSIG (status) == SIGTRAP) || (WTERMSIG (status) == SIGKILL)) {
+			e->type = SERVER_EVENT_EXITED;
+			e->arg = 0;
+		} else {
+			e->type = SERVER_EVENT_SIGNALED;
+			e->arg = WTERMSIG (status);
+		}
+
+		server->SendEvent (e);
+		g_free (e);
+		return ERR_INFERIOR_EXITED;
+	} else if (WIFSTOPPED (status)) {
+		int stopsig;
+
+		stopped = true;
+
+		stopsig = WSTOPSIG (status);
+		g_message (G_STRLOC ": %d", stopsig);
+		if (stopsig == SIGSTOP)
+			return ERR_NONE;
+
+		if (stopsig == SIGCONT)
+			stopsig = 0;
+
+		stop_requested = true;
+		last_signal = stopsig;
+		return ERR_NONE;
+	} else {
+		return ERR_UNKNOWN_ERROR;
+	}
+}
+
+ErrorCode
+PTraceInferior::ResumeThread (void)
+{
+	ServerEvent *e;
+	int stopsig;
+	bool remain_stopped;
+
+	stopsig = last_signal;
+	last_signal = 0;
+
+	g_message (G_STRLOC ": ResumeThread(): %d - %d", pid, stopsig);
+
+	if (!stopsig)
+		return ResumeStepping ();
+
+	e = arch->ChildStopped (stopsig, &remain_stopped);
+	g_message (G_STRLOC ": ResumeThread() #1: %d - %d - %p - %d", pid, stopsig, e,
+		   remain_stopped);
+
+	if (e) {
+		server->SendEvent (e);
+		g_free (e);
+		return ERR_NONE;
+	}
+
+	return ResumeStepping ();
+}
+
+ErrorCode
 PTraceInferior::CallMethod (InvocationData *data)
 {
 	return arch->CallMethod (data);
 }
 
+static void
+suspend_process_func (MdbInferior *inferior, gpointer user_data)
+{
+	MdbInferior *caller = (MdbInferior *) user_data;
+
+	if (inferior != caller)
+		inferior->SuspendThread ();
+}
+
+static void
+resume_process_func (MdbInferior *inferior, gpointer user_data)
+{
+	MdbInferior *caller = (MdbInferior *) user_data;
+
+	if (inferior != caller)
+		inferior->ResumeThread ();
+}
+
+ErrorCode
+PTraceProcess::SuspendProcess (MdbInferior *caller)
+{
+	ServerDelegate dlg;
+
+	g_message (G_STRLOC ": SuspendProcess()");
+
+	ForeachInferior (suspend_process_func, caller);
+
+	return ERR_NONE;
+}
+
+ErrorCode
+PTraceProcess::ResumeProcess (MdbInferior *caller)
+{
+	ServerDelegate dlg;
+
+	g_message (G_STRLOC ": ResumeProcess()");
+
+	ForeachInferior (resume_process_func, caller);
+
+	return ERR_NONE;
+}

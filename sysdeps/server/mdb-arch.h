@@ -8,7 +8,7 @@
 class MdbArch
 {
 public:
-	virtual ServerEvent *ChildStopped (int stopsig) = 0;
+	virtual ServerEvent *ChildStopped (int stopsig, bool *out_remain_stopped) = 0;
 
 	virtual ErrorCode GetFrame (StackFrame *out_frame) = 0;
 
@@ -27,6 +27,9 @@ public:
 	virtual ErrorCode SetRegisters (void) = 0;
 
 	virtual ErrorCode CallMethod (InvocationData *data) = 0;
+
+	virtual ErrorCode ExecuteInstruction (MdbInferior *inferior, gsize code_address, int insn_size,
+					      bool update_ip, InferiorCallback *callback) = 0;
 
 protected:
 	MdbArch (MdbInferior *inferior)

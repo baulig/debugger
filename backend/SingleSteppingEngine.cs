@@ -664,7 +664,6 @@ namespace Mono.Debugger.Backend
 						    TargetAddress extended_notifications_addr)
 		{
 			this.lmf_address = lmf_address;
-			this.extended_notifications_addr = extended_notifications_addr;
 		}
 
 		internal void SetMainReturnAddress (TargetAddress main_ret)
@@ -1135,16 +1134,12 @@ namespace Mono.Debugger.Backend
 
 		void enable_extended_notification (NotificationType type)
 		{
-			long notifications = inferior.ReadLongInteger (extended_notifications_addr);
-			notifications |= (uint) type;
-			inferior.WriteLongInteger (extended_notifications_addr, notifications);
+			process.MonoManager.SetExtendedNotifications (inferior, type, true);
 		}
 
 		void disable_extended_notification (NotificationType type)
 		{
-			long notifications = inferior.ReadLongInteger (extended_notifications_addr);
-			notifications &= ~(long) type;
-			inferior.WriteLongInteger (extended_notifications_addr, notifications);
+			process.MonoManager.SetExtendedNotifications (inferior, type, false);
 		}
 
 		ExceptionAction throw_exception (TargetAddress stack, TargetAddress exc, TargetAddress ip)
@@ -1722,7 +1717,7 @@ namespace Mono.Debugger.Backend
 			}
 
 			if (cevent.Type == ServerEventType.Interrupted) {
-				inferior.Resume ();
+				inferior.ResumeStepping ();
 				return;
 			}
 
@@ -2550,7 +2545,6 @@ namespace Mono.Debugger.Backend
 
 		TargetAddress lmf_address = TargetAddress.Null;
 		TargetAddress end_stack_address = TargetAddress.Null;
-		TargetAddress extended_notifications_addr = TargetAddress.Null;
 		TargetAddress main_retaddr = TargetAddress.Null;
 
 		Stack<InterruptibleOperation> nested_break_stack = new Stack<InterruptibleOperation> ();
@@ -2972,8 +2966,6 @@ namespace Mono.Debugger.Backend
 
 			sse.Process.InitializeThreads (inferior, !sse.Process.IsAttached);
 
-			return EventResult.Completed;
-
 			if (sse.Process.IsAttached)
 				return EventResult.Completed;
 
@@ -3168,37 +3160,6 @@ namespace Mono.Debugger.Backend
 		}
 	}
 
-	protected class OperationInitCodeBuffer : OperationCallback
-	{
-		public OperationInitCodeBuffer (SingleSteppingEngine sse)
-			: base (sse, null)
-		{ }
-
-		public override bool IsSourceOperation {
-			get { return false; }
-		}
-
-		protected override void DoExecute ()
-		{
-			MonoDebuggerInfo info = sse.Process.MonoManager.MonoDebuggerInfo;
-			inferior.CallMethod (info.InitCodeBuffer, 0, 0, ID);
-		}
-
-		protected override EventResult CallbackCompleted (long data1, long data2, out TargetEventArgs args)
-		{
-			Report.Debug (DebugFlags.SSE,
-				      "{0} init code buffer: {1:x} {2:x} {3}",
-				      sse, data1, data2, Result);
-
-			TargetAddress buffer = new TargetAddress (inferior.AddressDomain, data1);
-			sse.process.MonoManager.InitCodeBuffer (inferior, buffer);
-
-			RestoreStack ();
-			args = null;
-			return EventResult.AskParent;
-		}
-	}
-
 	protected class OperationStepOverBreakpoint : Operation
 	{
 		TargetAddress until;
@@ -3325,13 +3286,7 @@ namespace Mono.Debugger.Backend
 				      "{0} executing instruction: {1}", sse,
 				      TargetBinaryReader.HexDump (Instruction));
 
-			if (!sse.Process.MonoManager.HasCodeBuffer) {
-				sse.PushOperation (new OperationInitCodeBuffer (sse));
-				pushed_code_buffer = true;
-				return;
-			}
-
-			inferior.ExecuteInstruction (Instruction, UpdateIP);
+			sse.Process.MonoManager.ExecuteInstruction (inferior, Instruction, UpdateIP);
 		}
 
 		protected override EventResult DoProcessEvent (ServerEvent cevent,
@@ -3345,7 +3300,7 @@ namespace Mono.Debugger.Backend
 			args = null;
 			if (pushed_code_buffer) {
 				pushed_code_buffer = false;
-				inferior.ExecuteInstruction (Instruction, UpdateIP);
+				sse.Process.MonoManager.ExecuteInstruction (inferior, Instruction, UpdateIP);
 				return EventResult.Running;
 			}
 
@@ -4580,6 +4535,8 @@ namespace Mono.Debugger.Backend
 
 		protected override void DoExecute ()
 		{
+			Console.WriteLine ("TRAMPOLINE: {0}", sse.MonoDebuggerInfo.HasNewTrampolineNotification);
+
 			if (sse.MonoDebuggerInfo.HasNewTrampolineNotification) {
 				sse.enable_extended_notification (NotificationType.Trampoline);
 				sse.do_continue (CallSite.Address + CallSite.InstructionSize);

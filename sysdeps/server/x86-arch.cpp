@@ -18,6 +18,17 @@ struct _CallbackData
 #endif
 	gboolean debug;
 	gboolean is_rti;
+
+	InferiorCallback *callback;
+};
+
+struct _CodeBufferData
+{
+	gsize original_rip;
+	gsize code_address;
+	int insn_size;
+	bool update_ip;
+	InferiorCallback *callback;
 };
 
 MdbArch *
@@ -65,17 +76,18 @@ X86Arch::EnableBreakpoint (BreakpointInfo *breakpoint)
 
 		INFERIOR_DR_INDEX (current_regs, breakpoint->dr_index) = breakpoint->id;
 	} else {
+		MonoRuntime *runtime;
+
 		result = inferior->ReadMemory (address, 1, &breakpoint->saved_insn);
 		if (result)
 			return result;
 
-#if 0
-		if (server->mono_runtime) {
-			result = runtime_info_enable_breakpoint (server, breakpoint);
-			if (result != COMMAND_ERROR_NONE)
+		runtime = inferior->GetProcess ()->GetMonoRuntime ();
+		if (runtime) {
+			result = runtime->EnableBreakpoint (inferior, breakpoint);
+			if (result)
 				return result;
 		}
-#endif
 
 		return inferior->WriteMemory (address, 1, &bopcode);
 	}
@@ -106,17 +118,18 @@ X86Arch::DisableBreakpoint (BreakpointInfo *breakpoint)
 
 		INFERIOR_DR_INDEX (current_regs, breakpoint->dr_index) = 0;
 	} else {
+		MonoRuntime *runtime;
+
 		result = inferior->WriteMemory (address, 1, &breakpoint->saved_insn);
 		if (result)
 			return result;
 
-#if 0
-		if (server->mono_runtime) {
-			result = runtime_info_disable_breakpoint (server, breakpoint);
-			if (result != COMMAND_ERROR_NONE)
+		runtime = inferior->GetProcess ()->GetMonoRuntime ();
+		if (runtime) {
+			result = runtime->DisableBreakpoint (inferior, breakpoint);
+			if (result)
 				return result;
 		}
-#endif
 	}
 
 	return ERR_NONE;
@@ -172,7 +185,7 @@ X86Arch::GetFrame (StackFrame *out_frame)
 }
 
 ServerEvent *
-X86Arch::ChildStopped (int stopsig)
+X86Arch::ChildStopped (int stopsig, bool *remain_stopped)
 {
 	CodeBufferData *cbuffer = NULL;
 	CallbackData *cdata;
@@ -183,6 +196,8 @@ X86Arch::ChildStopped (int stopsig)
 	ServerEvent *e;
 	gsize code;
 	int i;
+
+	*remain_stopped = true;
 
 	if (GetRegisters ())
 		return NULL;
@@ -258,7 +273,7 @@ X86Arch::ChildStopped (int stopsig)
 		}
 
 		e->arg = cdata->callback_argument;
-		e->data1 = (gsize) INFERIOR_REG_RAX (current_regs);
+		e->data1 = INFERIOR_REG_RAX (current_regs);
 
 		if (cdata->data_pointer) {
 			e->opt_data_size = cdata->data_size;
@@ -285,6 +300,15 @@ X86Arch::ChildStopped (int stopsig)
 		g_ptr_array_remove (callback_stack, cdata);
 
 		GetRegisters ();
+
+		g_message (G_STRLOC);
+
+		if (cdata->callback) {
+			cdata->callback->Invoke (inferior, INFERIOR_REG_RAX (current_regs), exc_object);
+			delete cdata->callback;
+			g_free (e);
+			return NULL;
+		}
 
 		if (cdata->is_rti) {
 			g_free (cdata);
@@ -319,25 +343,33 @@ X86Arch::ChildStopped (int stopsig)
 
 	if (mono_runtime &&
 	    (INFERIOR_REG_RIP (current_regs) - 1 == mono_runtime->GetNotificationAddress ())) {
+		NotificationType type;
+		gsize arg1, arg2;
+
 #if defined(__i386__)
 		gsize addr = INFERIOR_REG_RSP (current_regs) + sizeof (gsize);
 		guint64 data [3];
 
-		g_message (G_STRLOC ": %Lx", addr);
-
 		if (inferior->ReadMemory (addr, 24, &data))
 			return e;
 
-		e->arg = data [0];
-		e->data1 = data [1];
-		e->data2 = data [2];
+		type = (NotificationType) data [0];
+		arg1 = (gsize) data [1];
+		arg2 = (gsize) data [2];
+
 #else
-		e->arg = INFERIOR_REG_RDI (current_regs);
-		e->data1 = INFERIOR_REG_RSI (current_regs);
-		e->data2 = INFERIOR_REG_RDX (current_regs);
+		type = (NotificationType) INFERIOR_REG_RDI (current_regs);
+		arg1 = INFERIOR_REG_RSI (current_regs);
+		arg2 = INFERIOR_REG_RDX (current_regs);
 #endif
 
+		mono_runtime->HandleNotification (inferior, type, arg1, arg2);
+
 		e->type = SERVER_EVENT_NOTIFICATION;
+
+		e->arg = type;
+		e->data1 = arg1;
+		e->data2 = arg2;
 		return e;
 	}
 
@@ -355,24 +387,25 @@ X86Arch::ChildStopped (int stopsig)
 
 	breakpoint = bpm->Lookup (INFERIOR_REG_RIP (current_regs) - 1);
 	if (breakpoint && breakpoint->enabled) {
-		if (breakpoint->handler && breakpoint->handler (inferior, breakpoint)) {
-			if (!inferior->Resume ()) {
-				g_free (e);
-				return NULL;
-			}
-		}
-
 		INFERIOR_REG_RIP (current_regs)--;
 		SetRegisters ();
+
+		if (breakpoint->handler && breakpoint->handler (inferior, breakpoint)) {
+			inferior->DisableBreakpoint (breakpoint);
+			*remain_stopped = false;
+			g_free (e);
+			return NULL;
+		}
+
 		e->type = SERVER_EVENT_BREAKPOINT;
 		e->arg = breakpoint->id;
 		return e;
 	}
 
-#if 0
-	cbuffer = code_buffer;
+	cbuffer = current_code_buffer;
 	if (cbuffer) {
-		server->mono_runtime->executable_code_bitfield [cbuffer->slot] = 0;
+		if (cbuffer->callback)
+			cbuffer->callback->Invoke (inferior, INFERIOR_REG_RIP (current_regs), cbuffer->original_rip);
 
 		if (cbuffer->code_address + cbuffer->insn_size != INFERIOR_REG_RIP (current_regs)) {
 			g_warning (G_STRLOC ": %x - %x,%d - %x - %x", cbuffer->original_rip,
@@ -385,15 +418,14 @@ X86Arch::ChildStopped (int stopsig)
 		INFERIOR_REG_RIP (current_regs) = cbuffer->original_rip;
 		if (cbuffer->update_ip)
 			INFERIOR_REG_RIP (current_regs) += cbuffer->insn_size;
-		if (mdb_inferior_set_registers (server, &current_regs) != COMMAND_ERROR_NONE) {
+		if (inferior->SetRegisters (&current_regs)) {
 			g_error (G_STRLOC ": Can't restore registers");
 		}
 
 		g_free (cbuffer);
-		code_buffer = NULL;
+		current_code_buffer = NULL;
 		return e;
 	}
-#endif
 
 	if (inferior->PeekWord (GPOINTER_TO_INT (INFERIOR_REG_RIP (current_regs) - 1), &code))
 		return e;
@@ -444,4 +476,35 @@ X86Arch::CallMethod (InvocationData *invocation)
 	g_ptr_array_add (callback_stack, cdata);
 
 	return inferior->Continue ();
+}
+
+ErrorCode
+X86Arch::ExecuteInstruction (MdbInferior *inferior, gsize code_address, int insn_size,
+			     bool update_ip, InferiorCallback *callback)
+{
+	CodeBufferData *data;
+	ErrorCode result;
+
+	if (current_code_buffer)
+		return ERR_INTERNAL_ERROR;
+
+	data = g_new0 (CodeBufferData, 1);
+	data->original_rip = INFERIOR_REG_RIP (current_regs);
+	data->code_address = code_address;
+	data->insn_size = insn_size;
+	data->update_ip = update_ip;
+	data->callback = callback;
+
+	current_code_buffer = data;
+
+#if defined(__linux__) || defined(__FreeBSD__)
+	INFERIOR_REG_ORIG_RAX (current_regs) = -1;
+#endif
+	INFERIOR_REG_RIP (current_regs) = code_address;
+
+	result = inferior->SetRegisters (&current_regs);
+	if (result)
+		return result;
+
+	return inferior->Step ();
 }

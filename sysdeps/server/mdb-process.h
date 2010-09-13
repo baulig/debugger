@@ -6,6 +6,8 @@
 
 class MonoRuntime;
 
+typedef void (* InferiorForeachFunc) (MdbInferior *inferior, gpointer user_data);
+
 class MdbProcess : public ServerObject
 {
 public:
@@ -26,6 +28,10 @@ public:
 				 const gchar **argv, const gchar **envp,
 				 MdbInferior **out_inferior, guint32 *out_thread_id,
 				 gchar **out_error) = 0;
+
+	virtual ErrorCode SuspendProcess (MdbInferior *caller) = 0;
+
+	virtual ErrorCode ResumeProcess (MdbInferior *caller) = 0;
 
 	void OnMainModuleLoaded (MdbInferior *inferior, MdbExeReader *reader);
 
@@ -71,6 +77,8 @@ protected:
 		this->exe_file_hash = g_hash_table_new (NULL, NULL);
 		this->mono_runtime = NULL;
 	}
+
+	void ForeachInferior (InferiorForeachFunc func, gpointer user_data);
 
 	MdbServer *server;
 	static MdbProcess *main_process;
