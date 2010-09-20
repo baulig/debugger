@@ -1,5 +1,6 @@
 #include <mdb-process.h>
 #include <mono-runtime.h>
+#include <string.h>
 
 GHashTable *MdbProcess::inferior_by_thread_id;
 MdbProcess *MdbProcess::main_process;
@@ -103,6 +104,24 @@ MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		g_free (argv);
 		break;
 	}
+
+	case CMD_PROCESS_ATTACH: {
+		MdbInferior *inferior;
+		guint32 thread_id;
+		ErrorCode result;
+		int pid;
+
+		pid = in->DecodeInt ();
+
+		result = Attach (pid, &inferior, &thread_id);
+		if (result)
+			return result;
+
+		out->AddInt (inferior->GetID ());
+		out->AddInt (thread_id);
+		break;
+	}
+
 
 	case CMD_PROCESS_SUSPEND: {
 		MdbInferior *inferior;
@@ -215,3 +234,39 @@ MdbProcess::ForeachInferior (InferiorForeachFunc func, gpointer user_data)
 	dlg.user_data = user_data;
 	g_hash_table_foreach (inferior_by_thread_id, inferior_foreach, &dlg);
 }
+
+typedef struct {
+	const char *name;
+	MdbExeReader *result;
+} ExeReaderData;
+
+static void
+exe_reader_foreach (gpointer key, gpointer value, gpointer user_data)
+{
+	const char *name = (const char *) key;
+	MdbExeReader *reader = (MdbExeReader *) value;
+	ExeReaderData *data = (ExeReaderData *) user_data;
+	gchar *basename;
+
+	basename = g_path_get_basename (reader->GetFileName ());
+	if (!strcmp (data->name, basename))
+		data->result = reader;
+	g_free (basename);
+}
+
+MdbExeReader *
+MdbProcess::LookupDll (const char *name, bool exact_match)
+{
+	ExeReaderData data;
+
+	if (exact_match)
+		g_hash_table_lookup (exe_file_hash, name);
+
+	data.name = name;
+	data.result = NULL;
+
+	g_hash_table_foreach (exe_file_hash, exe_reader_foreach, &data);
+
+	return data.result;
+}
+

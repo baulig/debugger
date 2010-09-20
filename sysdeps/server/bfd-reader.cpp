@@ -68,6 +68,8 @@ private:
 
 	friend MdbExeReader *mdb_server_create_exe_reader (const char *filename);
 
+	gsize base_address;
+
 	gsize dynamic_info;
 	bool has_dynlink_info;
 	BreakpointInfo *dynlink_bpt;
@@ -141,7 +143,9 @@ BfdReader::~BfdReader (void)
 guint64
 BfdReader::GetStartAddress (void)
 {
-	return bfd_get_start_address (this->bfd_handle);
+	if (base_address)
+		return base_address;
+	return base_address + bfd_get_start_address (this->bfd_handle);
 }
 
 guint64
@@ -414,6 +418,7 @@ BfdReader::DynlinkHandler (MdbInferior *inferior)
 	map_addr = (gsize) rdebug.r_map;
 	while (map_addr) {
 		struct link_map map;
+		BfdReader *reader;
 		gchar *file;
 
 		if (inferior->ReadMemory (map_addr, sizeof (link_map), &map))
@@ -425,8 +430,12 @@ BfdReader::DynlinkHandler (MdbInferior *inferior)
 			continue;
 
 		file = inferior->ReadString ((gsize) map.l_name);
-		if (file && *file)
-			inferior->GetProcess ()->OnDllLoaded (inferior, file);
+		if (file && *file) {
+			g_message (G_STRLOC ": DLL Loaded: %Lx - %s", map.l_addr, file);
+			reader = (BfdReader *) inferior->GetProcess ()->OnDllLoaded (inferior, file);
+			if (reader)
+				reader->base_address = map.l_addr;
+		}
 		g_free (file);
 	}
 }
@@ -503,5 +512,7 @@ BfdReader::ReadDynamicInfo (MdbInferior *inferior)
 	dynlink_bpt->handler = dynlink_breakpoint_handler;
 	dynlink_bpt->user_data = this;
 	has_dynlink_info = true;
+
+	DynlinkHandler (inferior);
 #endif
 }

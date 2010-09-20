@@ -412,6 +412,14 @@ namespace Mono.Debugger.Backend
 
 			arch = process.Architecture;
 
+			if (process.IsAttached) {
+				string exe_file, cwd;
+				string[] cmdline_args;
+				exe_file = GetApplication (out cwd, out cmdline_args);
+
+				start.SetupApplication (exe_file, cwd, cmdline_args);
+			}
+
 			has_target = true;
 			initialized = true;
 

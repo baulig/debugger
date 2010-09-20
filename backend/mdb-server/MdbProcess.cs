@@ -28,8 +28,9 @@ namespace Mono.Debugger.MdbServer
 			GET_MAIN_READER = 1,
 			INITIALIZE_PROCESS = 2,
 			SPAWN = 3,
-			SUSPEND = 4,
-			RESUME = 5
+			ATTACH = 4,
+			SUSPEND = 5,
+			RESUME = 6
 		}
 
 		public MdbExeReader MainReader {
@@ -81,7 +82,14 @@ namespace Mono.Debugger.MdbServer
 
 		public MdbInferior Attach (int pid)
 		{
-			throw new NotImplementedException ();
+			var writer = new Connection.PacketWriter ();
+			writer.WriteId (ID);
+			writer.WriteInt (pid);
+
+			var reader = Connection.SendReceive (CommandSet.PROCESS, (int) CmdProcess.ATTACH, writer);
+			int inferior_iid = reader.ReadInt ();
+
+			return new MdbInferior (Connection, inferior_iid);
 		}
 
 		IInferior IProcess.Attach (int pid)

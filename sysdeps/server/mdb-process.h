@@ -29,6 +29,8 @@ public:
 				 MdbInferior **out_inferior, guint32 *out_thread_id,
 				 gchar **out_error) = 0;
 
+	virtual ErrorCode Attach (int pid, MdbInferior **out_inferior, guint32 *out_thread_id) = 0;
+
 	virtual ErrorCode SuspendProcess (MdbInferior *caller) = 0;
 
 	virtual ErrorCode ResumeProcess (MdbInferior *caller) = 0;
@@ -67,6 +69,8 @@ public:
 	static void AddInferior (guint32 thread_id, MdbInferior *inferior);
 
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
+
+	MdbExeReader *LookupDll (const char *name, bool exact_match);
 
 protected:
 	MdbProcess (MdbServer *server)

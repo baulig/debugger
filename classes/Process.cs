@@ -345,9 +345,14 @@ namespace Mono.Debugger
 			var sse = new SingleSteppingEngine (manager, this, server_process, server_inferior);
 			OnThreadCreatedEvent (sse);
 
-			CommandResult result = current_operation != null ?
-				current_operation : new ThreadCommandResult (sse.Thread);
-			sse.StartThread (result);
+			if (IsAttached)
+				sse.StartSuspended ();
+			else {
+				CommandResult result = current_operation != null ?
+					current_operation : new ThreadCommandResult (sse.Thread);
+
+				sse.StartThread (result);
+			}
 
 			return sse;
 		}
@@ -481,12 +486,18 @@ namespace Mono.Debugger
 
 		internal CommandResult StartApplication ()
 		{
-			string[] args = new string[start.CommandLineArguments.Length + 1];
-			Array.Copy (start.CommandLineArguments, args, start.CommandLineArguments.Length);
-			string[] env = new string[start.Environment.Length + 1];
-			Array.Copy (start.Environment, env, start.Environment.Length);
+			IInferior server_inferior;
 
-			var server_inferior = server_process.Spawn (start.WorkingDirectory, args, env);
+			if (start.PID != 0) {
+				server_inferior = server_process.Attach (start.PID);
+			} else {
+				string[] args = new string[start.CommandLineArguments.Length + 1];
+				Array.Copy (start.CommandLineArguments, args, start.CommandLineArguments.Length);
+				string[] env = new string[start.Environment.Length + 1];
+				Array.Copy (start.Environment, env, start.Environment.Length);
+
+				server_inferior = server_process.Spawn (start.WorkingDirectory, args, env);
+			}
 
 			var engine = new SingleSteppingEngine (manager, this, server_process, server_inferior);
 			manager.AddEngine (server_inferior, engine);
@@ -505,8 +516,14 @@ namespace Mono.Debugger
 			session.OnMainProcessCreated (this);
 			manager.Debugger.OnMainProcessCreatedEvent (this);
 
-			CommandResult result = Debugger.StartOperation (start.Session.Config.ThreadingModel, engine);
-			return engine.StartApplication (result);
+			if (start.PID != 0) {
+				engine.Inferior.InitializeProcess ();
+				engine.StartSuspended ();
+				return null;
+			} else {
+				CommandResult result = Debugger.StartOperation (start.Session.Config.ThreadingModel, engine);
+				return engine.StartApplication (result);
+			}
 		}
 
 		internal void OnDllLoaded (ExecutableReader reader)

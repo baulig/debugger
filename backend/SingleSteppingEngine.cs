@@ -132,6 +132,7 @@ namespace Mono.Debugger.Backend
 
 		public void StartSuspended ()
 		{
+			engine_stopped = true;
 			frame_changed (inferior.CurrentFrame, null);
 		}
 

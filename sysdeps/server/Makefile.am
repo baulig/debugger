@@ -55,12 +55,13 @@ if PLATFORM_X86_LINUX
 platform_sources = \
 	x86-arch.cpp \
 	x86-arch.h \
-	ptrace-inferior.cpp
+	ptrace-inferior.cpp \
+	thread-db.cpp
 platform_server = \
 	bfd-reader.cpp \
 	mdb-server-linux.cpp
 platform_libs = \
-	-lpthread
+	-lpthread -lthread_db
 endif
 if PLATFORM_ARM_LINUX
 platform_sources = \

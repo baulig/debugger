@@ -1,6 +1,7 @@
 #include <mdb-server-linux.h>
 #include <mdb-inferior.h>
 #include <mdb-process.h>
+#include <thread-db.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -29,6 +30,8 @@
 #error "Unknown Architecture."
 #endif
 
+static void iterate_over_threads_cb (ThreadDB *thread_db, int lwp, gsize tid, gpointer user_data);
+
 class PTraceInferior;
 
 class PTraceProcess : public MdbProcess
@@ -47,10 +50,15 @@ private:
 			 MdbInferior **out_inferior, guint32 *out_thread_id,
 			 gchar **out_error);
 
+	ErrorCode Attach (int pid, MdbInferior **out_inferior, guint32 *out_thread_id);
+
 	ErrorCode SuspendProcess (MdbInferior *caller);
 
 	ErrorCode ResumeProcess (MdbInferior *caller);
 
+	void IterateOverThreadsCallback (ThreadDB *thread_db, int lwd, gsize tid);
+
+	friend void iterate_over_threads_cb (ThreadDB *thread_db, int lwp, gsize tid, gpointer user_data);
 	friend class PTraceInferior;
 };
 
@@ -284,6 +292,42 @@ PTraceProcess::Spawn (const gchar *working_directory, const gchar **argv, const 
 	}
 
 	close (fd [0]);
+
+	inferior = new PTraceInferior (this, pid);
+
+	if (!inferior->WaitForNewThread ()) {
+		delete inferior;
+		return ERR_INTERNAL_ERROR;
+	}
+
+	result = inferior->SetupInferior ();
+	if (result) {
+		delete inferior;
+		return result;
+	}
+
+	if (!Initialize (inferior, pid)) {
+		delete inferior;
+		return ERR_CANNOT_START_TARGET;
+	}
+
+	AddInferior (pid, inferior);
+	main_process = this;
+
+	*out_inferior = inferior;
+	*out_thread_id = pid;
+
+	return ERR_NONE;
+}
+
+ErrorCode
+PTraceProcess::Attach (int pid, MdbInferior **out_inferior, guint32 *out_thread_id)
+{
+	PTraceInferior *inferior;
+	ErrorCode result;
+
+	if (ptrace (PT_ATTACH, pid, NULL, 0) != 0)
+		return ERR_CANNOT_START_TARGET;
 
 	inferior = new PTraceInferior (this, pid);
 
@@ -858,12 +902,67 @@ PTraceProcess::Initialize (PTraceInferior *inferior, int pid)
 }
 
 void
+PTraceProcess::IterateOverThreadsCallback (ThreadDB *thread_db, int lwp, gsize tid)
+{
+	PTraceInferior *inferior;
+	ServerEvent *e;
+
+	g_message (G_STRLOC ": %d - %Lx", lwp, tid);
+
+	inferior = (PTraceInferior *) GetInferiorByThreadId (lwp);
+	if (inferior)
+		return;
+
+	if (ptrace (PT_ATTACH, lwp, NULL, 0) != 0) {
+		g_warning (G_STRLOC ": Cannot attach to thread %d", lwp);
+		return;
+	}
+
+	inferior = new PTraceInferior (this, lwp, false);
+	AddInferior (lwp, inferior);
+
+	if (inferior->GetArch ()->GetRegisters ()) {
+		g_warning (G_STRLOC);
+	}
+
+	e = g_new0 (ServerEvent, 1);
+	e->type = SERVER_EVENT_THREAD_CREATED;
+	e->sender = this;
+	e->arg_object = inferior;
+	e->arg = lwp;
+	server->SendEvent (e);
+	g_free (e);
+}
+
+static void
+iterate_over_threads_cb (ThreadDB *thread_db, int lwp, gsize tid, gpointer user_data)
+{
+	PTraceProcess *process = (PTraceProcess *) user_data;
+
+	process->IterateOverThreadsCallback (thread_db, lwp, tid);
+}
+
+void
 PTraceProcess::InitializeProcess (MdbInferior *inferior)
 {
-	MdbExeReader *reader = GetMainReader ();
+	PTraceInferior *ptrace_inferior = (PTraceInferior *) inferior;
+	MdbExeReader *reader;
+	ThreadDB *thread_db;
+
+	reader = GetMainReader ();
+
+	g_message (G_STRLOC ": InitializeProcess(): %p", reader);
 
 	if (reader)
 		reader->ReadDynamicInfo (inferior);
+
+	thread_db = ThreadDB::Initialize (inferior, ptrace_inferior->pid);
+
+	if (thread_db) {
+		ThreadDBCallback *cb = new ThreadDBCallback (iterate_over_threads_cb, this);
+		thread_db->GetAllThreads (inferior, cb);
+		delete cb;
+	}
 }
 
 MdbInferior *
