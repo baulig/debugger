@@ -18,11 +18,15 @@ namespace Mono.Debugger.MdbServer
 			GET_TARGET_NAME = 4,
 			HAS_SECTION = 5,
 			GET_SECTION_ADDRESS = 6,
-			GET_SECTION_CONTENTS = 7
+			GET_SECTION_CONTENTS = 7,
+			GET_BASE_ADDRESS = 8,
+			GET_END_ADDRESS = 9
 		}
 
 		bool initialized;
 		long start_address;
+		long base_address;
+		long end_address;
 		string file_name;
 		string target_name;
 
@@ -35,8 +39,12 @@ namespace Mono.Debugger.MdbServer
 				start_address = Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_START_ADDRESS, new Connection.PacketWriter ().WriteInt (ID)).ReadLong ();
 				file_name = Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_FILENAME, new Connection.PacketWriter ().WriteInt (ID)).ReadString ();
 				target_name = Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_TARGET_NAME, new Connection.PacketWriter ().WriteInt (ID)).ReadString ();
-
+				base_address = Connection.SendReceive (CommandSet.EXE_READER, (int)CmdExeReader.GET_BASE_ADDRESS, new Connection.PacketWriter ().WriteInt (ID)).ReadLong ();
+				end_address = Connection.SendReceive (CommandSet.EXE_READER, (int) CmdExeReader.GET_END_ADDRESS, new Connection.PacketWriter ().WriteInt (ID)).ReadLong ();
 				initialized = true;
+
+				Console.WriteLine ("EXE READER: {0} {1:x} {2:x} {3:x}", file_name,
+					base_address, start_address, end_address);
 			}
 		}
 
@@ -44,6 +52,14 @@ namespace Mono.Debugger.MdbServer
 			get {
 				initialize ();
 				return start_address;
+			}
+		}
+
+		public long EndAddress
+		{
+			get {
+				initialize ();
+				return end_address;
 			}
 		}
 
@@ -58,6 +74,14 @@ namespace Mono.Debugger.MdbServer
 			get {
 				initialize ();
 				return target_name;
+			}
+		}
+
+		public long BaseAddress
+		{
+			get {
+				initialize ();
+				return base_address;
 			}
 		}
 

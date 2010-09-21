@@ -65,8 +65,11 @@ public:
 		return mono_runtime;
 	}
 
-	static MdbInferior *GetInferiorByThreadId (guint32 thread_id);
-	static void AddInferior (guint32 thread_id, MdbInferior *inferior);
+	static MdbInferior *GetInferiorByPID (int pid);
+	static void AddInferior (int pid, MdbInferior *inferior);
+
+	MdbInferior *GetInferiorByTID (gsize tid);
+	void AddInferiorByTID (gsize tid, MdbInferior *inferior);
 
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
@@ -79,23 +82,24 @@ protected:
 		this->server = server;
 		this->main_reader = NULL;
 		this->exe_file_hash = g_hash_table_new (NULL, NULL);
+		this->inferior_by_tid = g_hash_table_new (NULL, NULL);
 		this->mono_runtime = NULL;
 	}
 
 	void ForeachInferior (InferiorForeachFunc func, gpointer user_data);
 
 	MdbServer *server;
+	MonoRuntime *mono_runtime;
 	static MdbProcess *main_process;
 
 private:
 	GHashTable *exe_file_hash;
 	MdbExeReader *main_reader;
 
-	MonoRuntime *mono_runtime;
-
 	void CheckLoadedDll (MdbInferior *inferior, MdbExeReader *reader);
 
-	static GHashTable *inferior_by_thread_id;
+	static GHashTable *inferior_by_pid;
+	GHashTable *inferior_by_tid;
 };
 
 extern MdbProcess *mdb_process_new (MdbServer *server);

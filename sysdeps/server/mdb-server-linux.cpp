@@ -116,7 +116,7 @@ MdbServerLinux::HandleExtendedWaitEvent (MdbProcess *process, int pid, int statu
 			return true;
 		}
 
-		new_inferior = MdbProcess::GetInferiorByThreadId (new_pid);
+		new_inferior = MdbProcess::GetInferiorByPID (new_pid);
 
 		//
 		// We already got a stop event for this new thread.
@@ -213,7 +213,7 @@ MdbServerLinux::HandleLinuxWaitEvent (void)
 	} else if (pid == 0)
 		return;
 
-	inferior = MdbProcess::GetInferiorByThreadId (pid);
+	inferior = MdbProcess::GetInferiorByPID (pid);
 
 	if (!inferior) {
 		//

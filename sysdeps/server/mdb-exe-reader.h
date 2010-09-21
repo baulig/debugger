@@ -23,6 +23,8 @@ public:
 	virtual guint64 LookupSymbol (const char *name) = 0;
 	virtual const char *GetTargetName (void) = 0;
 	virtual gboolean HasSection (const char *name) = 0;
+	virtual guint64 GetBaseAddress (void) = 0;
+	virtual guint64 GetEndAddress (void) = 0;
 	virtual guint64 GetSectionAddress (const char *name) = 0;
 	virtual gpointer GetSectionContents (const char *name, guint32 *out_size) = 0;
 	virtual const char *LookupSymbol (guint64 address) = 0;

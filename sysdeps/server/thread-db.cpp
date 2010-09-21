@@ -78,7 +78,7 @@ ps_err_e
 ThreadDBImpl::GlobalLookup (const char *object_name, const char *sym_name, psaddr_t *addr)
 {
 	MdbExeReader *reader;
-	guint64 symbol, start;
+	guint64 symbol;
 
 	g_message (G_STRLOC ": GlobalLookup(%s,%s)", object_name, sym_name);
 
@@ -90,9 +90,8 @@ ThreadDBImpl::GlobalLookup (const char *object_name, const char *sym_name, psadd
 		return PS_ERR;
 
 	symbol = reader->LookupSymbol (sym_name);
-	start = reader->GetStartAddress ();
 
-	*addr = GUINT_TO_POINTER (start + symbol);
+	*addr = GUINT_TO_POINTER (symbol);
 	g_message (G_STRLOC ": GlobalLookup(%s,%s) - %p", object_name, sym_name, *addr);
 	return PS_OK;
 }

@@ -103,5 +103,7 @@ namespace Mono.Debugger.Server
 		void SetExtendedNotifications (IInferior inferior, NotificationType type, bool enable);
 
 		void ExecuteInstruction (IInferior inferior, byte[] instruction, bool update_ip);
+
+		long GetLMFAddress (IInferior inferior);
 	}
 }

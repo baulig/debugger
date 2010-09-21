@@ -130,6 +130,27 @@ typedef struct {
 } MonoDebuggerMetadataInfo;
 
 typedef struct {
+	guint64 tid;
+	guint64 lmf_addr;
+	guint64 end_stack;
+
+	guint64 extended_notifications;
+
+	/* Next pointer. */
+	gsize next_ptr;
+
+	/*
+	 * The stack bounds are only used when reading a core file.
+	 */
+	guint64 stack_start;
+	guint64 signal_stack_start;
+	guint32 stack_size;
+	guint32 signal_stack_size;
+
+	guint32 thread_flags;
+} MonoDebuggerThreadInfo;
+
+typedef struct {
 	gsize thread_info_ptr;
 	gsize tid, lmf_addr;
 } RuntimeInferiorData;
@@ -172,11 +193,15 @@ public:
 		return debugger_info->generic_invocation_func;
 	}
 
+	gsize GetLMFAddress (MdbInferior *inferior);
+
 	ErrorCode EnableBreakpoint (MdbInferior *inferior, BreakpointInfo *breakpoint);
 	ErrorCode DisableBreakpoint (MdbInferior *inferior, BreakpointInfo *breakpoint);
 
 	ErrorCode ExecuteInstruction (MdbInferior *inferior, const guint8 *instruction,
 				      guint32 size, bool update_ip);
+
+	ErrorCode InitializeThreads (MdbInferior *inferior);
 
 protected:
 	MonoRuntimeImpl (MdbProcess *process, MdbExeReader *exe, gsize info_ptr)
@@ -192,6 +217,8 @@ protected:
 	}
 
 	bool Initialize (MdbInferior *inferior);
+
+	void SendEventsAfterAttach (MdbInferior *inferior);
 
 	friend bool initialize_breakpoint_handler (MdbInferior *inferior, BreakpointInfo *breakpoint);
 	friend MonoRuntime *MonoRuntime::Initialize (MdbInferior *inferior, MdbExeReader *exe);
@@ -390,6 +417,20 @@ MonoRuntimeImpl::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		update_ip = in->DecodeByte() != 0;
 
 		return ExecuteInstruction (inferior, instruction, size, update_ip);
+	}
+
+	case CMD_MONO_RUNTIME_GET_LMF_ADDRESS: {
+		MdbInferior *inferior;
+		int iid;
+
+		iid = in->DecodeID ();
+		inferior = (MdbInferior *) ServerObject::GetObjectByID (iid, SERVER_OBJECT_KIND_INFERIOR);
+
+		if (!inferior)
+			return ERR_NO_SUCH_INFERIOR;
+
+		out->AddLong (GetLMFAddress (inferior));
+		break;
 	}
 
 	default:
@@ -630,3 +671,83 @@ MonoRuntimeImpl::HandleNotification (MdbInferior *inferior, NotificationType typ
 	}
 }
 
+ErrorCode
+MonoRuntimeImpl::InitializeThreads (MdbInferior *inferior)
+{
+	ErrorCode result;
+	gsize ptr;
+
+	g_message (G_STRLOC ": InitializeThreads(): %Lx", debugger_info->thread_table_ptr);
+
+	result = inferior->PeekWord (debugger_info->thread_table_ptr, &ptr);
+	if (result)
+		return result;
+
+	g_message (G_STRLOC ": InitializeThreads(): %Lx - %Lx", debugger_info->thread_table_ptr, ptr);
+
+	while (ptr) {
+		MonoDebuggerThreadInfo info;
+		RuntimeInferiorData *data;
+		MdbInferior *thread;
+		gsize tid;
+
+		result = inferior->ReadMemory (ptr, sizeof (info), &info);
+		if (result)
+			return result;
+
+		g_message (G_STRLOC ": %Lx - %Lx - %Lx - %Lx - %Lx",
+			   info.tid, info.lmf_addr, info.end_stack,
+			   info.extended_notifications, info.next_ptr);
+
+		tid = (gsize) info.tid;
+
+		thread = inferior->GetProcess ()->GetInferiorByTID (tid);
+		g_message (G_STRLOC ": %Lx - %p", tid, thread);
+
+		if (!thread) {
+			g_warning (G_STRLOC ": Can't find thread %Lx.", tid);
+			ptr = info.next_ptr;
+			continue;
+		}
+
+		data = g_new0 (RuntimeInferiorData, 1);
+		data->thread_info_ptr = ptr;
+		data->tid = tid;
+		data->lmf_addr = info.lmf_addr;
+
+		g_hash_table_insert (inferior_data_hash, thread, data);
+
+		ptr = info.next_ptr;
+	}
+
+	SendEventsAfterAttach (inferior);
+
+	return ERR_NONE;
+}
+
+gsize
+MonoRuntimeImpl::GetLMFAddress (MdbInferior *inferior)
+{
+	RuntimeInferiorData *data;
+
+	data = (RuntimeInferiorData *) g_hash_table_lookup (inferior_data_hash, inferior);
+	if (!data)
+		return 0;
+
+	return data->lmf_addr;
+}
+
+void
+MonoRuntimeImpl::SendEventsAfterAttach (MdbInferior *inferior)
+{
+	ServerEvent *e;
+
+	e = g_new0 (ServerEvent, 1);
+	e->sender = inferior;
+	e->type = SERVER_EVENT_NOTIFICATION;
+	e->arg = NOTIFICATION_INITIALIZE_THREAD_MANAGER;
+
+	inferior->GetServer ()->SendEvent (e);
+
+	g_free (e);
+}

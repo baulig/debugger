@@ -165,9 +165,12 @@ namespace Mono.Debugger
 				if ((new_frame == null) || !IsFrameOkForMode (new_frame, mode)) {
 					if (!tried_lmf) {
 						tried_lmf = true;
+						Console.WriteLine ("TRY UNWIND: {0} {1}", thread, thread.LMFAddress);
 						if (thread.LMFAddress.IsNull)
 							return false;
 						lmf_address = memory.ReadAddress (thread.LMFAddress);
+						Console.WriteLine ("TRY UNWIND #1: {0} {1} {2}",
+								   thread, thread.LMFAddress, lmf_address);
 					}
 
 					if (!lmf_address.IsNull)

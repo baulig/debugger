@@ -14,7 +14,8 @@ namespace Mono.Debugger.MdbServer
 		enum CmdMonoRuntime {
 			GET_DEBUGGER_INFO = 1,
 			SET_EXTENDED_NOTIFICATIONS = 2,
-			EXECUTE_INSTRUCTION = 3
+			EXECUTE_INSTRUCTION = 3,
+			GET_LMF_ADDRESS = 4
 		}
 
 		public MonoDebuggerInfo GetDebuggerInfo ()
@@ -77,6 +78,15 @@ namespace Mono.Debugger.MdbServer
 			writer.WriteByte (update_ip ? (byte)1 : (byte)0);
 
 			Connection.SendReceive (CommandSet.MONO_RUNTIME, (int) CmdMonoRuntime.EXECUTE_INSTRUCTION, writer);
+		}
+
+		public long GetLMFAddress (IInferior inferior)
+		{
+			var writer = new Connection.PacketWriter ();
+			writer.WriteId (ID);
+			writer.WriteId (inferior.ID);
+
+			return Connection.SendReceive (CommandSet.MONO_RUNTIME, (int) CmdMonoRuntime.GET_LMF_ADDRESS, writer).ReadLong ();
 		}
 	}
 }

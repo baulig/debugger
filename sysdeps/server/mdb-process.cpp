@@ -2,25 +2,37 @@
 #include <mono-runtime.h>
 #include <string.h>
 
-GHashTable *MdbProcess::inferior_by_thread_id;
+GHashTable *MdbProcess::inferior_by_pid;
 MdbProcess *MdbProcess::main_process;
 
 void
 MdbProcess::Initialize (void)
 {
-	inferior_by_thread_id = g_hash_table_new (NULL, NULL);
+	inferior_by_pid = g_hash_table_new (NULL, NULL);
 }
 
 MdbInferior *
-MdbProcess::GetInferiorByThreadId (guint32 thread_id)
+MdbProcess::GetInferiorByPID (int pid)
 {
-	return (MdbInferior *) g_hash_table_lookup (inferior_by_thread_id, GUINT_TO_POINTER (thread_id));
+	return (MdbInferior *) g_hash_table_lookup (inferior_by_pid, GUINT_TO_POINTER (pid));
+}
+
+MdbInferior *
+MdbProcess::GetInferiorByTID (gsize tid)
+{
+	return (MdbInferior *) g_hash_table_lookup (inferior_by_tid, GUINT_TO_POINTER (tid));
 }
 
 void
-MdbProcess::AddInferior (guint32 thread_id, MdbInferior *inferior)
+MdbProcess::AddInferior (int pid, MdbInferior *inferior)
 {
-	g_hash_table_insert (inferior_by_thread_id, GUINT_TO_POINTER (thread_id), inferior);
+	g_hash_table_insert (inferior_by_pid, GUINT_TO_POINTER (pid), inferior);
+}
+
+void
+MdbProcess::AddInferiorByTID (gsize tid, MdbInferior *inferior)
+{
+	g_hash_table_insert (inferior_by_tid, GUINT_TO_POINTER (tid), inferior);
 }
 
 MdbExeReader *
@@ -232,7 +244,7 @@ MdbProcess::ForeachInferior (InferiorForeachFunc func, gpointer user_data)
 
 	dlg.func = func;
 	dlg.user_data = user_data;
-	g_hash_table_foreach (inferior_by_thread_id, inferior_foreach, &dlg);
+	g_hash_table_foreach (inferior_by_pid, inferior_foreach, &dlg);
 }
 
 typedef struct {

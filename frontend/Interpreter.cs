@@ -313,6 +313,8 @@ namespace Mono.Debugger.Frontend
 				current_process = main_process = debugger.Attach (session, pid, out result);
 				current_thread = current_process.MainThread;
 
+				System.Threading.Thread.Sleep (5000); // FIXME
+
 				Wait (result);
 
 				return current_process;

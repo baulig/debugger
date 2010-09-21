@@ -21,5 +21,15 @@ namespace Mono.Debugger.Server
 		long GetSectionAddress (string name);
 
 		byte[] GetSectionContents (string name);
+
+		long BaseAddress
+		{
+			get;
+		}
+
+		long EndAddress
+		{
+			get;
+		}
 	}
 }

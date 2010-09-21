@@ -228,6 +228,8 @@ namespace Mono.Debugger.Backend
 				if (stop_requested) {
 					OperationInterrupted ();
 				} else if (resume_target) {
+					if (current_operation == null)
+						return true;
 					if (!current_operation.ResumeOperation ())
 						inferior.Continue ();
 				}
@@ -661,12 +663,6 @@ namespace Mono.Debugger.Backend
 			this.tid = tid;
 		}
 
-		internal void SetManagedThreadData (TargetAddress lmf_address,
-						    TargetAddress extended_notifications_addr)
-		{
-			this.lmf_address = lmf_address;
-		}
-
 		internal void SetMainReturnAddress (TargetAddress main_ret)
 		{
 			if (main_ret.IsNull) {
@@ -870,7 +866,12 @@ namespace Mono.Debugger.Backend
 		}
 
 		public override TargetAddress LMFAddress {
-			get { return lmf_address; }
+			get {
+				if (process.MonoManager != null)
+					return process.MonoManager.GetLMFAddress (inferior);
+
+				return TargetAddress.Null;
+			}
 		}
 
 		public override bool CanRun {
@@ -2544,7 +2545,6 @@ namespace Mono.Debugger.Backend
 
 		TargetEventArgs last_target_event;
 
-		TargetAddress lmf_address = TargetAddress.Null;
 		TargetAddress end_stack_address = TargetAddress.Null;
 		TargetAddress main_retaddr = TargetAddress.Null;
 

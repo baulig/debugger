@@ -21,6 +21,9 @@ namespace Mono.Debugger.Backend
 
 		bool dwarf_supported;
 		bool stabs_supported;
+		bool has_frame_reader;
+
+		DwarfFrameReader frame_reader, eh_frame_reader;
 
 		TargetAddress start_address = TargetAddress.Null;
 		TargetAddress end_address = TargetAddress.Null;
@@ -39,6 +42,10 @@ namespace Mono.Debugger.Backend
 
 			symfile = new ExeReaderSymbolFile (this);
 
+			start_address = create_address (reader.StartAddress);
+			end_address = create_address (reader.EndAddress);
+			base_address = create_address (reader.BaseAddress);
+
 			Module = process.Session.GetModule (FileName);
 			if (Module == null) {
 				Module = process.Session.CreateModule (FileName, symfile);
@@ -56,6 +63,10 @@ namespace Mono.Debugger.Backend
 		public OperatingSystemBackend OperatingSystem
 		{
 			get { return Process.OperatingSystem; }
+		}
+
+		internal Architecture Architecture {
+			get { return Process.Architecture; }
 		}
 
 		public TargetInfo TargetInfo {
@@ -148,10 +159,35 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
+		void create_frame_reader ()
+		{
+			if (has_frame_reader)
+				return;
+
+			has_frame_reader = true;
+
+			if (reader.HasSection (".debug_frame")) {
+				var contents = reader.GetSectionContents (".debug_frame");
+				var addr = reader.GetSectionAddress (".debug_frame");
+				var blob = new TargetBlob (contents, TargetInfo);
+				frame_reader = new DwarfFrameReader (
+					OperatingSystem, this, blob, addr, false);
+			}
+
+			if (reader.HasSection (".eh_frame")) {
+				var contents = reader.GetSectionContents (".eh_frame");
+				var addr = reader.GetSectionAddress (".eh_frame");
+				var blob = new TargetBlob (contents, TargetInfo);
+				frame_reader = new DwarfFrameReader (
+					OperatingSystem, this, blob, addr, true);
+			}
+		}
+
 		public void ReadDebuggingInfo ()
 		{
 			read_dwarf ();
 			read_stabs ();
+			create_frame_reader ();
 		}
 
 		void read_dwarf ()
@@ -211,6 +247,38 @@ namespace Mono.Debugger.Backend
 		protected ArrayList GetSimpleSymbols ()
 		{
 			return new ArrayList ();
+		}
+
+		protected StackFrame UnwindStack (StackFrame frame, TargetMemoryAccess memory)
+		{
+			if ((frame.TargetAddress < StartAddress) || (frame.TargetAddress > EndAddress))
+				return null;
+
+			StackFrame new_frame;
+			try {
+				new_frame = Architecture.TrySpecialUnwind (frame, memory);
+				if (new_frame != null)
+					return new_frame;
+			} catch {
+			}
+
+			try {
+				if (frame_reader != null) {
+					new_frame = frame_reader.UnwindStack (frame, memory, Architecture);
+					if (new_frame != null)
+						return new_frame;
+				}
+
+				if (eh_frame_reader != null) {
+					new_frame = eh_frame_reader.UnwindStack (frame, memory, Architecture);
+					if (new_frame != null)
+						return new_frame;
+				}
+			} catch {
+				return null;
+			}
+
+			return null;
 		}
 
 		protected class ExeReaderSymbolFile : SymbolFile
@@ -278,7 +346,7 @@ namespace Mono.Debugger.Backend
 
 			internal override StackFrame UnwindStack (StackFrame frame, TargetMemoryAccess memory)
 			{
-				return null;
+				return ExecutableReader.UnwindStack (frame, memory);
 			}
 		}
 

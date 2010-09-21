@@ -1,6 +1,7 @@
 #include <mdb-server-linux.h>
 #include <mdb-inferior.h>
 #include <mdb-process.h>
+#include <mono-runtime.h>
 #include <thread-db.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -92,6 +93,22 @@ public:
 		SetupInferior ();
 	}
 
+	PTraceInferior (PTraceProcess *process, int pid, gsize tid)
+		: MdbInferior (process->server)
+	{
+		this->process = process;
+		this->pid = pid;
+		this->tid = tid;
+
+		this->stopped = false;
+		this->stop_requested = false;
+		this->stepping = false;
+
+		WaitForNewThread ();
+
+		SetupInferior ();
+	}
+
 	MdbProcess *GetProcess (void)
 	{
 		return process;
@@ -170,6 +187,7 @@ private:
 	PTraceProcess *process;
 
 	int pid;
+	gsize tid;
 	bool stepping;
 
 	bool stopped;
@@ -909,17 +927,21 @@ PTraceProcess::IterateOverThreadsCallback (ThreadDB *thread_db, int lwp, gsize t
 
 	g_message (G_STRLOC ": %d - %Lx", lwp, tid);
 
-	inferior = (PTraceInferior *) GetInferiorByThreadId (lwp);
-	if (inferior)
+	inferior = (PTraceInferior *) GetInferiorByPID (lwp);
+	if (inferior) {
+		inferior->tid = tid;
+		AddInferiorByTID (tid, inferior);
 		return;
+	}
 
 	if (ptrace (PT_ATTACH, lwp, NULL, 0) != 0) {
 		g_warning (G_STRLOC ": Cannot attach to thread %d", lwp);
 		return;
 	}
 
-	inferior = new PTraceInferior (this, lwp, false);
+	inferior = new PTraceInferior (this, lwp, tid);
 	AddInferior (lwp, inferior);
+	AddInferiorByTID (tid, inferior);
 
 	if (inferior->GetArch ()->GetRegisters ()) {
 		g_warning (G_STRLOC);
@@ -962,6 +984,10 @@ PTraceProcess::InitializeProcess (MdbInferior *inferior)
 		ThreadDBCallback *cb = new ThreadDBCallback (iterate_over_threads_cb, this);
 		thread_db->GetAllThreads (inferior, cb);
 		delete cb;
+	}
+
+	if (mono_runtime) {
+		mono_runtime->InitializeThreads (inferior);
 	}
 }
 

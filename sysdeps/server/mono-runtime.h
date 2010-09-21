@@ -62,6 +62,8 @@ public:
 
 	virtual gsize GetGenericInvocationFunc (void) = 0;
 
+	virtual gsize GetLMFAddress (MdbInferior *inferior) = 0;
+
 	virtual ErrorCode EnableBreakpoint (MdbInferior *inferior, BreakpointInfo *breakpoint) = 0;
 	virtual ErrorCode DisableBreakpoint (MdbInferior *inferior, BreakpointInfo *breakpoint) = 0;
 
@@ -69,6 +71,8 @@ public:
 					      guint32 size, bool update_ip) = 0;
 
 	virtual ErrorCode SetExtendedNotifications (MdbInferior *inferior, NotificationType type, bool enable) = 0;
+
+	virtual ErrorCode InitializeThreads (MdbInferior *inferior) = 0;
 
 	virtual void HandleNotification (MdbInferior *inferior, NotificationType type, gsize arg1, gsize arg2) = 0;
 

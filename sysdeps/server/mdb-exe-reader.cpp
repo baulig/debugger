@@ -73,6 +73,14 @@ MdbExeReader::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		break;
 	}
 
+	case CMD_EXE_READER_GET_BASE_ADDRESS:
+		out->AddLong (GetBaseAddress ());
+		break;
+
+	case CMD_EXE_READER_GET_END_ADDRESS:
+		out->AddLong (GetEndAddress ());
+		break;
+
 	default:
 		return ERR_NOT_IMPLEMENTED;
 	}

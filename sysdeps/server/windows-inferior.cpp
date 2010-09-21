@@ -351,7 +351,7 @@ MdbServerWindows::HandleDebugEvent (DEBUG_EVENT *de)
 {
 	WindowsInferior *inferior;
 
-	inferior = (WindowsInferior *) WindowsProcess::GetInferiorByThreadId (de->dwThreadId);
+	inferior = (WindowsInferior *) WindowsProcess::GetInferiorByPID (de->dwThreadId);
 	if (!inferior) {
 		g_warning (G_STRLOC ": Got debug event for unknown thread: %d/%d", de->dwProcessId, de->dwThreadId);
 		if (!ContinueDebugEvent (de->dwProcessId, de->dwThreadId, DBG_CONTINUE)) {

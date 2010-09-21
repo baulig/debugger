@@ -36,6 +36,15 @@ namespace Mono.Debugger.Backend
 			runtime.ExecuteInstruction (inferior.InferiorHandle, instruction, update_ip);
 		}
 
+		public TargetAddress GetLMFAddress (Inferior inferior)
+		{
+			var lmf_addr = runtime.GetLMFAddress (inferior.InferiorHandle);
+			if (lmf_addr == 0)
+				return TargetAddress.Null;
+
+			return new TargetAddress (inferior.AddressDomain, lmf_addr);
+		}
+
 		internal bool CanExecuteCode {
 			get { return true; }
 		}

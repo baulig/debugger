@@ -51,6 +51,13 @@ public:
 		return bfd_handle->xvec->byteorder;
 	}
 
+	guint64 GetBaseAddress (void)
+	{
+		return base_address;
+	}
+
+	guint64 GetEndAddress (void);
+
 private:
 	bfd *bfd_handle;
 	long symtab_size;
@@ -143,9 +150,36 @@ BfdReader::~BfdReader (void)
 guint64
 BfdReader::GetStartAddress (void)
 {
-	if (base_address)
-		return base_address;
-	return base_address + bfd_get_start_address (this->bfd_handle);
+	asection *text, *bss;
+
+	text = FindSection (".text");
+	bss = FindSection (".bss");
+
+	g_message (G_STRLOC ": GetStartAddress() - %s - %Lx - %Lx", filename, base_address,
+		   bfd_get_start_address (bfd_handle));
+
+	if (text) {
+		g_message (G_STRLOC ": %Lx - %Lx", text->vma, base_address + text->vma);
+		return base_address + text->vma;
+	}
+
+	return base_address + bfd_get_start_address (bfd_handle);
+}
+
+guint64
+BfdReader::GetEndAddress (void)
+{
+	asection *text, *bss;
+
+	text = FindSection (".text");
+	bss = FindSection (".bss");
+
+	if (bss)
+		return base_address + bss->vma + bss->size;
+	else if (text)
+		return base_address + text->vma + bss->size;
+
+	return 0;
 }
 
 guint64
@@ -195,7 +229,7 @@ BfdReader::LookupSymbol (const char *name)
 #endif
 
 		if (!strcmp (symname, name))
-			return address;
+			return base_address + address;
 	}
 
 	return 0;
@@ -232,7 +266,7 @@ BfdReader::GetSectionAddress (const char *name)
 	asection *section = FindSection (name);
 	if (!section)
 		return 0;
-	return section->vma;
+	return base_address + section->vma;
 }
 
 gpointer
