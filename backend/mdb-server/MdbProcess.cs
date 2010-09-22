@@ -13,6 +13,7 @@ namespace Mono.Debugger.MdbServer
 
 		bool initialized;
 		MdbExeReader main_reader;
+		MonoRuntime mono_runtime;
 
 		void initialize ()
 		{
@@ -22,6 +23,12 @@ namespace Mono.Debugger.MdbServer
 			int reader_iid = Connection.SendReceive (CommandSet.PROCESS, (int) CmdProcess.GET_MAIN_READER, new Connection.PacketWriter ().WriteInt (ID)).ReadInt ();
 			main_reader = new MdbExeReader (Connection, reader_iid);
 			initialized = true;
+
+			int runtime_iid = Connection.SendReceive (CommandSet.PROCESS, (int) CmdProcess.GET_MONO_RUNTIME, new Connection.PacketWriter ().WriteInt (ID)).ReadInt ();
+			if (runtime_iid != 0)
+				mono_runtime = new MonoRuntime (Connection, runtime_iid);
+
+			initialized = true;
 		}
 
 		enum CmdProcess {
@@ -30,7 +37,9 @@ namespace Mono.Debugger.MdbServer
 			SPAWN = 3,
 			ATTACH = 4,
 			SUSPEND = 5,
-			RESUME = 6
+			RESUME = 6,
+			GET_ALL_THREADS = 7,
+			GET_MONO_RUNTIME = 8
 		}
 
 		public MdbExeReader MainReader {
@@ -46,14 +55,17 @@ namespace Mono.Debugger.MdbServer
 			get { return MainReader; }
 		}
 
-		public void InitializeProcess (MdbInferior inferior)
-		{
-			Connection.SendReceive (CommandSet.PROCESS, (int)CmdProcess.INITIALIZE_PROCESS, new Connection.PacketWriter ().WriteInt (ID).WriteInt (inferior.ID));
+		public MonoRuntime MonoRuntime {
+			get {
+				lock (this) {
+					initialize ();
+					return mono_runtime;
+				}
+			}
 		}
 
-		void IProcess.InitializeProcess (IInferior inferior)
-		{
-			InitializeProcess ((MdbInferior) inferior);
+		IMonoRuntime IProcess.MonoRuntime {
+			get { return MonoRuntime; }
 		}
 
 		public MdbInferior Spawn (string cwd, string[] argv, string[] envp)
@@ -105,6 +117,25 @@ namespace Mono.Debugger.MdbServer
 		public void Resume (IInferior caller)
 		{
 			Connection.SendReceive (CommandSet.PROCESS, (int) CmdProcess.RESUME, new Connection.PacketWriter ().WriteId (ID).WriteId (caller.ID));
+		}
+
+		public MdbInferior[] GetAllThreads ()
+		{
+			var reader = Connection.SendReceive (CommandSet.PROCESS, (int) CmdProcess.GET_ALL_THREADS, new Connection.PacketWriter ().WriteId (ID));
+
+			int count = reader.ReadInt ();
+			MdbInferior[] threads = new MdbInferior [count];
+
+			for (int i = 0; i < count; i++) {
+				threads [i] = (MdbInferior) ServerObject.GetOrCreateObject (Connection, reader.ReadId (), ServerObjectKind.Inferior);
+			}
+
+			return threads;
+		}
+
+		IInferior[] IProcess.GetAllThreads ()
+		{
+			return GetAllThreads ();
 		}
 	}
 }

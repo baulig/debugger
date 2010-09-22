@@ -53,6 +53,12 @@ namespace Mono.Debugger.Backend
 			get { return debugger_info; }
 		}
 
+		internal void InitializeAfterAttach (Inferior inferior)
+		{
+			csharp_language = inferior.Process.CreateMonoLanguage (debugger_info);
+			csharp_language.InitializeAttach (inferior);
+		}
+
 		internal void Detach (Inferior inferior)
 		{
 #if FIXME

@@ -720,7 +720,7 @@ MonoRuntimeImpl::InitializeThreads (MdbInferior *inferior)
 		ptr = info.next_ptr;
 	}
 
-	SendEventsAfterAttach (inferior);
+	// SendEventsAfterAttach (inferior);
 
 	return ERR_NONE;
 }

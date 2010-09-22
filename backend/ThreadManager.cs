@@ -175,8 +175,11 @@ namespace Mono.Debugger.Backend
 			process.OnDllLoaded (exe);
 		}
 
-		void OnThreadCreated (IInferior inferior)
+		internal void OnThreadCreated (IInferior inferior)
 		{
+			if (sse_by_inferior.ContainsKey (inferior.ID))
+				return;
+
 			Console.WriteLine ("THREAD CREATED: {0}", inferior.ID);
 
 			var sse = main_process.ThreadCreated (inferior);

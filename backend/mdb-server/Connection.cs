@@ -125,7 +125,7 @@ namespace Mono.Debugger.MdbServer
 			return res;
 		}
 
-		static long decode_id (byte[] packet, ref int offset) {
+		static int decode_id (byte[] packet, ref int offset) {
 			return decode_int (packet, ref offset);
 		}
 
@@ -240,7 +240,7 @@ namespace Mono.Debugger.MdbServer
 				return decode_int (packet, ref offset);
 			}
 
-			public long ReadId () {
+			public int ReadId () {
 				return decode_id (packet, ref offset);
 			}
 

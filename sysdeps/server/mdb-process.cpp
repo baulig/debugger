@@ -59,6 +59,15 @@ MdbProcess::GetDisassembler (MdbInferior *inferior)
 	return main_reader->GetDisassembler (inferior);
 }
 
+static void
+get_all_threads_func (gpointer key, gpointer value, gpointer user_data)
+{
+	MdbInferior *inferior = (MdbInferior *) value;
+	Buffer *out = (Buffer *) user_data;
+
+	out->AddID (inferior->GetID ());
+}
+
 ErrorCode
 MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 {
@@ -68,20 +77,6 @@ MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 			return ERR_NO_SUCH_EXE_READER;
 		out->AddInt (main_reader->GetID ());
 		break;
-
-	case CMD_PROCESS_INITIALIZE_PROCESS: {
-		MdbInferior *inferior;
-		int iid;
-
-		iid = in->DecodeID ();
-		inferior = (MdbInferior *) ServerObject::GetObjectByID (iid, SERVER_OBJECT_KIND_INFERIOR);
-
-		if (!inferior)
-			return ERR_NO_SUCH_INFERIOR;
-
-		InitializeProcess (inferior);
-		break;
-	}
 
 	case CMD_PROCESS_SPAWN: {
 		char *cwd, **argv, *error;
@@ -161,6 +156,24 @@ MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		return ResumeProcess (inferior);
 	}
 
+	case CMD_PROCESS_GET_ALL_THREADS: {
+		int count;
+
+		count = g_hash_table_size (inferior_by_pid);
+		out->AddInt (count);
+
+		g_hash_table_foreach (inferior_by_pid, get_all_threads_func, out);
+		break;
+	}
+
+	case CMD_PROCESS_GET_MONO_RUNTIME: {
+		if (mono_runtime)
+			out->AddID (mono_runtime->GetID ());
+		else
+			out->AddID (0);
+		break;
+	}
+
 	default:
 		return ERR_NOT_IMPLEMENTED;
 	}
@@ -171,17 +184,17 @@ MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 void
 MdbProcess::OnMainModuleLoaded (MdbInferior *inferior, MdbExeReader *reader)
 {
-	ServerEvent *e;
-
 	this->main_reader = reader;
 
-	e = g_new0 (ServerEvent, 1);
+	if (initialized) {
+		ServerEvent *e = g_new0 (ServerEvent, 1);
 
-	e->type = SERVER_EVENT_MAIN_MODULE_LOADED;
-	e->sender = this;
-	e->arg_object = reader;
-	server->SendEvent (e);
-	g_free (e);
+		e->type = SERVER_EVENT_MAIN_MODULE_LOADED;
+		e->sender = this;
+		e->arg_object = reader;
+		server->SendEvent (e);
+		g_free (e);
+	}
 
 	CheckLoadedDll (inferior, reader);
 }
@@ -189,8 +202,6 @@ MdbProcess::OnMainModuleLoaded (MdbInferior *inferior, MdbExeReader *reader)
 void
 MdbProcess::CheckLoadedDll (MdbInferior *inferior, MdbExeReader *reader)
 {
-	ServerEvent *e;
-
 	if (mono_runtime)
 		return;
 
@@ -198,27 +209,29 @@ MdbProcess::CheckLoadedDll (MdbInferior *inferior, MdbExeReader *reader)
 	if (!mono_runtime)
 		return;
 
-	e = g_new0 (ServerEvent, 1);
+	if (initialized) {
+		ServerEvent *e = g_new0 (ServerEvent, 1);
 
-	e->type = SERVER_EVENT_MONO_RUNTIME_LOADED;
-	e->sender = this;
-	e->arg_object = mono_runtime;
-	server->SendEvent (e);
-	g_free (e);
+		e->type = SERVER_EVENT_MONO_RUNTIME_LOADED;
+		e->sender = this;
+		e->arg_object = mono_runtime;
+		server->SendEvent (e);
+		g_free (e);
+	}
 }
 
 void
 MdbProcess::OnDllLoaded (MdbInferior *inferior, MdbExeReader *reader)
 {
-	ServerEvent *e;
+	if (initialized) {
+		ServerEvent *e = g_new0 (ServerEvent, 1);
 
-	e = g_new0 (ServerEvent, 1);
-
-	e->type = SERVER_EVENT_DLL_LOADED;
-	e->sender = this;
-	e->arg_object = reader;
-	server->SendEvent (e);
-	g_free (e);
+		e->type = SERVER_EVENT_DLL_LOADED;
+		e->sender = this;
+		e->arg_object = reader;
+		server->SendEvent (e);
+		g_free (e);
+	}
 
 	CheckLoadedDll (inferior, reader);
 }

@@ -6,7 +6,11 @@ namespace Mono.Debugger.Server
 			get;
 		}
 
-		void InitializeProcess (IInferior inferior);
+		IMonoRuntime MonoRuntime {
+			get;
+		}
+
+		IInferior[] GetAllThreads ();
 
 		IInferior Spawn (string cwd, string[] argv, string[] envp);
 

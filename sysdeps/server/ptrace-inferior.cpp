@@ -41,10 +41,8 @@ public:
 	PTraceProcess (MdbServer *server) : MdbProcess (server)
 	{ }
 
-	void InitializeProcess (MdbInferior *inferior);
-
 private:
-	bool Initialize (PTraceInferior *inferior, int pid);
+	bool SetupInferior (PTraceInferior *inferior, int pid);
 
 	ErrorCode Spawn (const gchar *working_directory,
 			 const gchar **argv, const gchar **envp,
@@ -58,6 +56,8 @@ private:
 	ErrorCode ResumeProcess (MdbInferior *caller);
 
 	void IterateOverThreadsCallback (ThreadDB *thread_db, int lwd, gsize tid);
+
+	void InitializeProcess (PTraceInferior *inferior, bool attached);
 
 	friend void iterate_over_threads_cb (ThreadDB *thread_db, int lwp, gsize tid, gpointer user_data);
 	friend class PTraceInferior;
@@ -167,8 +167,6 @@ public:
 
 protected:
 	ErrorCode SetupInferior (void);
-
-	ErrorCode InitializeProcess (void);
 
 	bool WaitForNewThread (void);
 
@@ -324,13 +322,15 @@ PTraceProcess::Spawn (const gchar *working_directory, const gchar **argv, const 
 		return result;
 	}
 
-	if (!Initialize (inferior, pid)) {
+	if (!SetupInferior (inferior, pid)) {
 		delete inferior;
 		return ERR_CANNOT_START_TARGET;
 	}
 
 	AddInferior (pid, inferior);
 	main_process = this;
+
+	InitializeProcess (inferior, false);
 
 	*out_inferior = inferior;
 	*out_thread_id = pid;
@@ -360,13 +360,15 @@ PTraceProcess::Attach (int pid, MdbInferior **out_inferior, guint32 *out_thread_
 		return result;
 	}
 
-	if (!Initialize (inferior, pid)) {
+	if (!SetupInferior (inferior, pid)) {
 		delete inferior;
 		return ERR_CANNOT_START_TARGET;
 	}
 
 	AddInferior (pid, inferior);
 	main_process = this;
+
+	InitializeProcess (inferior, true);
 
 	*out_inferior = inferior;
 	*out_thread_id = pid;
@@ -433,20 +435,6 @@ PTraceInferior::WaitForNewThread (void)
 	}
 
 	return true;
-}
-
-ErrorCode
-PTraceInferior::InitializeProcess (void)
-{
-	int flags = PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK |
-		PTRACE_O_TRACEEXEC;
-
-	if (ptrace (PTRACE_SETOPTIONS, pid, 0, GINT_TO_POINTER (flags))) {
-		g_warning (G_STRLOC ": Can't PTRACE_SETOPTIONS %d: %s", pid, g_strerror (errno));
-		return ERR_UNKNOWN_ERROR;
-	}
-
-	return ERR_NONE;
 }
 
 ErrorCode
@@ -892,7 +880,7 @@ PTraceInferior::HandleLinuxWaitEvent (int status, bool *out_remain_stopped)
 }
 
 bool
-PTraceProcess::Initialize (PTraceInferior *inferior, int pid)
+PTraceProcess::SetupInferior (PTraceInferior *inferior, int pid)
 {
 	char buffer [BUFSIZ+1];
 	gchar *exe_filename;
@@ -923,7 +911,6 @@ void
 PTraceProcess::IterateOverThreadsCallback (ThreadDB *thread_db, int lwp, gsize tid)
 {
 	PTraceInferior *inferior;
-	ServerEvent *e;
 
 	g_message (G_STRLOC ": %d - %Lx", lwp, tid);
 
@@ -942,18 +929,6 @@ PTraceProcess::IterateOverThreadsCallback (ThreadDB *thread_db, int lwp, gsize t
 	inferior = new PTraceInferior (this, lwp, tid);
 	AddInferior (lwp, inferior);
 	AddInferiorByTID (tid, inferior);
-
-	if (inferior->GetArch ()->GetRegisters ()) {
-		g_warning (G_STRLOC);
-	}
-
-	e = g_new0 (ServerEvent, 1);
-	e->type = SERVER_EVENT_THREAD_CREATED;
-	e->sender = this;
-	e->arg_object = inferior;
-	e->arg = lwp;
-	server->SendEvent (e);
-	g_free (e);
 }
 
 static void
@@ -965,9 +940,8 @@ iterate_over_threads_cb (ThreadDB *thread_db, int lwp, gsize tid, gpointer user_
 }
 
 void
-PTraceProcess::InitializeProcess (MdbInferior *inferior)
+PTraceProcess::InitializeProcess (PTraceInferior *inferior, bool attached)
 {
-	PTraceInferior *ptrace_inferior = (PTraceInferior *) inferior;
 	MdbExeReader *reader;
 	ThreadDB *thread_db;
 
@@ -978,7 +952,12 @@ PTraceProcess::InitializeProcess (MdbInferior *inferior)
 	if (reader)
 		reader->ReadDynamicInfo (inferior);
 
-	thread_db = ThreadDB::Initialize (inferior, ptrace_inferior->pid);
+	thread_db = ThreadDB::Initialize (inferior, inferior->pid);
+
+	if (!attached) {
+		initialized = true;
+		return;
+	}
 
 	if (thread_db) {
 		ThreadDBCallback *cb = new ThreadDBCallback (iterate_over_threads_cb, this);
@@ -986,9 +965,13 @@ PTraceProcess::InitializeProcess (MdbInferior *inferior)
 		delete cb;
 	}
 
+	g_message (G_STRLOC ": InitializeProcess(): %p", mono_runtime);
+
 	if (mono_runtime) {
 		mono_runtime->InitializeThreads (inferior);
 	}
+
+	initialized = true;
 }
 
 MdbInferior *

@@ -2963,8 +2963,6 @@ namespace Mono.Debugger.Backend
 				return EventResult.Running;
 			}
 
-			inferior.InitializeProcess ();
-
 			sse.Process.InitializeThreads (inferior, !sse.Process.IsAttached);
 
 			if (sse.Process.IsAttached)

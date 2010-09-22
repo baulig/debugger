@@ -339,11 +339,6 @@ namespace Mono.Debugger.Backend
 		}
 #endif
 
-		public void InitializeProcess ()
-		{
-			server_process.InitializeProcess (server_inferior);
-		}
-
 #if FIXME
 		public ServerEvent ProcessEvent (int status)
 		{

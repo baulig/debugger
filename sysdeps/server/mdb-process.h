@@ -13,8 +13,6 @@ class MdbProcess : public ServerObject
 public:
 	static void Initialize (void);
 
-	virtual void InitializeProcess (MdbInferior *inferior) = 0;
-
 	MdbExeReader *GetMainReader (void)
 	{
 		return main_reader;
@@ -75,6 +73,8 @@ public:
 
 	MdbExeReader *LookupDll (const char *name, bool exact_match);
 
+	GList *GetThreads (void);
+
 protected:
 	MdbProcess (MdbServer *server)
 		: ServerObject (SERVER_OBJECT_KIND_PROCESS)
@@ -87,6 +87,8 @@ protected:
 	}
 
 	void ForeachInferior (InferiorForeachFunc func, gpointer user_data);
+
+	bool initialized;
 
 	MdbServer *server;
 	MonoRuntime *mono_runtime;

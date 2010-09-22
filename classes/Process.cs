@@ -516,8 +516,15 @@ namespace Mono.Debugger
 			session.OnMainProcessCreated (this);
 			manager.Debugger.OnMainProcessCreatedEvent (this);
 
+			if (server_process.MonoRuntime != null)
+				mono_manager = new MonoRuntimeManager (this, server_process.MonoRuntime);
+
 			if (start.PID != 0) {
-				engine.Inferior.InitializeProcess ();
+				foreach (var inferior in server_process.GetAllThreads ()) {
+					manager.OnThreadCreated (inferior);
+				}
+				if (mono_manager != null)
+					mono_manager.InitializeAfterAttach (engine.Inferior);
 				engine.StartSuspended ();
 				return null;
 			} else {
