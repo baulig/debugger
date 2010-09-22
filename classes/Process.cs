@@ -523,6 +523,9 @@ namespace Mono.Debugger
 				foreach (var inferior in server_process.GetAllThreads ()) {
 					manager.OnThreadCreated (inferior);
 				}
+				foreach (var dll in server_process.GetAllModules ()) {
+					manager.OnDllLoaded (this, dll);
+				}
 				if (mono_manager != null)
 					mono_manager.InitializeAfterAttach (engine.Inferior);
 				engine.StartSuspended ();

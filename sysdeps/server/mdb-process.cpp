@@ -68,6 +68,15 @@ get_all_threads_func (gpointer key, gpointer value, gpointer user_data)
 	out->AddID (inferior->GetID ());
 }
 
+static void
+get_all_modules_func (gpointer key, gpointer value, gpointer user_data)
+{
+	MdbExeReader *reader = (MdbExeReader *) value;
+	Buffer *out = (Buffer *) user_data;
+
+	out->AddID (reader->GetID ());
+}
+
 ErrorCode
 MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 {
@@ -171,6 +180,16 @@ MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 			out->AddID (mono_runtime->GetID ());
 		else
 			out->AddID (0);
+		break;
+	}
+
+	case CMD_PROCESS_GET_ALL_MODULES: {
+		int count;
+
+		count = g_hash_table_size (exe_file_hash);
+		out->AddInt (count);
+
+		g_hash_table_foreach (exe_file_hash, get_all_modules_func, out);
 		break;
 	}
 

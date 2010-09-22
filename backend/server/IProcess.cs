@@ -12,6 +12,8 @@ namespace Mono.Debugger.Server
 
 		IInferior[] GetAllThreads ();
 
+		IExecutableReader[] GetAllModules ();
+
 		IInferior Spawn (string cwd, string[] argv, string[] envp);
 
 		IInferior Attach (int pid);

@@ -165,8 +165,11 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		void OnDllLoaded (Process process, IExecutableReader reader)
+		internal void OnDllLoaded (Process process, IExecutableReader reader)
 		{
+			if (exe_reader_by_id.ContainsKey (reader.ID))
+				return;
+
 			Console.WriteLine ("DLL LOADED: {0}", reader.FileName);
 
 			var exe = new ExecutableReader (process, TargetInfo, reader);

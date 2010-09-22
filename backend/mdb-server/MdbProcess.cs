@@ -39,7 +39,8 @@ namespace Mono.Debugger.MdbServer
 			SUSPEND = 5,
 			RESUME = 6,
 			GET_ALL_THREADS = 7,
-			GET_MONO_RUNTIME = 8
+			GET_MONO_RUNTIME = 8,
+			GET_ALL_MODULES = 9
 		}
 
 		public MdbExeReader MainReader {
@@ -136,6 +137,25 @@ namespace Mono.Debugger.MdbServer
 		IInferior[] IProcess.GetAllThreads ()
 		{
 			return GetAllThreads ();
+		}
+
+		public MdbExeReader[] GetAllModules ()
+		{
+			var reader = Connection.SendReceive (CommandSet.PROCESS, (int) CmdProcess.GET_ALL_MODULES, new Connection.PacketWriter ().WriteId (ID));
+
+			int count = reader.ReadInt ();
+			MdbExeReader[] modules = new MdbExeReader [count];
+
+			for (int i = 0; i < count; i++) {
+				modules [i] = (MdbExeReader) ServerObject.GetOrCreateObject (Connection, reader.ReadId (), ServerObjectKind.ExeReader);
+			}
+
+			return modules;
+		}
+
+		IExecutableReader[] IProcess.GetAllModules ()
+		{
+			return GetAllModules ();
 		}
 	}
 }
