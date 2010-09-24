@@ -88,14 +88,13 @@ namespace Mono.Debugger.Backend
 				      DebuggerWaitHandle.CurrentThread, this);
 		}
 
-		static int next_pid;
-
 		public SingleSteppingEngine (ThreadManager manager, Process process,
 					     IProcess server_process, IInferior server_inferior)
 			: this (manager, process)
 		{
 			inferior = Inferior.CreateInferior (this, server_process, server_inferior);
-			pid = ++next_pid;
+			pid = server_inferior.PID;
+			tid = server_inferior.TID;
 		}
 
 		public CommandResult StartApplication (CommandResult result)
@@ -2962,6 +2961,8 @@ namespace Mono.Debugger.Backend
 				inferior.Step ();
 				return EventResult.Running;
 			}
+
+			sse.Process.InitializeProcess (inferior);
 
 			sse.Process.InitializeThreads (inferior, !sse.Process.IsAttached);
 

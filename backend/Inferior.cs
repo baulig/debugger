@@ -293,52 +293,6 @@ namespace Mono.Debugger.Backend
 			}
 		}
 
-		public void InitializeAfterExec (int pid)
-		{
-			if (initialized)
-				throw new TargetException (TargetError.AlreadyHaveTarget);
-
-			initialized = true;
-
-			server_inferior.InitializeThread (pid, false);
-			this.child_pid = pid;
-
-			string exe_file, cwd;
-			string[] cmdline_args;
-			exe_file = GetApplication (out cwd, out cmdline_args);
-
-			start.SetupApplication (exe_file, cwd, cmdline_args);
-
-			SetupInferior ();
-
-			change_target_state (TargetState.Stopped, 0);
-		}
-
-#if FIXME
-		protected void Attach ()
-		{
-			if (has_target || initialized)
-				throw new TargetException (TargetError.AlreadyHaveTarget);
-
-			has_target = true;
-
-			server_inferior = server_process.Attach (start.PID);
-			this.child_pid = start.PID;
-
-			string exe_file, cwd;
-			string[] cmdline_args;
-			exe_file = GetApplication (out cwd, out cmdline_args);
-
-			start.SetupApplication (exe_file, cwd, cmdline_args);
-
-			initialized = true;
-
-			SetupInferior ();
-
-			change_target_state (TargetState.Stopped, 0);
-		}
-#endif
-
 #if FIXME
 		public ServerEvent ProcessEvent (int status)
 		{

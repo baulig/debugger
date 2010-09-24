@@ -63,8 +63,6 @@ public:
 	static ServerCapabilities GetCapabilities (void);
 	static ArchType GetArchType (void);
 
-	MdbExeReader *InitializeProcess (void);
-
 	static ErrorCode GetTargetInfo (guint32 *out_target_int_size, guint32 *out_target_long_size,
 					guint32 *out_target_address_size, guint32 *out_is_bigendian);
 
@@ -145,13 +143,25 @@ public:
 
 	virtual ErrorCode CallMethod (InvocationData *data) = 0;
 
+	int GetPid (void)
+	{
+		return pid;
+	}
+
+	gsize GetTid (void)
+	{
+		return tid;
+	}
+
 	ErrorCode ProcessCommand (int command, int id, Buffer *in, Buffer *out);
 
 protected:
-	MdbInferior (MdbServer *server)
+	MdbInferior (MdbServer *server, int pid, gsize tid)
 		: ServerObject (SERVER_OBJECT_KIND_INFERIOR)
 	{
 		this->server = server;
+		this->pid = pid;
+		this->tid = tid;
 
 #if defined(__linux__) || defined(__FreeBSD__)
 		last_signal = 0;
@@ -165,6 +175,9 @@ protected:
 #if defined(__linux__) || defined(__FreeBSD__)
 	int last_signal;
 #endif
+
+	int pid;
+	gsize tid;
 
 	MdbServer *server;
 	MdbArch *arch;

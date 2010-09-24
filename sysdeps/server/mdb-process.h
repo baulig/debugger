@@ -29,6 +29,8 @@ public:
 
 	virtual ErrorCode Attach (int pid, MdbInferior **out_inferior, guint32 *out_thread_id) = 0;
 
+	virtual ErrorCode InitializeProcess (MdbInferior *inferior) = 0;
+
 	virtual ErrorCode SuspendProcess (MdbInferior *caller) = 0;
 
 	virtual ErrorCode ResumeProcess (MdbInferior *caller) = 0;

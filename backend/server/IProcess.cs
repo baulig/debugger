@@ -10,6 +10,8 @@ namespace Mono.Debugger.Server
 			get;
 		}
 
+		void InitializeProcess (IInferior inferior);
+
 		IInferior[] GetAllThreads ();
 
 		IExecutableReader[] GetAllModules ();

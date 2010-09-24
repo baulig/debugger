@@ -145,7 +145,6 @@ bool
 ThreadDBImpl::GetAllThreads (MdbInferior *inferior, ThreadDBCallback *callback)
 {
 	IterateOverThreadsData data;
-	td_thrhandle_t th;
 	td_err_e e;
 
 	data.thread_db = this;

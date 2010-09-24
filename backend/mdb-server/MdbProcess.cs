@@ -32,8 +32,8 @@ namespace Mono.Debugger.MdbServer
 		}
 
 		enum CmdProcess {
-			GET_MAIN_READER = 1,
-			INITIALIZE_PROCESS = 2,
+			INITIALIZE_PROCESS = 1,
+			GET_MAIN_READER = 2,
 			SPAWN = 3,
 			ATTACH = 4,
 			SUSPEND = 5,
@@ -67,6 +67,11 @@ namespace Mono.Debugger.MdbServer
 
 		IMonoRuntime IProcess.MonoRuntime {
 			get { return MonoRuntime; }
+		}
+
+		public void InitializeProcess (IInferior inferior)
+		{
+			Connection.SendReceive (CommandSet.PROCESS, (int)CmdProcess.INITIALIZE_PROCESS, new Connection.PacketWriter ().WriteId (ID).WriteId (inferior.ID));
 		}
 
 		public MdbInferior Spawn (string cwd, string[] argv, string[] envp)

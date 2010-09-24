@@ -13,7 +13,6 @@ namespace Mono.Debugger.MdbServer
 		{ }
 
 		enum CmdInferior {
-			INITIALIZE_PROCESS = 2,
 			GET_SIGNAL_INFO = 3,
 			GET_APPLICATION = 4,
 			GET_FRAME = 5,
@@ -33,29 +32,13 @@ namespace Mono.Debugger.MdbServer
 			DISASSEMBLE_INSN = 19,
 			STOP = 20,
 			CALL_METHOD = 21,
-			EXECUTE_INSTRUCTION = 22
-		}
-
-		public MdbExeReader InitializeProcess ()
-		{
-			int reader_iid = Connection.SendReceive (CommandSet.SERVER, (int)CmdInferior.INITIALIZE_PROCESS, null).ReadInt ();
-			return new MdbExeReader (Connection, reader_iid);
-		}
-
-		IExecutableReader IInferior.InitializeProcess ()
-		{
-			return InitializeProcess ();
-		}
-
-		public void InitializeThread (int child_pid, bool wait)
-		{
-			throw new NotImplementedException ();
+			GET_PID = 22
 		}
 
 		public bool Stop ()
 		{
 			try {
-				Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.STOP, new Connection.PacketWriter ().WriteInt (ID));
+				Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.STOP, new Connection.PacketWriter ().WriteId (ID));
 				return true;
 			} catch (TargetException ex) {
 				if (ex.Type == TargetError.AlreadyStopped)
@@ -66,7 +49,7 @@ namespace Mono.Debugger.MdbServer
 
 		public SignalInfo GetSignalInfo ()
 		{
-			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_SIGNAL_INFO, new Connection.PacketWriter ().WriteInt (ID));
+			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_SIGNAL_INFO, new Connection.PacketWriter ().WriteId (ID));
 
 			SignalInfo sinfo;
 
@@ -89,7 +72,7 @@ namespace Mono.Debugger.MdbServer
 
 		public string GetApplication (out string cwd, out string[] cmdline_args)
 		{
-			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_APPLICATION, new Connection.PacketWriter ().WriteInt (ID));
+			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_APPLICATION, new Connection.PacketWriter ().WriteId (ID));
 
 			string exe = reader.ReadString ();
 			cwd = reader.ReadString ();
@@ -104,7 +87,7 @@ namespace Mono.Debugger.MdbServer
 
 		public ServerStackFrame GetFrame ()
 		{
-			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_FRAME, new Connection.PacketWriter ().WriteInt (ID));
+			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_FRAME, new Connection.PacketWriter ().WriteId (ID));
 			ServerStackFrame frame;
 			frame.Address = reader.ReadLong ();
 			frame.StackPointer = reader.ReadLong ();
@@ -115,7 +98,7 @@ namespace Mono.Debugger.MdbServer
 		public int InsertBreakpoint (long address)
 		{
 			return Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.INSERT_BREAKPOINT,
-						       new Connection.PacketWriter ().WriteInt (ID).WriteLong (address)).ReadInt ();
+						       new Connection.PacketWriter ().WriteId (ID).WriteLong (address)).ReadInt ();
 		}
 
 		public int InsertHardwareBreakpoint (HardwareBreakpointType type, bool fallback,
@@ -132,19 +115,19 @@ namespace Mono.Debugger.MdbServer
 		public void EnableBreakpoint (int breakpoint)
 		{
 			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.ENABLE_BREAKPOINT,
-						new Connection.PacketWriter ().WriteInt (ID).WriteInt (breakpoint));
+						new Connection.PacketWriter ().WriteId (ID).WriteInt (breakpoint));
 		}
 
 		public void DisableBreakpoint (int breakpoint)
 		{
 			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.DISABLE_BREAKPOINT,
-						new Connection.PacketWriter ().WriteInt (ID).WriteInt (breakpoint));
+						new Connection.PacketWriter ().WriteId (ID).WriteInt (breakpoint));
 		}
 
 		public void RemoveBreakpoint (int breakpoint)
 		{
 			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.REMOVE_BREAKPOINT,
-						new Connection.PacketWriter ().WriteInt (ID).WriteInt (breakpoint));
+						new Connection.PacketWriter ().WriteId (ID).WriteInt (breakpoint));
 		}
 
 		public bool CurrentInsnIsBpt ()
@@ -154,22 +137,22 @@ namespace Mono.Debugger.MdbServer
 
 		public void Step ()
 		{
-			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.STEP, new Connection.PacketWriter ().WriteInt (ID));
+			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.STEP, new Connection.PacketWriter ().WriteId (ID));
 		}
 
 		public void Continue ()
 		{
-			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.CONTINUE, new Connection.PacketWriter ().WriteInt (ID));
+			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.CONTINUE, new Connection.PacketWriter ().WriteId (ID));
 		}
 
 		public void ResumeStepping ()
 		{
-			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.RESUME_STEPPING, new Connection.PacketWriter ().WriteInt (ID));
+			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.RESUME_STEPPING, new Connection.PacketWriter ().WriteId (ID));
 		}
 
 		public long[] GetRegisters ()
 		{
-			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_REGISTERS, new Connection.PacketWriter ().WriteInt (ID));
+			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_REGISTERS, new Connection.PacketWriter ().WriteId (ID));
 			int count = reader.ReadInt ();
 			long[] regs = new long [count];
 			for (int i = 0; i < count; i++)
@@ -189,28 +172,28 @@ namespace Mono.Debugger.MdbServer
 
 		public byte[] ReadMemory (long address, int size)
 		{
-			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.READ_MEMORY, new Connection.PacketWriter ().WriteInt (ID).WriteLong (address).WriteInt (size));
+			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.READ_MEMORY, new Connection.PacketWriter ().WriteId (ID).WriteLong (address).WriteInt (size));
 			return reader.ReadData (size);
 		}
 
 		public void WriteMemory (long address, byte[] data)
 		{
-			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.WRITE_MEMORY, new Connection.PacketWriter ().WriteInt (ID).WriteLong (address).WriteInt (data.Length).WriteData (data));
+			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.WRITE_MEMORY, new Connection.PacketWriter ().WriteId (ID).WriteLong (address).WriteInt (data.Length).WriteData (data));
 		}
 
 		public int GetPendingSignal ()
 		{
-			return Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_PENDING_SIGNAL, new Connection.PacketWriter ().WriteInt (ID)).ReadInt ();
+			return Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_PENDING_SIGNAL, new Connection.PacketWriter ().WriteId (ID)).ReadInt ();
 		}
 
 		public void SetSignal (int sig, bool send_it)
 		{
-			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.SET_SIGNAL, new Connection.PacketWriter ().WriteInt (ID).WriteInt (sig).WriteByte (send_it ? (byte)1 : (byte)0));
+			Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.SET_SIGNAL, new Connection.PacketWriter ().WriteId (ID).WriteInt (sig).WriteByte (send_it ? (byte)1 : (byte)0));
 		}
 
 		public string DisassembleInstruction (long address, out int insn_size)
 		{
-			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.DISASSEMBLE_INSN, new Connection.PacketWriter ().WriteInt (ID).WriteLong (address));
+			var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.DISASSEMBLE_INSN, new Connection.PacketWriter ().WriteId (ID).WriteLong (address));
 			insn_size = reader.ReadInt ();
 			return reader.ReadString ();
 		}
@@ -270,7 +253,7 @@ namespace Mono.Debugger.MdbServer
 		public void CallMethod (InvocationData data)
 		{
 			var writer = new Connection.PacketWriter ();
-			writer.WriteInt (ID);
+			writer.WriteId (ID);
 			writer.WriteByte ((byte) data.Type);
 			writer.WriteLong (data.MethodAddress);
 			writer.WriteLong (data.CallbackID);
@@ -280,6 +263,38 @@ namespace Mono.Debugger.MdbServer
 			writer.WriteString (data.StringArg);
 
 			Connection.SendReceive (CommandSet.INFERIOR, (int) CmdInferior.CALL_METHOD, writer);
+		}
+
+		bool initialized;
+		int pid;
+		long tid;
+
+		void initialize ()
+		{
+			lock (this) {
+				if (initialized)
+					return;
+
+				var reader = Connection.SendReceive (CommandSet.INFERIOR, (int)CmdInferior.GET_PID, new Connection.PacketWriter ().WriteId (ID));
+				pid = reader.ReadInt ();
+				tid = reader.ReadLong ();
+
+				initialized = true;
+			}
+		}
+
+		public int PID {
+			get {
+				initialize ();
+				return pid;
+			}
+		}
+
+		public long TID {
+			get {
+				initialize ();
+				return tid;
+			}
 		}
 	}
 }

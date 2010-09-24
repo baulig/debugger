@@ -150,9 +150,13 @@ namespace Mono.Debugger.Server
 
 	internal interface IInferior : IServerObject, IDisposable
 	{
-		IExecutableReader InitializeProcess ();
+		int PID {
+			get;
+		}
 
-		void InitializeThread (int child_pid, bool wait);
+		long TID {
+			get;
+		}
 
 		bool Stop ();
 

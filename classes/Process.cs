@@ -536,6 +536,11 @@ namespace Mono.Debugger
 			}
 		}
 
+		internal void InitializeProcess (Inferior inferior)
+		{
+			server_process.InitializeProcess (inferior.InferiorHandle);
+		}
+
 		internal void OnDllLoaded (ExecutableReader reader)
 		{
 			lock (this) {

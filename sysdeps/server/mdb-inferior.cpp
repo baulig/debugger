@@ -370,6 +370,13 @@ MdbInferior::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		break;
 	}
 
+	case CMD_INFERIOR_GET_PID: {
+		g_message (G_STRLOC ": GET_PID(): %d - %d - %Lx", GetID (), pid, tid);
+		out->AddInt (pid);
+		out->AddLong (tid);
+		break;
+	}
+
 	default:
 		return ERR_NOT_IMPLEMENTED;
 	}

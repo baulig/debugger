@@ -39,7 +39,10 @@ class PTraceProcess : public MdbProcess
 {
 public:
 	PTraceProcess (MdbServer *server) : MdbProcess (server)
-	{ }
+	{
+		this->thread_db = NULL;
+		this->attached = false;
+	}
 
 private:
 	bool SetupInferior (PTraceInferior *inferior, int pid);
@@ -51,26 +54,28 @@ private:
 
 	ErrorCode Attach (int pid, MdbInferior **out_inferior, guint32 *out_thread_id);
 
+	ErrorCode InitializeProcess (MdbInferior *inferior);
+
 	ErrorCode SuspendProcess (MdbInferior *caller);
 
 	ErrorCode ResumeProcess (MdbInferior *caller);
 
 	void IterateOverThreadsCallback (ThreadDB *thread_db, int lwd, gsize tid);
 
-	void InitializeProcess (PTraceInferior *inferior, bool attached);
-
 	friend void iterate_over_threads_cb (ThreadDB *thread_db, int lwp, gsize tid, gpointer user_data);
 	friend class PTraceInferior;
+
+	ThreadDB *thread_db;
+	bool attached;
 };
 
 class PTraceInferior : public MdbInferior
 {
 public:
 	PTraceInferior (PTraceProcess *process, int pid)
-		: MdbInferior (process->server)
+		: MdbInferior (process->server, pid, tid)
 	{
 		this->process = process;
-		this->pid = pid;
 
 		this->stopped = false;
 		this->stop_requested = false;
@@ -78,10 +83,9 @@ public:
 	}
 
 	PTraceInferior (PTraceProcess *process, int pid, bool stopped)
-		: MdbInferior (process->server)
+		: MdbInferior (process->server, pid, 0)
 	{
 		this->process = process;
-		this->pid = pid;
 
 		this->stopped = false;
 		this->stop_requested = false;
@@ -94,11 +98,9 @@ public:
 	}
 
 	PTraceInferior (PTraceProcess *process, int pid, gsize tid)
-		: MdbInferior (process->server)
+		: MdbInferior (process->server, pid, tid)
 	{
 		this->process = process;
-		this->pid = pid;
-		this->tid = tid;
 
 		this->stopped = false;
 		this->stop_requested = false;
@@ -160,11 +162,6 @@ public:
 
 	ServerEvent *HandleLinuxWaitEvent (int status, bool *out_remain_stopped);
 
-	int GetPid (void)
-	{
-		return pid;
-	}
-
 protected:
 	ErrorCode SetupInferior (void);
 
@@ -184,8 +181,6 @@ private:
 
 	PTraceProcess *process;
 
-	int pid;
-	gsize tid;
 	bool stepping;
 
 	bool stopped;
@@ -330,8 +325,6 @@ PTraceProcess::Spawn (const gchar *working_directory, const gchar **argv, const 
 	AddInferior (pid, inferior);
 	main_process = this;
 
-	InitializeProcess (inferior, false);
-
 	*out_inferior = inferior;
 	*out_thread_id = pid;
 
@@ -346,6 +339,8 @@ PTraceProcess::Attach (int pid, MdbInferior **out_inferior, guint32 *out_thread_
 
 	if (ptrace (PT_ATTACH, pid, NULL, 0) != 0)
 		return ERR_CANNOT_START_TARGET;
+
+	attached = true;
 
 	inferior = new PTraceInferior (this, pid);
 
@@ -368,7 +363,7 @@ PTraceProcess::Attach (int pid, MdbInferior **out_inferior, guint32 *out_thread_
 	AddInferior (pid, inferior);
 	main_process = this;
 
-	InitializeProcess (inferior, true);
+	InitializeProcess (inferior);
 
 	*out_inferior = inferior;
 	*out_thread_id = pid;
@@ -916,6 +911,8 @@ PTraceProcess::IterateOverThreadsCallback (ThreadDB *thread_db, int lwp, gsize t
 
 	inferior = (PTraceInferior *) GetInferiorByPID (lwp);
 	if (inferior) {
+		g_message (G_STRLOC ": IterateOverThreadsCallback(): %d - %d - %Lx",
+			   inferior->GetID (), lwp, tid);
 		inferior->tid = tid;
 		AddInferiorByTID (tid, inferior);
 		return;
@@ -927,6 +924,8 @@ PTraceProcess::IterateOverThreadsCallback (ThreadDB *thread_db, int lwp, gsize t
 	}
 
 	inferior = new PTraceInferior (this, lwp, tid);
+	g_message (G_STRLOC ": IterateOverThreadsCallback(): %d - %d - %Lx",
+		   inferior->GetID (), lwp, tid);
 	AddInferior (lwp, inferior);
 	AddInferiorByTID (tid, inferior);
 }
@@ -939,11 +938,11 @@ iterate_over_threads_cb (ThreadDB *thread_db, int lwp, gsize tid, gpointer user_
 	process->IterateOverThreadsCallback (thread_db, lwp, tid);
 }
 
-void
-PTraceProcess::InitializeProcess (PTraceInferior *inferior, bool attached)
+ErrorCode
+PTraceProcess::InitializeProcess (MdbInferior *inferior)
 {
+	PTraceInferior *ptrace_inferior = (PTraceInferior *) inferior;
 	MdbExeReader *reader;
-	ThreadDB *thread_db;
 
 	reader = GetMainReader ();
 
@@ -952,11 +951,11 @@ PTraceProcess::InitializeProcess (PTraceInferior *inferior, bool attached)
 	if (reader)
 		reader->ReadDynamicInfo (inferior);
 
-	thread_db = ThreadDB::Initialize (inferior, inferior->pid);
+	thread_db = ThreadDB::Initialize (inferior, ptrace_inferior->pid);
 
 	if (!attached) {
 		initialized = true;
-		return;
+		return ERR_NONE;
 	}
 
 	if (thread_db) {
@@ -972,6 +971,8 @@ PTraceProcess::InitializeProcess (PTraceInferior *inferior, bool attached)
 	}
 
 	initialized = true;
+
+	return ERR_NONE;
 }
 
 MdbInferior *
