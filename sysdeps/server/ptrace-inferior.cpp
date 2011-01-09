@@ -23,6 +23,10 @@
 #include <fcntl.h>
 #include <errno.h>
 
+#if defined(__arm__) || HAVE_OPEN64
+#define USE_PROC_MEM
+#endif
+
 #if defined(__i386__) || defined(__x86_64__)
 #include <x86-arch.h>
 
@@ -185,8 +189,10 @@ protected:
 #endif
 
 private:
-#if HAVE_OPEN64
+#if defined(USE_PROC_MEM)
 	int mem_fd;
+
+	ErrorCode ReadProcMem (guint64 start, guint32 size, gpointer buffer);
 #endif
 
 	PTraceProcess *process;
@@ -388,8 +394,12 @@ PTraceInferior::SetupInferior (void)
 
 	// mdb_server_remove_hardware_breakpoints (handle);
 
+#ifdef USE_PROC_MEM
 #if HAVE_OPEN64
 	mem_fd = open64 (filename, O_RDONLY);
+#else
+	mem_fd = open (filename, O_RDONLY);
+#endif
 
 	if (mem_fd < 0) {
 		if (errno == EACCES)
@@ -599,15 +609,20 @@ PTraceInferior::ResumeStepping (void)
 		return Continue ();
 }
 
-#if HAVE_OPEN64
+#ifdef USE_PROC_MEM
 
 ErrorCode
-PTraceInferior::ReadMemory (guint64 start, guint32 size, gpointer buffer)
+PTraceInferior::ReadProcMem (guint64 start, guint32 size, gpointer buffer)
 {
 	guint8 *ptr = (guint8 *) buffer;
 
 	while (size) {
+#if HAVE_OPEN64
 		int ret = pread64 (mem_fd, ptr, size, start);
+#else
+		int ret = pread (mem_fd, ptr, size, start);
+#endif
+
 		if (ret < 0) {
 			if (errno == EINTR)
 				continue;
@@ -620,12 +635,13 @@ PTraceInferior::ReadMemory (guint64 start, guint32 size, gpointer buffer)
 
 		size -= ret;
 		ptr += ret;
+		start += ret;
 	}
 
 	return ERR_NONE;
 }
 
-#else
+#endif
 
 ErrorCode
 PTraceInferior::ReadMemory (guint64 start, guint32 size, gpointer buffer)
@@ -634,6 +650,12 @@ PTraceInferior::ReadMemory (guint64 start, guint32 size, gpointer buffer)
 	gsize *ptr = (gsize *) buffer;
 	gsize addr = start;
 	gsize temp;
+
+#ifdef USE_PROC_MEM
+	result = ReadProcMem (start, size, buffer);
+	if (!result)
+		return result;
+#endif
 
 	while (size >= sizeof (gsize)) {
 		errno = 0;
@@ -658,8 +680,6 @@ PTraceInferior::ReadMemory (guint64 start, guint32 size, gpointer buffer)
 
 	return ERR_NONE;
 }
-
-#endif
 
 ErrorCode
 PTraceInferior::WriteMemory (guint64 start, guint32 size, gconstpointer buffer)
