@@ -35,11 +35,15 @@ struct _InferiorRegs {
 	struct pt_regs regs;
 };
 
+typedef struct _CallbackData CallbackData;
+
 class ArmArch : public MdbArch
 {
 public:
 	ArmArch (MdbInferior *inferior) : MdbArch (inferior)
-	{ }
+	{
+		callback_stack = g_ptr_array_new ();
+	}
 
 	ErrorCode EnableBreakpoint (BreakpointInfo *breakpoint);
 	ErrorCode DisableBreakpoint (BreakpointInfo *breakpoint);
@@ -74,6 +78,19 @@ protected:
 	{
 		return current_regs.regs.ARM_cpsr & 0x20;
 	}
+
+	CallbackData *
+	GetCallbackData (void)
+	{
+		if (!callback_stack || !callback_stack->len)
+			return NULL;
+
+		return (CallbackData *) g_ptr_array_index (callback_stack, callback_stack->len - 1);
+	}
+
+	bool Marshal_Generic (InvocationData *data, CallbackData *cdata);
+
+	GPtrArray *callback_stack;
 
 	InferiorRegs current_regs;
 };

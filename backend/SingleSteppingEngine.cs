@@ -1800,6 +1800,9 @@ namespace Mono.Debugger.Backend
 
 		internal bool ActivatePendingBreakpoints (Module module)
 		{
+			if (!process.IsManagedApplication)
+				return false;
+
 			var pending = process.Session.GetPendingBreakpoints (this, module);
 			if ((pending == null) || (pending.Count == 0))
 				return false;

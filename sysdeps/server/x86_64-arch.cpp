@@ -133,7 +133,7 @@ X86Arch::Marshal_Generic (InvocationData *invocation, CallbackData *cdata)
 	data.arg2 = invocation->arg2;
 	data.arg3 = invocation->arg3;
 
-	if (invocation->type == 	INVOCATION_TYPE_LONG_LONG_LONG_STRING) {
+	if (invocation->type == INVOCATION_TYPE_LONG_LONG_LONG_STRING) {
 		data_ptr = invocation->string_arg;
 		data_size = strlen (invocation->string_arg) + 1;
 	}

@@ -20,6 +20,24 @@
 #define INFERIOR_REG_CPSR(r)		r.regs.ARM_cpsr
 #define INFERIOR_REG_ORIG_R0(r)		r.regs.ARM_ORIG_r0
 
+struct _CallbackData
+{
+	InferiorRegs saved_regs;
+	guint64 callback_argument;
+	gsize call_address;
+	gsize stack_pointer;
+	gsize rti_frame;
+	gsize exc_address;
+	gsize pushed_registers;
+	gsize data_pointer;
+	guint32 data_size;
+	int saved_signal;
+	gboolean debug;
+	gboolean is_rti;
+
+	InferiorCallback *callback;
+};
+
 MdbArch *
 mdb_arch_new (MdbInferior *inferior)
 {
@@ -82,21 +100,19 @@ ArmArch::ChildStopped (int stopsig, bool *out_remain_stopped)
 
 	if (stopsig == SIGILL) {
 		BreakpointInfo *breakpoint;
+		CallbackData *cdata;
+		gsize exc_object = 0;
 
 		if (mono_runtime &&
 		    (INFERIOR_REG_PC (current_regs) == mono_runtime->GetNotificationAddress ())) {
 			NotificationType type;
 			gsize arg1, arg2, lr;
 
-			g_message (G_STRLOC);
-
 			type = (NotificationType) INFERIOR_REG_R0 (current_regs);
 			arg1 = INFERIOR_REG_R1 (current_regs);
 			arg2 = INFERIOR_REG_R2 (current_regs);
 
 			lr = INFERIOR_REG_LR (current_regs);
-
-			g_message (G_STRLOC ": %p - %p - %p - %p", lr, type, arg1, arg2);
 
 			INFERIOR_REG_PC (current_regs) = INFERIOR_REG_PC (current_regs) + 4;
 			SetRegisters ();
@@ -108,6 +124,69 @@ ArmArch::ChildStopped (int stopsig, bool *out_remain_stopped)
 			e->arg = type;
 			e->data1 = arg1;
 			e->data2 = arg2;
+			return e;
+		}
+
+		cdata = GetCallbackData ();
+		if (cdata && (cdata->call_address == INFERIOR_REG_PC (current_regs))) {
+			g_message (G_STRLOC);
+
+			if (inferior->SetRegisters (&cdata->saved_regs)) {
+				g_warning (G_STRLOC ": Can't restore registers after returning from a call");
+				e->type = SERVER_EVENT_INTERNAL_ERROR;
+				return e;
+			}
+
+			e->arg = cdata->callback_argument;
+			e->data1 = INFERIOR_REG_R0 (current_regs);
+
+			if (cdata->data_pointer) {
+				e->opt_data_size = cdata->data_size;
+				e->opt_data = g_malloc0 (cdata->data_size);
+
+				if (inferior->ReadMemory (cdata->data_pointer, cdata->data_size, e->opt_data)) {
+					e->type = SERVER_EVENT_INTERNAL_ERROR;
+					return e;
+				}
+			}
+
+			if (cdata->exc_address && inferior->PeekWord (cdata->exc_address, &exc_object)) {
+				g_warning (G_STRLOC ": Can't get exc object");
+				e->type = SERVER_EVENT_INTERNAL_ERROR;
+				return e;
+			}
+
+			e->data2 = (guint64) exc_object;
+
+			inferior->SetLastSignal (cdata->saved_signal);
+
+			g_ptr_array_remove (callback_stack, cdata);
+
+			GetRegisters ();
+
+			g_message (G_STRLOC);
+
+			if (cdata->callback) {
+				cdata->callback->Invoke (inferior, INFERIOR_REG_R0 (current_regs), exc_object);
+				delete cdata->callback;
+				g_free (e);
+				return NULL;
+			}
+
+			if (cdata->is_rti) {
+				g_free (cdata);
+				e->type = SERVER_EVENT_RUNTIME_INVOKE_DONE;
+			}
+
+			if (cdata->debug) {
+				e->data1 = 0;
+				g_free (cdata);
+				e->type = SERVER_EVENT_CALLBACK_COMPLETED;
+				return e;
+			}
+
+			g_free (cdata);
+			e->type = SERVER_EVENT_CALLBACK;
 			return e;
 		}
 
@@ -249,7 +328,32 @@ ArmArch::SetRegisterValues (const guint64 *values)
 ErrorCode
 ArmArch::CallMethod (InvocationData *invocation)
 {
-	return ERR_NOT_IMPLEMENTED;
+	CallbackData *cdata;
+	ErrorCode result;
+
+	g_message (G_STRLOC ": CallMethod(): %d", invocation->type);
+
+	cdata = g_new0 (CallbackData, 1);
+	memcpy (&cdata->saved_regs, &current_regs, sizeof (InferiorRegs));
+	cdata->callback_argument = invocation->callback_id;
+
+	cdata->saved_signal = inferior->GetLastSignal ();
+	inferior->SetLastSignal (0);
+
+	if (!Marshal_Generic (invocation, cdata)) {
+		g_free (cdata);
+		return ERR_UNKNOWN_ERROR;
+	}
+
+	result = SetRegisters ();
+	if (result) {
+		g_free (cdata);
+		return result;
+	}
+
+	g_ptr_array_add (callback_stack, cdata);
+
+	return inferior->Continue ();
 }
 
 ErrorCode
@@ -260,3 +364,56 @@ ArmArch::ExecuteInstruction (MdbInferior *inferior, gsize code_address, int insn
 }
 
 
+bool
+ArmArch::Marshal_Generic (InvocationData *invocation, CallbackData *cdata)
+{
+	MonoRuntime *runtime = inferior->GetProcess ()->GetMonoRuntime ();
+	GenericInvocationData data;
+	gsize invocation_func, new_sp;
+	gconstpointer data_ptr = NULL;
+	int data_size = 0;
+
+	memset (&data, 0, sizeof (data));
+	data.invocation_type = invocation->type;
+	data.callback_id = (guint32) invocation->callback_id;
+	data.method_address = invocation->method_address;
+	data.arg1 = invocation->arg1;
+	data.arg2 = invocation->arg2;
+	data.arg3 = invocation->arg3;
+
+	if (invocation->type == INVOCATION_TYPE_LONG_LONG_LONG_STRING) {
+		data_ptr = invocation->string_arg;
+		data_size = strlen (invocation->string_arg) + 1;
+	}
+
+	invocation_func = runtime->GetGenericInvocationFunc ();
+
+	new_sp = INFERIOR_REG_SP (current_regs) - sizeof (data) - data_size - 4;
+
+	g_message (G_STRLOC ": %p - %p - %p", invocation_func, (gsize) invocation->method_address, new_sp);
+
+	if (data_ptr) {
+		data.data_size = data_size;
+		data.data_arg_ptr = new_sp + sizeof (data) + 4;
+
+		if (inferior->WriteMemory (data.data_arg_ptr, data_size, data_ptr))
+			return false;
+	}
+
+	cdata->call_address = new_sp;
+	cdata->stack_pointer = new_sp;
+
+	cdata->callback = invocation->callback;
+
+	if (inferior->PokeWord (new_sp, 0xE7FFDEFE))
+		return false;
+	if (inferior->WriteMemory (new_sp + 4, sizeof (data), &data))
+		return false;
+
+	INFERIOR_REG_R0 (current_regs) = new_sp + 4;
+	INFERIOR_REG_PC (current_regs) = runtime->GetGenericInvocationFunc ();
+	INFERIOR_REG_LR (current_regs) = new_sp;
+	INFERIOR_REG_SP (current_regs) = new_sp;
+
+	return true;
+}
