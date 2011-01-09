@@ -9,10 +9,10 @@ struct GenericInvocationData
 	guint32 invocation_type;
 	guint32 callback_id;
 
-	guint64 method_address;
-	guint64 arg1;
-	guint64 arg2;
-	guint64 arg3;
+	gsize method_address;
+	gsize arg1;
+	gsize arg2;
+	gsize arg3;
 
 	guint32 data_size;
 	guint32 dummy;
