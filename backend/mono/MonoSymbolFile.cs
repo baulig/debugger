@@ -228,6 +228,14 @@ namespace Mono.Debugger.Backend.Mono
 
 			ImageFile = memory.ReadString (image_file_addr);
 
+			Console.WriteLine ("MONO SYMBOL FILE #1: {0} {1} {2} {3} - {4}", Index, image_file_addr,
+					   MonoImage, type_table_ptr, ImageFile);
+
+			ImageFile = Path.Combine ("/home/martin/work/martin", Path.GetFileName (ImageFile));
+
+			Console.WriteLine ("MONO SYMBOL FILE #2: {0} {1} {2} {3} - {4}", Index, image_file_addr,
+					   MonoImage, type_table_ptr, ImageFile);
+
 			TypeTable = MonoTypeTable.CreateTypeTable (this, memory, type_table_ptr);
 
 			string shadow_location = language.GetShadowCopyLocation (ImageFile);
