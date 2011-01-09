@@ -421,11 +421,13 @@ BfdDisassembler::DisassembleInstruction (guint64 address, guint32 *out_insn_size
 
 #if defined(__x86_64__) || defined(__i386__)
 	ret = print_insn_i386 ((gsize) address, &this->info);
-#elif defined(__ARM__)
-	if (bfd_little_endian (this->main_bfd))
-		ret = print_insn_littlearm ((gsize) address, &this->info);
+#elif defined(__arm__)
+	if (this->info.display_endian == BFD_ENDIAN_LITTLE)
+		ret = print_insn_little_arm ((gsize) address, &this->info);
 	else
-		ret = print_insn_bigarm ((gsize) address, &this->info);
+		ret = print_insn_big_arm ((gsize) address, &this->info);
+#else
+#error "Unknown architecture"
 #endif
 
 	if (out_insn_size)
