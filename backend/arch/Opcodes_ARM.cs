@@ -29,9 +29,8 @@ namespace Mono.Debugger.Architectures
 
 			Report.Debug (DebugFlags.StackUnwind, "Scanning prologue: {0}", reader.HexDump ());
 
-			context.Registers [(int) ARM_Register.SP].State = UnwindContext.RegisterState.Preserved;
-			context.Registers [(int) ARM_Register.FP].State = UnwindContext.RegisterState.Preserved;
-			context.Registers [(int) ARM_Register.IP].State = UnwindContext.RegisterState.Preserved;
+			for (int i = 0; i <= 15; i++)
+				context.Registers [i].State = UnwindContext.RegisterState.Preserved;
 
 			context.Dump ();
 
@@ -39,12 +38,13 @@ namespace Mono.Debugger.Architectures
 				var opcode = reader.ReadUInt32 ();
 				Report.Debug (DebugFlags.StackUnwind, "  scanning: {0} {1:x}", address, opcode);
 				var insn = new Instruction_ARM (this, memory, address, context.Frame.Registers, opcode);
-				address += 4;
 
 				bool ok = insn.ScanPrologue (context);
 
 				Report.Debug (DebugFlags.StackUnwind, "  scanning: {0} {1:x} -> {2}", address, opcode,
 					      ok ? "OK" : "ERROR");
+
+				address += 4;
 
 				context.Dump ();
 

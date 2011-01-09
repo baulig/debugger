@@ -31,6 +31,7 @@ namespace Mono.Debugger.Architectures
 			var original_values = frame.Registers.Values;
 			original_registers = new TargetAddress [original_values.Length];
 			registers = new RegisterValue [original_registers.Length];
+			preserved_registers = new RegisterValue [original_registers.Length];
 
 			for (int i = 0; i < original_registers.Length; i++) {
 				original_registers [i] = make_address (original_values [i]);
@@ -50,6 +51,7 @@ namespace Mono.Debugger.Architectures
 			Unknown = 0,
 			Preserved,
 			Register,
+			Value,
 			Memory
 		}
 
@@ -64,7 +66,12 @@ namespace Mono.Debugger.Architectures
 			get { return registers; }
 		}
 
+		public RegisterValue[] PreservedRegisters {
+			get { return preserved_registers; }
+		}
+
 		TargetAddress[] original_registers;
+		RegisterValue[] preserved_registers;
 		RegisterValue[] registers;
 
 		public void Dump ()
@@ -90,12 +97,24 @@ namespace Mono.Debugger.Architectures
 
 		public string PrintRegisterValue (int i)
 		{
-			if ((registers [i].State == RegisterState.Register) || (registers [i].State == RegisterState.Memory))
-				return String.Format ("{0} : {1} + {2:x}", registers [i].State,
+			string preserved = "";
+			if (preserved_registers [i].State == RegisterState.Register)
+				preserved = String.Format (", preserved at {0} + {1:x}",
+							   Architecture.RegisterNames [preserved_registers [i].BaseRegister],
+							   make_address (preserved_registers [i].Offset));
+			else if (preserved_registers [i].State == RegisterState.Memory)
+				preserved = String.Format (", preserved at [{0} + {1:x}]",
+							   Architecture.RegisterNames [preserved_registers [i].BaseRegister],
+							   make_address (preserved_registers [i].Offset));
+
+			if (registers [i].State == RegisterState.Register)
+				return String.Format ("{0} + {1:x}{2}",
 						      Architecture.RegisterNames [registers [i].BaseRegister],
-						      make_address (registers [i].Offset));
+						      make_address (registers [i].Offset), preserved);
+			else if (registers [i].State == RegisterState.Value)
+				return String.Format ("{0:x}{1}", make_address (registers [i].Offset), preserved);
 			else
-				return String.Format ("{0}", registers [i].State);
+				return String.Format ("{0}{1}", registers [i].State, preserved);
 		}
 	}
 }

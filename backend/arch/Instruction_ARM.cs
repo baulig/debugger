@@ -368,9 +368,9 @@ namespace Mono.Debugger.Architectures
 					if (!Bit (i))
 						continue;
 
-					context.Registers [i].State = UnwindContext.RegisterState.Memory;
-					context.Registers [i].BaseRegister = Rn;
-					context.Registers [i].Offset = offset;
+					context.PreservedRegisters [i].State = UnwindContext.RegisterState.Memory;
+					context.PreservedRegisters [i].BaseRegister = Rn;
+					context.PreservedRegisters [i].Offset = offset;
 
 					offset += 4;
 				}
@@ -407,6 +407,13 @@ namespace Mono.Debugger.Architectures
 						      opcodes.Architecture.RegisterNames [Rn], context.PrintRegisterValue (Rn),
 						      Imm, Rotate, value);
 
+					if (opcode == 13) { // MOV
+						context.Registers [Rd].State = UnwindContext.RegisterState.Value;
+						context.Registers [Rd].BaseRegister = -1;
+						context.Registers [Rd].Offset = 0;
+						return true;
+					}
+
 					if (context.Registers [Rn].State == UnwindContext.RegisterState.Preserved) {
 						context.Registers [Rd].State = UnwindContext.RegisterState.Register;
 						context.Registers [Rd].BaseRegister = Rn;
@@ -423,8 +430,6 @@ namespace Mono.Debugger.Architectures
 						context.Registers [Rd].Offset -= value;
 					else if (opcode == 4) // ADD
 						context.Registers [Rd].Offset += value;
-					else if (opcode == 13) // MOV
-						context.Registers [Rd].Offset = value;
 					else
 						return false;
 
@@ -456,6 +461,32 @@ namespace Mono.Debugger.Architectures
 
 					return true;
 				}
+			}
+
+			if (Bits (26, 27) == 1) { // Single data transfer
+				if (Bit (20)) // load
+					return false;
+
+				var Rd = (int) Bits (12, 15);
+				var Rn = (int) Bits (16, 19);
+
+				Report.Debug (DebugFlags.StackUnwind,
+					      "  found data transfer: Rd = {0} ({1}), Rn = {2} ({3}) - {4} {5} {6} {7} - {8:x}",
+					      opcodes.Architecture.RegisterNames [Rd], context.PrintRegisterValue (Rd),
+					      opcodes.Architecture.RegisterNames [Rn], context.PrintRegisterValue (Rn),
+					      Bit (24) ? "pre" : "post", Bit (23) ? "up" : "down", Bit (22) ? "byte" : "word",
+					      Bit (21) ? "writeback" : "no-writeback", Bits (0, 15));
+
+				// Ignore for the moment
+				return true;
+			}
+
+			if (Bits (25, 27) == 5) { // Branch
+				Report.Debug (DebugFlags.StackUnwind, "  found branch: {0} - {1:x}", Bit (24), SBits (0, 23));
+				if (!Bit (24))
+					return false;
+
+				return true;
 			}
 
 			return false;
