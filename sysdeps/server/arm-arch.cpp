@@ -28,13 +28,34 @@ mdb_arch_new (MdbInferior *inferior)
 ErrorCode
 ArmArch::EnableBreakpoint (BreakpointInfo *breakpoint)
 {
-	return ERR_NOT_IMPLEMENTED;
+	static const char arm_le_breakpoint[] = { 0xFE, 0xDE, 0xFF, 0xE7 };
+	ErrorCode result;
+
+	if (IsThumbMode ())
+		return ERR_NOT_IMPLEMENTED;
+
+	g_message (G_STRLOC ": %p - %d", breakpoint->address, IsThumbMode ());
+
+	result = inferior->ReadMemory (breakpoint->address, 4, &breakpoint->saved_insn);
+	if (result)
+		return result;
+
+	return inferior->WriteMemory (breakpoint->address, 4, &arm_le_breakpoint);
 }
 
 ErrorCode
 ArmArch::DisableBreakpoint (BreakpointInfo *breakpoint)
 {
-	return ERR_NOT_IMPLEMENTED;
+	ErrorCode result;
+
+	if (IsThumbMode ())
+		return ERR_NOT_IMPLEMENTED;
+
+	result = inferior->WriteMemory (breakpoint->address, 4, &breakpoint->saved_insn);
+	if (result)
+		return result;
+
+	return ERR_NONE;
 }
 
 ServerEvent *
@@ -42,18 +63,40 @@ ArmArch::ChildStopped (int stopsig, bool *out_remain_stopped)
 {
 	ServerEvent *e;
 
-	g_message (G_STRLOC);
-
 	*out_remain_stopped = true;
 
 	if (GetRegisters ())
 		return NULL;
 
+	g_message (G_STRLOC ": %p - %d", INFERIOR_REG_PC (current_regs), stopsig);
+
 	e = g_new0 (ServerEvent, 1);
 	e->sender = inferior;
 	e->type = SERVER_EVENT_STOPPED;
 
-#if defined(__linux__) || defined(__FreeBSD__)
+	if (stopsig == SIGILL) {
+		BreakpointManager *bpm;
+		BreakpointInfo *breakpoint;
+
+		bpm = inferior->GetServer ()->GetBreakpointManager();
+		breakpoint = bpm->Lookup (INFERIOR_REG_PC (current_regs));
+
+		g_message (G_STRLOC ": %p - %p", INFERIOR_REG_PC (current_regs), breakpoint);
+
+		if (breakpoint && breakpoint->enabled) {
+			if (breakpoint->handler && breakpoint->handler (inferior, breakpoint)) {
+				inferior->DisableBreakpoint (breakpoint);
+				*out_remain_stopped = false;
+				g_free (e);
+				return NULL;
+			}
+
+			e->type = SERVER_EVENT_BREAKPOINT;
+			e->arg = breakpoint->id;
+			return e;
+		}
+	}
+
 	if (stopsig == SIGSTOP) {
 		e->type = SERVER_EVENT_INTERRUPTED;
 		return e;
@@ -63,7 +106,6 @@ ArmArch::ChildStopped (int stopsig, bool *out_remain_stopped)
 		e->arg = stopsig;
 		return e;
 	}
-#endif
 
 	return e;
 }
@@ -86,7 +128,29 @@ ArmArch::GetFrame (StackFrame *out_frame)
 
 void
 ArmArch::RemoveBreakpointsFromTargetMemory (guint64 start, guint32 size, gpointer buffer)
-{ }
+{
+	GPtrArray *breakpoints;
+	guint8 *ptr = (guint8 *) buffer;
+	guint32 i;
+
+	breakpoints = inferior->GetServer ()->GetBreakpointManager ()->GetBreakpoints ();
+
+	for (i = 0; i < breakpoints->len; i++) {
+		BreakpointInfo *info = (BreakpointInfo *) g_ptr_array_index (breakpoints, i);
+		guint32 offset;
+
+		if (info->is_hardware_bpt || !info->enabled)
+			continue;
+		if ((info->address < start) || (info->address >= start+size+4))
+			continue;
+
+		offset = (gsize) (info->address - start);
+		ptr [offset] = info->saved_insn[0];
+		ptr [offset+1] = info->saved_insn[1];
+		ptr [offset+2] = info->saved_insn[2];
+		ptr [offset+3] = info->saved_insn[3];
+	}
+}
 
 int
 ArmArch::GetRegisterCount (void)

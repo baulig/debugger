@@ -67,7 +67,7 @@ public:
 	bool enabled;
 	bool is_hardware_bpt;
 	int dr_index;
-	char saved_insn;
+	char saved_insn[4];
 	int runtime_table_slot;
 	gsize address;
 

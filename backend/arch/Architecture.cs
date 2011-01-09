@@ -117,7 +117,10 @@ namespace Mono.Debugger.Backend
 
 		internal Instruction ReadInstruction (TargetMemoryAccess memory, TargetAddress address)
 		{
-			return opcodes.ReadInstruction (memory, address);
+			if (opcodes != null)
+				return opcodes.ReadInstruction (memory, address);
+
+			return null;
 		}
 
 		internal abstract int MaxPrologueSize {

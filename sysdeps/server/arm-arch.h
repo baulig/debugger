@@ -70,6 +70,11 @@ protected:
 		return inferior->SetRegisters (&current_regs);
 	}
 
+	bool IsThumbMode (void)
+	{
+		return current_regs.regs.ARM_cpsr & 0x20;
+	}
+
 	InferiorRegs current_regs;
 };
 

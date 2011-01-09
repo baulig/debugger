@@ -115,6 +115,8 @@ BfdReader::BfdReader (const char *filename)
 	has_dynlink_info = false;
 	dynlink_bpt = NULL;
 
+	base_address = 0;
+
 	bfd_handle = bfd_openr (filename, NULL);
 	if (!bfd_handle)
 		return;
