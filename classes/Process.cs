@@ -206,7 +206,7 @@ namespace Mono.Debugger
 				architecture = new Architecture_X86_64 (this, target_info);
 				break;
 			case ArchType.ARM:
-				architecture = new Architecture_Arm (this, target_info);
+				architecture = new Architecture_ARM (this, target_info);
 				break;
 			default:
 				throw new InternalError ();

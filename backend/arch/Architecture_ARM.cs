@@ -7,9 +7,9 @@ namespace Mono.Debugger.Architectures
 	// <summary>
 	//   Architecture-dependent stuff for the x86_64.
 	// </summary>
-	internal class Architecture_Arm : Architecture
+	internal class Architecture_ARM : Architecture
 	{
-		internal Architecture_Arm (Process process, TargetInfo info)
+		internal Architecture_ARM (Process process, TargetInfo info)
 			: base (process, info)
 		{ }
 

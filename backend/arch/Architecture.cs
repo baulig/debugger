@@ -15,7 +15,7 @@ namespace Mono.Debugger.Backend
 		protected readonly TargetInfo TargetInfo;
 
 		Disassembler disassembler;
-		X86_Opcodes opcodes;
+		Opcodes opcodes;
 
 		protected Architecture (Process process, TargetInfo info)
 		{
@@ -32,7 +32,7 @@ namespace Mono.Debugger.Backend
 				opcodes = new Opcodes_I386 (process);
 				break;
 			case ArchType.ARM:
-				// opcodes = new Opcodes_ARM (process);
+				opcodes = new Opcodes_ARM (process);
 				break;
 			default:
 				throw new InternalError ();
