@@ -28,7 +28,7 @@ popd
 
 NDK=$ANDROID_NDK_PATH
 TOOLCHAIN=$NDK/build/prebuilt/$ANDROID_HOST_PLATFORM/arm-eabi-4.2.1
-NDK_PLATFORM_ARCH=$NDK/build/platforms/android-4/arch-arm
+NDK_PLATFORM_ARCH=$NDK/build/platforms/android-8/arch-arm
 
 HACK_INC=`pwd`/hack-inc
 mkdir -p "$HACK_INC/arch"

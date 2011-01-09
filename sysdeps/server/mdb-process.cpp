@@ -106,6 +106,7 @@ MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		guint32 thread_id;
 		ErrorCode result;
 		int argc, i;
+		const char *envp[] = { "MONO_ENV_OPTIONS=TestManagedTypes.exe", "MONO_PATH=/data/data/martin", NULL };
 
 		cwd = in->DecodeString ();
 		argc = in->DecodeInt ();
@@ -120,7 +121,7 @@ MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 			cwd = g_get_current_dir ();
 		}
 
-		result = Spawn (cwd, (const gchar **) argv, NULL, &inferior, &thread_id, &error);
+		result = Spawn (cwd, (const gchar **) argv, envp, &inferior, &thread_id, &error);
 		if (result)
 			return result;
 

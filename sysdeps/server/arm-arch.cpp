@@ -1,4 +1,5 @@
 #include <arm-arch.h>
+#include <mono-runtime.h>
 
 #define INFERIOR_REG_R0(r)		r.regs.ARM_r0
 #define INFERIOR_REG_R1(r)		r.regs.ARM_r1
@@ -61,6 +62,8 @@ ArmArch::DisableBreakpoint (BreakpointInfo *breakpoint)
 ServerEvent *
 ArmArch::ChildStopped (int stopsig, bool *out_remain_stopped)
 {
+	MonoRuntime *mono_runtime;
+	BreakpointManager *bpm;
 	ServerEvent *e;
 
 	*out_remain_stopped = true;
@@ -74,11 +77,40 @@ ArmArch::ChildStopped (int stopsig, bool *out_remain_stopped)
 	e->sender = inferior;
 	e->type = SERVER_EVENT_STOPPED;
 
+	mono_runtime = inferior->GetProcess ()->GetMonoRuntime ();
+	bpm = inferior->GetServer ()->GetBreakpointManager();
+
 	if (stopsig == SIGILL) {
-		BreakpointManager *bpm;
 		BreakpointInfo *breakpoint;
 
-		bpm = inferior->GetServer ()->GetBreakpointManager();
+		if (mono_runtime &&
+		    (INFERIOR_REG_PC (current_regs) == mono_runtime->GetNotificationAddress ())) {
+			NotificationType type;
+			gsize arg1, arg2, lr;
+
+			g_message (G_STRLOC);
+
+			type = (NotificationType) INFERIOR_REG_R0 (current_regs);
+			arg1 = INFERIOR_REG_R1 (current_regs);
+			arg2 = INFERIOR_REG_R2 (current_regs);
+
+			lr = INFERIOR_REG_LR (current_regs);
+
+			g_message (G_STRLOC ": %p - %p - %p - %p", lr, type, arg1, arg2);
+
+			INFERIOR_REG_PC (current_regs) = INFERIOR_REG_PC (current_regs) + 4;
+			SetRegisters ();
+
+			mono_runtime->HandleNotification (inferior, type, arg1, arg2);
+
+			e->type = SERVER_EVENT_NOTIFICATION;
+
+			e->arg = type;
+			e->data1 = arg1;
+			e->data2 = arg2;
+			return e;
+		}
+
 		breakpoint = bpm->Lookup (INFERIOR_REG_PC (current_regs));
 
 		g_message (G_STRLOC ": %p - %p", INFERIOR_REG_PC (current_regs), breakpoint);

@@ -73,8 +73,8 @@ platform_server = \
 	bfd-reader.cpp \
 	mdb-server-linux.cpp
 platform_libs = \
-	-lthread_db
-mdb_server_ldflags = -entry=main
+	/work/catron/ndk/build/platforms/android-8/arch-arm/usr/lib/libthread_db.a
+mdb_server_ldflags = -entry=main -all-static
 else
 mdb_server_ldflags =
 endif
@@ -115,7 +115,7 @@ libmonodebuggerserver_la_LIBADD = \
 	@SERVER_DEPENDENCIES_LIBS@ $(eglib_libs) $(platform_libs) \
 	../../sysdeps/bfd/libbfd.la
 
-mdb_server_CPPFLAGS = $(server_cppflags) -DMDB_SERVER -fno-rtti -fno-exceptions
+mdb_server_CPPFLAGS = $(server_cppflags) -DMDB_SERVER -fno-rtti -fno-exceptions -DDEBUG_WAIT
 EXTRA_mdb_server_SOURCES = $(extra_sources)
 
 mdb_server_SOURCES = \

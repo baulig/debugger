@@ -654,7 +654,7 @@ PTraceInferior::ReadMemory (guint64 start, guint32 size, gpointer buffer)
 	if (result)
 		return result;
 
-	memcpy (&temp, ptr, size);
+	memcpy (ptr, &temp, size);
 
 	return ERR_NONE;
 }
