@@ -106,7 +106,7 @@ MdbProcess::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		guint32 thread_id;
 		ErrorCode result;
 		int argc, i;
-		const char *envp[] = { "MONO_ENV_OPTIONS=TestManagedTypes.exe", "MONO_PATH=/data/data/martin", NULL };
+		const char *envp[] = { "MONO_ENV_OPTIONS=TestManagedTypes.exe", "MONO_PATH=/data/data/martin", "MONO_XDEBUG=mdb", NULL };
 
 		cwd = in->DecodeString ();
 		argc = in->DecodeInt ();

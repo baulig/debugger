@@ -8,6 +8,7 @@ class MdbDisassembler;
 class MdbExeReader : public ServerObject {
 protected:
 	const char *filename;
+
 	MdbExeReader (const char *filename) : ServerObject (SERVER_OBJECT_KIND_EXE_READER)
 	{
 		this->filename = g_strdup (filename);
@@ -46,5 +47,7 @@ protected:
 };
 
 extern MdbExeReader *mdb_server_create_exe_reader (const char *filename);
+
+extern MdbExeReader *mdb_server_create_exe_reader (const guint8 *contents, gsize target_address, int size);
 
 #endif

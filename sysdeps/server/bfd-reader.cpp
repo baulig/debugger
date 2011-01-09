@@ -17,6 +17,11 @@
 static bool dynlink_breakpoint_handler (MdbInferior *inferior, BreakpointInfo *breakpoint);
 #endif
 
+static void *memory_iovec_open (struct bfd *nbfd, void *open_closure);
+static file_ptr memory_iovec_pread (struct bfd *abfd, void *stream, void *buf, file_ptr nbytes, file_ptr offset);
+static int memory_iovec_close (struct bfd *nbfd, void *stream);
+static int memory_iovec_stat (struct bfd *abfd, void *stream, struct stat *sb);
+
 class BfdReader : public MdbExeReader {
 public:
 	guint64 GetStartAddress (void);
@@ -65,7 +70,12 @@ private:
 	long num_symbols;
 	asymbol **symtab;
 
+	const guint8 *memory_ptr;
+	gsize memory_address;
+	int memory_size;
+
 	BfdReader (const char *filename);
+	BfdReader (const guint8 *contents, gsize target_address, int size);
 	asection *FindSection (const char *name);
 	~BfdReader (void);
 
@@ -74,7 +84,13 @@ private:
 	friend bool dynlink_breakpoint_handler (MdbInferior *inferior, BreakpointInfo *breakpoint);
 #endif
 
+	friend void *memory_iovec_open (struct bfd *nbfd, void *open_closure);
+	friend file_ptr memory_iovec_pread (struct bfd *abfd, void *stream, void *buf, file_ptr nbytes, file_ptr offset);
+	friend int memory_iovec_close (struct bfd *nbfd, void *stream);
+	friend int memory_iovec_stat (struct bfd *abfd, void *stream, struct stat *sb);
+
 	friend MdbExeReader *mdb_server_create_exe_reader (const char *filename);
+	friend MdbExeReader *mdb_server_create_exe_reader (const guint8 *contents, gsize target_address, int size);
 
 	gsize base_address;
 
@@ -118,6 +134,10 @@ BfdReader::BfdReader (const char *filename)
 
 	base_address = 0;
 
+	memory_ptr = NULL;
+	memory_size = 0;
+	memory_address = 0;
+
 	bfd_handle = bfd_openr (filename, NULL);
 	if (!bfd_handle)
 		return;
@@ -136,6 +156,47 @@ BfdReader::BfdReader (const char *filename)
 		num_symbols = bfd_canonicalize_symtab (bfd_handle, symtab);
 	}
 }
+
+BfdReader::BfdReader (const guint8 *contents, gsize target_address, int size)
+	: MdbExeReader (NULL)
+{
+	symtab_size = 0;
+	num_symbols = 0;
+	symtab = NULL;
+
+	dynamic_info = 0;
+	has_dynlink_info = false;
+	dynlink_bpt = NULL;
+
+	base_address = 0;
+
+	memory_ptr = contents;
+	memory_size = target_address;
+	memory_address = size;
+
+	filename = g_strdup_printf ("<inline:%p:%p:%x>", contents, target_address, size);
+
+	bfd_handle = bfd_openr_iovec (filename, NULL, memory_iovec_open, this, memory_iovec_pread,
+				      memory_iovec_close, memory_iovec_stat);
+
+	if (!bfd_handle)
+		return;
+
+	if (!bfd_check_format (bfd_handle, bfd_object) && !bfd_check_format (bfd_handle, bfd_archive)) {
+		g_warning (G_STRLOC ": Invalid bfd format: %s", filename);
+		bfd_close (bfd_handle);
+		bfd_handle = NULL;
+		return;
+	}
+
+	symtab_size = bfd_get_symtab_upper_bound (bfd_handle);
+
+	if (symtab_size) {
+		symtab = (asymbol **) g_malloc0 (symtab_size);
+		num_symbols = bfd_canonicalize_symtab (bfd_handle, symtab);
+	}
+}
+
 
 BfdReader::~BfdReader (void)
 {
@@ -335,6 +396,17 @@ MdbExeReader *
 mdb_server_create_exe_reader (const char *filename)
 {
 	BfdReader *reader = new BfdReader (filename);
+	if (!reader->bfd_handle) {
+		delete reader;
+		return NULL;
+	}
+	return reader;
+}
+
+MdbExeReader *
+mdb_server_create_exe_reader (const guint8 *contents, gsize target_address, int size)
+{
+	BfdReader *reader = new BfdReader (contents, target_address, size);
 	if (!reader->bfd_handle) {
 		delete reader;
 		return NULL;
@@ -557,4 +629,32 @@ BfdReader::ReadDynamicInfo (MdbInferior *inferior)
 
 	DynlinkHandler (inferior);
 #endif
+}
+
+static void *
+memory_iovec_open (struct bfd *nbfd, void *open_closure)
+{
+	return open_closure;
+}
+
+static file_ptr
+memory_iovec_pread (struct bfd *abfd, void *stream, void *buf, file_ptr nbytes, file_ptr offset)
+{
+	BfdReader *reader = (BfdReader *) stream;
+	memcpy (buf, reader->memory_ptr + offset, nbytes);
+	return nbytes;
+}
+
+static int
+memory_iovec_close (struct bfd *nbfd, void *stream)
+{
+	g_message (G_STRLOC ": %p", stream);
+	return 0;
+}
+
+static int
+memory_iovec_stat (struct bfd *abfd, void *stream, struct stat *sb)
+{
+	g_message (G_STRLOC ": %p - %p", stream, sb);
+	return -1;
 }

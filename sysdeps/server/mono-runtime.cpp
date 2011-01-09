@@ -175,7 +175,7 @@ static void execute_insn_done (MdbInferior *inferior, gsize rip, G_GNUC_UNUSED g
 class MonoRuntimeImpl : public MonoRuntime
 {
 public:
-	void HandleNotification (MdbInferior *inferior, NotificationType type, gsize arg1, gsize arg2);
+	bool HandleNotification (MdbInferior *inferior, NotificationType type, gsize arg1, gsize arg2);
 
 	ErrorCode SetExtendedNotifications (MdbInferior *inferior, NotificationType type, bool enable);
 
@@ -648,11 +648,9 @@ MonoRuntimeImpl::SetExtendedNotifications (MdbInferior *inferior, NotificationTy
 	return inferior->PokeWord (data->thread_info_ptr + 24, notifications);
 }
 
-void
+bool
 MonoRuntimeImpl::HandleNotification (MdbInferior *inferior, NotificationType type, gsize arg1, gsize arg2)
 {
-	g_message (G_STRLOC ": HandleNotification(): %d - %Lx - %Lx", type, arg1, arg2);
-
 	switch (type) {
 	case NOTIFICATION_THREAD_CREATED: {
 		RuntimeInferiorData *data = g_new0 (RuntimeInferiorData, 1);
@@ -667,11 +665,40 @@ MonoRuntimeImpl::HandleNotification (MdbInferior *inferior, NotificationType typ
 
 		g_message (G_STRLOC ": %p - %Lx - %Lx - %Lx", data, data->thread_info_ptr, data->tid, data->lmf_addr);
 		g_hash_table_insert (inferior_data_hash, inferior, data);
-		break;
+		return false;
+	}
+
+	case NOTIFICATION_XDEBUG_REGISTER_CODE: {
+		gsize next_entry, prev_entry, symfile_addr;
+		guint32 symfile_size;
+		guint8 *contents;
+		MdbExeReader *reader;
+
+		// g_message (G_STRLOC ": %p - %p", arg1, arg2);
+
+		if (inferior->PeekWord (arg1, &next_entry) || inferior->PeekWord (arg1 + sizeof (gsize), &prev_entry) ||
+		    inferior->PeekWord (arg1 + 2 * sizeof (gsize), &symfile_addr) ||
+		    inferior->PeekWord (arg1 + 3 * sizeof (gsize), &symfile_size)) {
+			g_warning (G_STRLOC ": Cannot read xdebug jit entry at address %p", arg1);
+			return true;
+		}
+
+		contents = (guint8 *) g_malloc (symfile_size);
+		if (inferior->ReadMemory (symfile_addr, symfile_size, contents)) {
+			g_warning (G_STRLOC ": Cannot read xdebug symbol file %p:%x", symfile_addr, symfile_size);
+			g_free (contents);
+			return true;
+		}
+
+		reader = mdb_server_create_exe_reader (contents, symfile_addr, symfile_size);
+
+		// g_message (G_STRLOC ": %p", reader);
+
+		return true;
 	}
 
 	default:
-		break;
+		return false;
 	}
 }
 

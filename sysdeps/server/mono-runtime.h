@@ -47,6 +47,9 @@ typedef enum {
 	NOTIFICATION_CREATE_APPDOMAIN,
 	NOTIFICATION_UNLOAD_APPDOMAIN,
 
+	NOTIFICATION_XDEBUG_REGISTER_CODE = 64,
+	NOTIFICATION_XDEBUG_UNREGISTER_CODE,
+
 	/* Obsolete, only for backwards compatibility with older debugger versions */
 	NOTIFICATION_OLD_TRAMPOLINE    	= 256,
 
@@ -74,7 +77,7 @@ public:
 
 	virtual ErrorCode InitializeThreads (MdbInferior *inferior) = 0;
 
-	virtual void HandleNotification (MdbInferior *inferior, NotificationType type, gsize arg1, gsize arg2) = 0;
+	virtual bool HandleNotification (MdbInferior *inferior, NotificationType type, gsize arg1, gsize arg2) = 0;
 
 protected:
 	MonoRuntime (MdbProcess *process, MdbExeReader *exe)

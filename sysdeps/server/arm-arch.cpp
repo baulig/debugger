@@ -108,8 +108,6 @@ ArmArch::ChildStopped (int stopsig, bool *out_remain_stopped)
 	if (GetRegisters ())
 		return NULL;
 
-	g_message (G_STRLOC ": %p - %d", INFERIOR_REG_PC (current_regs), stopsig);
-
 	e = g_new0 (ServerEvent, 1);
 	e->sender = inferior;
 	e->type = SERVER_EVENT_STOPPED;
@@ -153,7 +151,11 @@ ArmArch::ChildStopped (int stopsig, bool *out_remain_stopped)
 		INFERIOR_REG_PC (current_regs) = INFERIOR_REG_PC (current_regs) + 4;
 		SetRegisters ();
 
-		mono_runtime->HandleNotification (inferior, type, arg1, arg2);
+		if (mono_runtime->HandleNotification (inferior, type, arg1, arg2)) {
+			*out_remain_stopped = false;
+			g_free (e);
+			return NULL;
+		}
 
 		e->type = SERVER_EVENT_NOTIFICATION;
 

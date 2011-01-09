@@ -185,7 +185,7 @@ X86Arch::GetFrame (StackFrame *out_frame)
 }
 
 ServerEvent *
-X86Arch::ChildStopped (int stopsig, bool *remain_stopped)
+X86Arch::ChildStopped (int stopsig, bool *out_remain_stopped)
 {
 	CodeBufferData *cbuffer = NULL;
 	CallbackData *cdata;
@@ -197,7 +197,7 @@ X86Arch::ChildStopped (int stopsig, bool *remain_stopped)
 	gsize code;
 	int i;
 
-	*remain_stopped = true;
+	*out_remain_stopped = true;
 
 	if (GetRegisters ())
 		return NULL;
@@ -363,7 +363,11 @@ X86Arch::ChildStopped (int stopsig, bool *remain_stopped)
 		arg2 = INFERIOR_REG_RDX (current_regs);
 #endif
 
-		mono_runtime->HandleNotification (inferior, type, arg1, arg2);
+		if (mono_runtime->HandleNotification (inferior, type, arg1, arg2)) {
+			*out_remain_stopped = false;
+			g_free (e);
+			return NULL;
+		}
 
 		e->type = SERVER_EVENT_NOTIFICATION;
 
@@ -392,7 +396,7 @@ X86Arch::ChildStopped (int stopsig, bool *remain_stopped)
 
 		if (breakpoint->handler && breakpoint->handler (inferior, breakpoint)) {
 			inferior->DisableBreakpoint (breakpoint);
-			*remain_stopped = false;
+			*out_remain_stopped = false;
 			g_free (e);
 			return NULL;
 		}
