@@ -5,6 +5,24 @@ namespace Mono.Debugger.Architectures
 {
 	internal abstract class Opcodes : DebuggerMarshalByRefObject, IDisposable
 	{
+		protected Opcodes (Architecture arch, TargetMemoryInfo target_info)
+		{
+			this.Architecture = arch;
+			this.TargetMemoryInfo = target_info;
+		}
+
+		internal Architecture Architecture {
+			get; private set;
+		}
+
+		internal TargetMemoryInfo TargetMemoryInfo {
+			get; private set;
+		}
+
+		internal Disassembler Disassembler {
+			get { return Architecture.Disassembler; }
+		}
+
 		internal abstract Instruction ReadInstruction (TargetMemoryAccess memory,
 							       TargetAddress address);
 

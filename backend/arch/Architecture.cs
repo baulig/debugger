@@ -13,6 +13,7 @@ namespace Mono.Debugger.Backend
 	{
 		protected readonly Process process;
 		protected readonly TargetInfo TargetInfo;
+		protected readonly TargetMemoryInfo TargetMemoryInfo;
 
 		Disassembler disassembler;
 		Opcodes opcodes;
@@ -21,18 +22,19 @@ namespace Mono.Debugger.Backend
 		{
 			this.process = process;
 			this.TargetInfo = info;
+			this.TargetMemoryInfo = process.ThreadManager.GetTargetMemoryInfo (AddressDomain.Global);
 
 			disassembler = process.ThreadManager.DebuggerServer.GetDisassembler ();
 
 			switch (process.ThreadManager.DebuggerServer.ArchType) {
 			case ArchType.I386:
-				opcodes = new Opcodes_X86_64 (process);
+				opcodes = new Opcodes_X86_64 (this, TargetMemoryInfo);
 				break;
 			case ArchType.X86_64:
-				opcodes = new Opcodes_I386 (process);
+				opcodes = new Opcodes_I386 (this, TargetMemoryInfo);
 				break;
 			case ArchType.ARM:
-				opcodes = new Opcodes_ARM (process);
+				opcodes = new Opcodes_ARM (this, TargetMemoryInfo);
 				break;
 			default:
 				throw new InternalError ();
@@ -41,6 +43,10 @@ namespace Mono.Debugger.Backend
 
 		internal Disassembler Disassembler {
 			get { return disassembler; }
+		}
+
+		public Process Process {
+			get { return process; }
 		}
 
 		public Opcodes Opcodes {
@@ -159,6 +165,8 @@ namespace Mono.Debugger.Backend
 				thread, type, address, stack, frame_pointer, regs,
 				process.NativeLanguage, name);
 		}
+
+		internal abstract TargetAddress GetMonoTrampoline (TargetMemoryAccess memory, TargetAddress address);
 
 		//
 		// This is a horrible hack - don't use !

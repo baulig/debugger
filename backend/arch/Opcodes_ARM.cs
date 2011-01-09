@@ -7,27 +7,9 @@ namespace Mono.Debugger.Architectures
 {
 	internal class Opcodes_ARM : Opcodes
 	{
-		Process process;
-		TargetMemoryInfo target_info;
-
-		internal Opcodes_ARM (Process process)
-		{
-			this.process = process;
-
-			target_info = process.ThreadManager.GetTargetMemoryInfo (AddressDomain.Global);
-		}
-
-		internal TargetMemoryInfo TargetMemoryInfo {
-			get { return target_info; }
-		}
-
-		internal Disassembler Disassembler {
-			get { return process.Architecture.Disassembler; }
-		}
-
-		internal Process Process {
-			get { return process; }
-		}
+		internal Opcodes_ARM (Architecture arch, TargetMemoryInfo target_info)
+			: base (arch, target_info)
+		{ }
 
 		internal override Instruction ReadInstruction (TargetMemoryAccess memory,
 							       TargetAddress address)

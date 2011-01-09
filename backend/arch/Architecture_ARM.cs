@@ -181,5 +181,46 @@ namespace Mono.Debugger.Architectures
 		{
 			return null;
 		}
+
+		static int submask (ushort x)
+		{
+			return (int) ((1L << (x + 1)) - 1);
+		}
+
+		internal override TargetAddress GetMonoTrampoline (TargetMemoryAccess memory, TargetAddress address)
+		{
+			if ((uint) memory.ReadInteger (address) != 0xe92d5fffu)
+				return TargetAddress.Null;
+
+			TargetAddress target = TargetAddress.Null;
+
+			var code = (uint) memory.ReadInteger (address + 4);
+			if ((code >> 24) == 0xeb) {
+				var offset = code & 0x00ffffff;
+				if ((code & 0x00800000) != 0)
+					offset |= 0xff000000;
+				target = address + 12 + ((int) offset << 2);
+			} else if (code == 0xe59f1008u) {
+				// Long trampoline:
+				// ldr r1, [pc, #8]
+				// mov lr, pc
+				// bx r1
+
+				var insn2 = (uint) memory.ReadInteger (address + 8);
+				var insn3 = (uint) memory.ReadInteger (address + 12);
+
+				if ((insn2 == 0xe1a0e00fu) && (insn3 == 0xe12fff11u))
+					target = memory.ReadAddress (address + 20);
+			}
+
+			if (target.IsNull)
+				return target;
+
+			if (!process.MonoLanguage.IsTrampolineAddress (target))
+				return TargetAddress.Null;
+
+			return target;
+		}
+
 	}
 }

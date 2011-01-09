@@ -42,7 +42,7 @@ namespace Mono.Debugger.Architectures
 
 		TargetAddress make_address (ulong value)
 		{
-			return new TargetAddress (Opcodes.TargetMemoryInfo.AddressDomain, (long) (value & 0x03fffffc));
+			return new TargetAddress (opcodes.TargetMemoryInfo.AddressDomain, (long) (value & 0x03fffffc));
 		}
 
 		uint get_reg (int rn)
@@ -99,7 +99,7 @@ namespace Mono.Debugger.Architectures
 
 		internal Instruction_ARM (Opcodes_ARM opcodes, TargetMemoryAccess memory, TargetAddress address)
 		{
-			this.Opcodes = opcodes;
+			this.opcodes = opcodes;
 			this.address = address;
 			this.code = memory.ReadBuffer (address, 4);
 			this.registers = memory.GetRegisters ();
@@ -108,7 +108,7 @@ namespace Mono.Debugger.Architectures
 					   address, code [0], code [1], code [2], code [3],
 					   (code [3] & 0xf0) >> 4, (code [3] & 0x0f));
 
-			is_conditional = (bits (28, 31) == 0x0e) || (bits (28, 31) == 0x0f);
+			is_conditional = (bits (28, 31) != 0x0e) && (bits (28, 31) != 0x0f);
 
 			//
 			// code[0] is bits 0..7
@@ -237,7 +237,7 @@ namespace Mono.Debugger.Architectures
 			}
 		}
 
-		protected readonly Opcodes_ARM Opcodes;
+		protected readonly Opcodes_ARM opcodes;
 		readonly TargetAddress address;
 		readonly Type type = Type.Unknown;
 		TargetAddress effective_address = TargetAddress.Null;
@@ -245,6 +245,10 @@ namespace Mono.Debugger.Architectures
 		bool is_conditional;
 		bool is_ip_relative;
 		byte[] code;
+
+		public override Opcodes Opcodes {
+			get { return opcodes; }
+		}
 
 		public override TargetAddress Address {
 			get { return address; }
@@ -287,13 +291,6 @@ namespace Mono.Debugger.Architectures
 			Console.WriteLine ("GET EFFECTIVE ADDRESS: {0} {1} {2}", address, type, effective_address);
 
 			return effective_address;
-		}
-
-		public override TrampolineType CheckTrampoline (TargetMemoryAccess memory,
-								out TargetAddress trampoline)
-		{
-			trampoline = TargetAddress.Null;
-			return TrampolineType.None;
 		}
 
 		public override bool CanInterpretInstruction {

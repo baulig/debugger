@@ -141,26 +141,5 @@ namespace Mono.Debugger.Architectures
 				return false;
 			}
 		}
-
-		protected override bool GetMonoTrampoline (TargetMemoryAccess memory,
-							   TargetAddress call_target,
-							   out TargetAddress trampoline)
-		{
-			TargetBinaryReader reader = memory.ReadMemory (call_target, 14).GetReader ();
-			byte opcode = reader.ReadByte ();
-			if (opcode != 0xe8) {
-				trampoline = TargetAddress.Null;
-				return false;
-			}
-
-			TargetAddress call = call_target + reader.ReadInt32 () + 5;
-			if (!Opcodes.Process.MonoLanguage.IsTrampolineAddress (call)) {
-				trampoline = TargetAddress.Null;
-				return false;
-			}
-
-			trampoline = call_target;
-			return true;
-		}
 	}
 }

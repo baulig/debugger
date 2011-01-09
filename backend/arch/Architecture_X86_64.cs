@@ -600,5 +600,19 @@ namespace Mono.Debugger.Architectures
 
 			return CreateFrame (thread.Client, FrameType.LMF, memory, rip, rsp, rbp, regs);
 		}
+
+		internal override TargetAddress GetMonoTrampoline (TargetMemoryAccess memory, TargetAddress address)
+		{
+			TargetBinaryReader reader = memory.ReadMemory (address, 14).GetReader ();
+			byte opcode = reader.ReadByte ();
+			if (opcode != 0xe8)
+				return TargetAddress.Null;
+
+			TargetAddress call = address + reader.ReadInt32 () + 5;
+			if (!process.MonoLanguage.IsTrampolineAddress (call))
+				return TargetAddress.Null;
+
+			return address;
+		}
 	}
 }
