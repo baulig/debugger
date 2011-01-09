@@ -115,7 +115,7 @@ libmonodebuggerserver_la_LIBADD = \
 	@SERVER_DEPENDENCIES_LIBS@ $(eglib_libs) $(platform_libs) \
 	../../sysdeps/bfd/libbfd.la
 
-mdb_server_CPPFLAGS = $(server_cppflags) -DMDB_SERVER -fno-rtti -fno-exceptions -DDEBUG_WAIT
+mdb_server_CPPFLAGS = $(server_cppflags) -DMDB_SERVER -fno-rtti -fno-exceptions
 EXTRA_mdb_server_SOURCES = $(extra_sources)
 
 mdb_server_SOURCES = \
