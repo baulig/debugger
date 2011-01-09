@@ -186,7 +186,7 @@ namespace Mono.Debugger.Backend
 		{
 			this.cwd = cwd;
 
-			cmdline_args [0] = exe_file;
+			// cmdline_args [0] = exe_file;
 			this.argv = cmdline_args;
 
 			options = options.Clone ();

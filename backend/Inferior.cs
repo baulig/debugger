@@ -1052,19 +1052,10 @@ namespace Mono.Debugger.Backend
 		 */
 		public int Kernel_SIGRTMIN {
 			get {
-				if (!has_signals || (signal_info.Kernel_SIGRTMIN < 0))
+				if (!has_signals)
 					throw new InvalidOperationException ();
 
 				return signal_info.Kernel_SIGRTMIN;
-			}
-		}
-
-		public int MonoThreadAbortSignal {
-			get {
-				if (!has_signals || (signal_info.MonoThreadAbortSignal < 0))
-					throw new InvalidOperationException ();
-
-				return signal_info.MonoThreadAbortSignal;
 			}
 		}
 
