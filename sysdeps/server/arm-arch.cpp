@@ -38,6 +38,8 @@ struct _CallbackData
 	InferiorCallback *callback;
 };
 
+static const char arm_le_breakpoint[] = { 0xFE, 0xDE, 0xFF, 0xE7 };
+
 MdbArch *
 mdb_arch_new (MdbInferior *inferior)
 {
@@ -47,7 +49,6 @@ mdb_arch_new (MdbInferior *inferior)
 ErrorCode
 ArmArch::EnableBreakpoint (BreakpointInfo *breakpoint)
 {
-	static const char arm_le_breakpoint[] = { 0xFE, 0xDE, 0xFF, 0xE7 };
 	MonoRuntime *runtime;
 	ErrorCode result;
 
@@ -96,7 +97,11 @@ ArmArch::ChildStopped (int stopsig, bool *out_remain_stopped)
 {
 	MonoRuntime *mono_runtime;
 	BreakpointManager *bpm;
+	BreakpointInfo *breakpoint;
+	gsize exc_object = 0;
+	CallbackData *cdata;
 	ServerEvent *e;
+	guint32 insn;
 
 	*out_remain_stopped = true;
 
@@ -109,129 +114,130 @@ ArmArch::ChildStopped (int stopsig, bool *out_remain_stopped)
 	e->sender = inferior;
 	e->type = SERVER_EVENT_STOPPED;
 
-	mono_runtime = inferior->GetProcess ()->GetMonoRuntime ();
-	bpm = inferior->GetServer ()->GetBreakpointManager();
-
-	if (stopsig == SIGILL) {
-		BreakpointInfo *breakpoint;
-		CallbackData *cdata;
-		gsize exc_object = 0;
-
-		if (mono_runtime &&
-		    (INFERIOR_REG_PC (current_regs) == mono_runtime->GetNotificationAddress ())) {
-			NotificationType type;
-			gsize arg1, arg2, lr;
-
-			type = (NotificationType) INFERIOR_REG_R0 (current_regs);
-			arg1 = INFERIOR_REG_R1 (current_regs);
-			arg2 = INFERIOR_REG_R2 (current_regs);
-
-			lr = INFERIOR_REG_LR (current_regs);
-
-			INFERIOR_REG_PC (current_regs) = INFERIOR_REG_PC (current_regs) + 4;
-			SetRegisters ();
-
-			mono_runtime->HandleNotification (inferior, type, arg1, arg2);
-
-			e->type = SERVER_EVENT_NOTIFICATION;
-
-			e->arg = type;
-			e->data1 = arg1;
-			e->data2 = arg2;
-			return e;
-		}
-
-		cdata = GetCallbackData ();
-		if (cdata && (cdata->call_address == INFERIOR_REG_PC (current_regs))) {
-			g_message (G_STRLOC);
-
-			if (inferior->SetRegisters (&cdata->saved_regs)) {
-				g_warning (G_STRLOC ": Can't restore registers after returning from a call");
-				e->type = SERVER_EVENT_INTERNAL_ERROR;
-				return e;
-			}
-
-			e->arg = cdata->callback_argument;
-			e->data1 = INFERIOR_REG_R0 (current_regs);
-
-			if (cdata->data_pointer) {
-				e->opt_data_size = cdata->data_size;
-				e->opt_data = g_malloc0 (cdata->data_size);
-
-				if (inferior->ReadMemory (cdata->data_pointer, cdata->data_size, e->opt_data)) {
-					e->type = SERVER_EVENT_INTERNAL_ERROR;
-					return e;
-				}
-			}
-
-			if (cdata->exc_address && inferior->PeekWord (cdata->exc_address, &exc_object)) {
-				g_warning (G_STRLOC ": Can't get exc object");
-				e->type = SERVER_EVENT_INTERNAL_ERROR;
-				return e;
-			}
-
-			e->data2 = (guint64) exc_object;
-
-			inferior->SetLastSignal (cdata->saved_signal);
-
-			g_ptr_array_remove (callback_stack, cdata);
-
-			GetRegisters ();
-
-			g_message (G_STRLOC);
-
-			if (cdata->callback) {
-				cdata->callback->Invoke (inferior, INFERIOR_REG_R0 (current_regs), exc_object);
-				delete cdata->callback;
-				g_free (e);
-				return NULL;
-			}
-
-			if (cdata->is_rti) {
-				g_free (cdata);
-				e->type = SERVER_EVENT_RUNTIME_INVOKE_DONE;
-			}
-
-			if (cdata->debug) {
-				e->data1 = 0;
-				g_free (cdata);
-				e->type = SERVER_EVENT_CALLBACK_COMPLETED;
-				return e;
-			}
-
-			g_free (cdata);
-			e->type = SERVER_EVENT_CALLBACK;
-			return e;
-		}
-
-		breakpoint = bpm->Lookup (INFERIOR_REG_PC (current_regs));
-
-		g_message (G_STRLOC ": %p - %p", INFERIOR_REG_PC (current_regs), breakpoint);
-
-		if (breakpoint && breakpoint->enabled) {
-			if (breakpoint->handler && breakpoint->handler (inferior, breakpoint)) {
-				inferior->DisableBreakpoint (breakpoint);
-				*out_remain_stopped = false;
-				g_free (e);
-				return NULL;
-			}
-
-			e->type = SERVER_EVENT_BREAKPOINT;
-			e->arg = breakpoint->id;
-			return e;
-		}
-	}
-
 	if (stopsig == SIGSTOP) {
 		e->type = SERVER_EVENT_INTERRUPTED;
 		return e;
 	}
 
-	if (stopsig != SIGTRAP) {
+	if (stopsig == SIGTRAP)
+		return e;
+
+	if (stopsig != SIGILL) {
 		e->arg = stopsig;
 		return e;
 	}
 
+	mono_runtime = inferior->GetProcess ()->GetMonoRuntime ();
+	bpm = inferior->GetServer ()->GetBreakpointManager();
+
+	if (inferior->PeekWord (INFERIOR_REG_PC (current_regs), &insn)) {
+		g_warning (G_STRLOC ": Can't read instruction at %p", INFERIOR_REG_PC (current_regs));
+		e->type = SERVER_EVENT_INTERNAL_ERROR;
+		return e;
+	}
+
+	if (memcmp (&arm_le_breakpoint, &insn, 4))
+		return e;
+
+	if (mono_runtime &&
+	    (INFERIOR_REG_PC (current_regs) == mono_runtime->GetNotificationAddress ())) {
+		NotificationType type;
+		gsize arg1, arg2, lr;
+
+		type = (NotificationType) INFERIOR_REG_R0 (current_regs);
+		arg1 = INFERIOR_REG_R1 (current_regs);
+		arg2 = INFERIOR_REG_R2 (current_regs);
+
+		lr = INFERIOR_REG_LR (current_regs);
+
+		INFERIOR_REG_PC (current_regs) = INFERIOR_REG_PC (current_regs) + 4;
+		SetRegisters ();
+
+		mono_runtime->HandleNotification (inferior, type, arg1, arg2);
+
+		e->type = SERVER_EVENT_NOTIFICATION;
+
+		e->arg = type;
+		e->data1 = arg1;
+		e->data2 = arg2;
+		return e;
+	}
+
+	cdata = GetCallbackData ();
+	if (cdata && (cdata->call_address == INFERIOR_REG_PC (current_regs))) {
+		if (inferior->SetRegisters (&cdata->saved_regs)) {
+			g_warning (G_STRLOC ": Can't restore registers after returning from a call");
+			e->type = SERVER_EVENT_INTERNAL_ERROR;
+			return e;
+		}
+
+		e->arg = cdata->callback_argument;
+		e->data1 = INFERIOR_REG_R0 (current_regs);
+
+		if (cdata->data_pointer) {
+			e->opt_data_size = cdata->data_size;
+			e->opt_data = g_malloc0 (cdata->data_size);
+
+			if (inferior->ReadMemory (cdata->data_pointer, cdata->data_size, e->opt_data)) {
+				e->type = SERVER_EVENT_INTERNAL_ERROR;
+				return e;
+			}
+		}
+
+		if (cdata->exc_address && inferior->PeekWord (cdata->exc_address, &exc_object)) {
+			g_warning (G_STRLOC ": Can't get exc object");
+			e->type = SERVER_EVENT_INTERNAL_ERROR;
+			return e;
+		}
+
+		e->data2 = (guint64) exc_object;
+
+		inferior->SetLastSignal (cdata->saved_signal);
+
+		g_ptr_array_remove (callback_stack, cdata);
+
+		GetRegisters ();
+
+		if (cdata->callback) {
+			cdata->callback->Invoke (inferior, INFERIOR_REG_R0 (current_regs), exc_object);
+			delete cdata->callback;
+			g_free (e);
+			return NULL;
+		}
+
+		if (cdata->is_rti) {
+			g_free (cdata);
+			e->type = SERVER_EVENT_RUNTIME_INVOKE_DONE;
+		}
+
+		if (cdata->debug) {
+			e->data1 = 0;
+			g_free (cdata);
+			e->type = SERVER_EVENT_CALLBACK_COMPLETED;
+			return e;
+		}
+
+		g_free (cdata);
+		e->type = SERVER_EVENT_CALLBACK;
+		return e;
+	}
+
+	breakpoint = bpm->Lookup (INFERIOR_REG_PC (current_regs));
+
+	if (breakpoint && breakpoint->enabled) {
+		if (breakpoint->handler && breakpoint->handler (inferior, breakpoint)) {
+			inferior->DisableBreakpoint (breakpoint);
+			*out_remain_stopped = false;
+			g_free (e);
+			return NULL;
+		}
+
+		e->type = SERVER_EVENT_BREAKPOINT;
+		e->arg = breakpoint->id;
+		return e;
+	}
+
+	e->arg = stopsig;
 	return e;
 }
 
