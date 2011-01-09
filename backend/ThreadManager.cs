@@ -288,9 +288,10 @@ namespace Mono.Debugger.Backend
 		internal bool HandleChildEvent (SingleSteppingEngine engine, Inferior inferior,
 						ref ServerEvent cevent, out bool resume_target)
 		{
-			if (cevent.Type == ServerEventType.Notification) {
+			Console.WriteLine ("HANDLE CHILD EVENT: {0}", cevent);
+
+			if (cevent.Type == ServerEventType.Notification)
 				return engine.Process.MonoManager.HandleEvent (engine, inferior, ref cevent, out resume_target);
-			}
 
 			//
 			// FIXME: This should be done in the server.
@@ -305,7 +306,7 @@ namespace Mono.Debugger.Backend
 					} else if (inferior.Has_SIGWINCH && (cevent.Argument == inferior.SIGWINCH)) {
 						resume_target = true;
 						return true;
-					} else if (cevent.Argument == inferior.Kernel_SIGRTMIN+1) {
+					} else if (inferior.Has_Kernel_SIGRTMIN && (cevent.Argument == inferior.Kernel_SIGRTMIN+1)) {
 						// __SIGRTMIN and __SIGRTMIN+1 are used internally by the threading library
 						resume_target = true;
 						return true;

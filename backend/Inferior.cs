@@ -1050,9 +1050,13 @@ namespace Mono.Debugger.Backend
 		 * CAUTION: This is the hard limit of the Linux kernel, not the first
 		 *          user-visible real-time signal !
 		 */
-		public int Kernel_SIGRTMIN {
+		internal bool Has_Kernel_SIGRTMIN {
+			get { return has_signals && (signal_info.Kernel_SIGRTMIN > 0); }
+		}
+
+		internal int Kernel_SIGRTMIN {
 			get {
-				if (!has_signals)
+				if (!has_signals || (signal_info.Kernel_SIGRTMIN < 0))
 					throw new InvalidOperationException ();
 
 				return signal_info.Kernel_SIGRTMIN;
