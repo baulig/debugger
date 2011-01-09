@@ -299,6 +299,19 @@ namespace Mono.Debugger.Architectures
 
 		public override bool InterpretInstruction (Inferior inferior)
 		{
+			Console.WriteLine ("INTERPRET INSTRUCTION: {0} {1} {2}", address, type, effective_address);
+
+			if (type == Type.Jump) {
+				registers [(int) Architecture_ARM.ARM_Register.PC].SetValue (effective_address);
+				inferior.SetRegisters (registers);
+				return true;
+			} else if (type == Type.Call) {
+				registers [(int) Architecture_ARM.ARM_Register.LR].SetValue (address + 4);
+				registers [(int) Architecture_ARM.ARM_Register.PC].SetValue (effective_address);
+				inferior.SetRegisters (registers);
+				return true;
+			}
+
 			return false;
 		}
 	}

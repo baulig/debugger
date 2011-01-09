@@ -1109,16 +1109,17 @@ namespace Mono.Debugger.Backend
 			Instruction instruction = inferior.Architecture.ReadInstruction (
 				inferior, inferior.CurrentFrame);
 
-			if ((instruction == null) || !instruction.HasInstructionSize ||
-			    !process.CanExecuteCode) {
+			if ((instruction != null) && !singlestep) {
+				if (instruction.InterpretInstruction (inferior))
+					return false;
+			}
+
+			if ((instruction == null) || !instruction.HasInstructionSize || !process.CanExecuteCode) {
 				PushOperation (new OperationStepOverBreakpoint (this, index, until));
 				return true;
 			}
 
 			if (instruction.InterpretInstruction (inferior)) {
-				if (!singlestep)
-					return false;
-
 				byte[] nop_insn = Architecture.Opcodes.GenerateNopInstruction ();
 				PushOperation (new OperationExecuteInstruction (this, nop_insn, false));
 				return true;
