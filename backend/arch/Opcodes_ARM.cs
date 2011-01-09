@@ -22,7 +22,7 @@ namespace Mono.Debugger.Architectures
 			throw new NotImplementedException ();
 		}
 
-		internal bool ScanPrologue (UnwindContext context, TargetMemoryAccess memory)
+		internal StackFrame ScanPrologue (UnwindContext context, TargetMemoryAccess memory)
 		{
 			var address = context.StartAddress;
 			var reader = new TargetBinaryReader (context.PrologueCode, memory.TargetMemoryInfo);
@@ -49,7 +49,7 @@ namespace Mono.Debugger.Architectures
 				context.Dump ();
 
 				if (!ok)
-					return false;
+					return null;
 			}
 
 			Report.Debug (DebugFlags.StackUnwind, "Done scanning prologue: IP = {0}, FP = {1}, SP = {2}",
@@ -60,7 +60,7 @@ namespace Mono.Debugger.Architectures
 			var fp_regval = context.Registers [(int) ARM_Register.FP];
 			if ((fp_regval.State != UnwindContext.RegisterState.Register) || (fp_regval.BaseRegister != (int) ARM_Register.SP)) {
 				Report.Debug (DebugFlags.StackUnwind, "  Invalid frame pointer!");
-				return false;
+				return null;
 			}
 
 			var current_fp = context.OriginalRegisters [(int) ARM_Register.FP];
@@ -85,7 +85,16 @@ namespace Mono.Debugger.Architectures
 				Report.Debug (DebugFlags.StackUnwind, "  Preserved FP: {0}", old_fp);
 			}
 
-			return true;
+			Registers old_regs = context.Frame.Registers;
+			Registers regs = new Registers (old_regs);
+
+			regs [(int) ARM_Register.PC].SetValue (current_lr);
+			regs [(int) ARM_Register.SP].SetValue (old_sp);
+
+			regs [(int) ARM_Register.FP].SetValue (old_fp);
+			regs [(int) ARM_Register.LR].SetValue (old_lr);
+
+			return Architecture.CreateFrame (context.Frame.Thread, FrameType.Normal, memory, old_lr, old_sp, old_fp, regs);
 		}
 
 	}
