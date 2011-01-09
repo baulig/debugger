@@ -48,16 +48,22 @@ ErrorCode
 ArmArch::EnableBreakpoint (BreakpointInfo *breakpoint)
 {
 	static const char arm_le_breakpoint[] = { 0xFE, 0xDE, 0xFF, 0xE7 };
+	MonoRuntime *runtime;
 	ErrorCode result;
 
 	if (IsThumbMode ())
 		return ERR_NOT_IMPLEMENTED;
 
-	g_message (G_STRLOC ": %p - %d", breakpoint->address, IsThumbMode ());
-
 	result = inferior->ReadMemory (breakpoint->address, 4, &breakpoint->saved_insn);
 	if (result)
 		return result;
+
+	runtime = inferior->GetProcess ()->GetMonoRuntime ();
+	if (runtime) {
+		result = runtime->EnableBreakpoint (inferior, breakpoint);
+		if (result)
+			return result;
+	}
 
 	return inferior->WriteMemory (breakpoint->address, 4, &arm_le_breakpoint);
 }
@@ -66,6 +72,7 @@ ErrorCode
 ArmArch::DisableBreakpoint (BreakpointInfo *breakpoint)
 {
 	ErrorCode result;
+	MonoRuntime *runtime;
 
 	if (IsThumbMode ())
 		return ERR_NOT_IMPLEMENTED;
@@ -73,6 +80,13 @@ ArmArch::DisableBreakpoint (BreakpointInfo *breakpoint)
 	result = inferior->WriteMemory (breakpoint->address, 4, &breakpoint->saved_insn);
 	if (result)
 		return result;
+
+	runtime = inferior->GetProcess ()->GetMonoRuntime ();
+	if (runtime) {
+		result = runtime->DisableBreakpoint (inferior, breakpoint);
+		if (result)
+			return result;
+	}
 
 	return ERR_NONE;
 }

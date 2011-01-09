@@ -476,7 +476,11 @@ MonoRuntimeImpl::EnableBreakpoint (MdbInferior *inferior, BreakpointInfo *breakp
 	if (result)
 		return result;
 
-	result = inferior->PokeWord (table_address + 4, (gsize) breakpoint->saved_insn);
+#if defined(__arm__)
+	result = inferior->PokeWord (table_address + 4, * (gsize *) breakpoint->saved_insn);
+#else
+	result = inferior->WriteMemory (table_address + 4, 1, breakpoint->saved_insn);
+#endif
 	if (result)
 		return result;
 
