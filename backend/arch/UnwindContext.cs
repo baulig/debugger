@@ -40,6 +40,8 @@ namespace Mono.Debugger.Architectures
 
 		protected TargetAddress make_address (long value)
 		{
+			if (Architecture.TargetMemoryInfo.TargetAddressSize == 4)
+				value &= 0x00000000ffffffffL;
 			return new TargetAddress (Architecture.TargetMemoryInfo.AddressDomain, value);
 		}
 
@@ -79,12 +81,21 @@ namespace Mono.Debugger.Architectures
 			Console.WriteLine ();
 
 			for (int i = 0; i < registers.Length; i++) {
-				Console.WriteLine ("{0,8} : {1} - {2,8} {3} {4:x}", Architecture.RegisterNames [i],
-						   original_registers [i], registers [i].State, registers [i].BaseRegister,
-						   registers [i].Offset);
+				Console.WriteLine ("{0,8} : {1} - {2}", Architecture.RegisterNames [i], original_registers [i],
+						   PrintRegisterValue (i));
 			}
 
 			Console.WriteLine ();
+		}
+
+		public string PrintRegisterValue (int i)
+		{
+			if ((registers [i].State == RegisterState.Register) || (registers [i].State == RegisterState.Memory))
+				return String.Format ("{0} : {1} + {2:x}", registers [i].State,
+						      Architecture.RegisterNames [registers [i].BaseRegister],
+						      make_address (registers [i].Offset));
+			else
+				return String.Format ("{0}", registers [i].State);
 		}
 	}
 }

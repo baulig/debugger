@@ -333,8 +333,16 @@ namespace Mono.Debugger.Architectures
 					      Bit (21) ? "writeback" : "no-writeback",
 					      Bits (0, 15));
 
-				if (context.Registers [Rn].State != UnwindContext.RegisterState.Preserved)
+				if (context.Registers [Rn].State == UnwindContext.RegisterState.Preserved) {
+					context.Registers [Rn].State = UnwindContext.RegisterState.Register;
+					context.Registers [Rn].BaseRegister = Rn;
+					context.Registers [Rn].Offset = 0;
+				} else if (context.Registers [Rn].State == UnwindContext.RegisterState.Register) {
+					if (context.Registers [Rn].BaseRegister != Rn)
+						return false;
+				} else {
 					return false;
+				}
 
 				int count = 0;
 				for (int i = 0; i < 15; i++) {
@@ -367,8 +375,87 @@ namespace Mono.Debugger.Architectures
 					offset += 4;
 				}
 
-				if (Bit (21)) // writeback
+				if (Bit (21)) { // writeback
 					context.Registers [Rn].Offset = endoffset;
+				}
+
+				return true;
+			}
+
+			if (Bits (26, 27) == 0) { // data processing
+				var opcode = Bits (21, 24);
+
+				var Rd = (int) Bits (12, 15);
+				var Rn = (int) Bits (16, 19);
+
+				Report.Debug (DebugFlags.StackUnwind,
+					      "  found data processing: Rd = {0} ({1}), Opcode = {2:x} - S = {3}, I = {4}",
+					      opcodes.Architecture.RegisterNames [Rd], context.PrintRegisterValue (Rd),
+					      opcode, Bit (20) ? "S" : "!S", Bit (25) ? "imm" : "reg");
+
+				if ((opcode != 2) && (opcode != 4) && (opcode != 13))
+					return false;
+
+				if (Bit (25)) { // imm
+					var Imm = Bits (0, 7);
+					var Rotate = (ushort) Bits (8, 11);
+
+					var value = ((Imm >> Rotate) | (Imm << (32 - Rotate))) & 0xffffffff;
+
+					Report.Debug (DebugFlags.StackUnwind,
+						      "    Rn = {0} ({1}), Imm = {2:x}, Rotate = {3:x} -> Value = {4:x}",
+						      opcodes.Architecture.RegisterNames [Rn], context.PrintRegisterValue (Rn),
+						      Imm, Rotate, value);
+
+					if (context.Registers [Rn].State == UnwindContext.RegisterState.Preserved) {
+						context.Registers [Rd].State = UnwindContext.RegisterState.Register;
+						context.Registers [Rd].BaseRegister = Rn;
+						context.Registers [Rd].Offset = 0;
+					} else if (context.Registers [Rn].State == UnwindContext.RegisterState.Register) {
+						context.Registers [Rd].State = UnwindContext.RegisterState.Register;
+						context.Registers [Rd].BaseRegister = context.Registers [Rn].BaseRegister;
+						context.Registers [Rd].Offset = context.Registers [Rn].Offset;
+					} else {
+						return false;
+					}
+
+					if (opcode == 2) // SUB
+						context.Registers [Rd].Offset -= value;
+					else if (opcode == 4) // ADD
+						context.Registers [Rd].Offset += value;
+					else if (opcode == 13) // MOV
+						context.Registers [Rd].Offset = value;
+					else
+						return false;
+
+					return true;
+				} else { // reg
+					var Rm = (int) Bits (0, 3);
+					var Shift = Bits (4, 11);
+
+					Report.Debug (DebugFlags.StackUnwind, "    Rm = {0} ({1}), Shift = {2:x}",
+						      opcodes.Architecture.RegisterNames [Rm], context.PrintRegisterValue (Rm),
+						      Shift);
+
+					if (Shift != 0)
+						return false;
+					if (opcode != 13) // MOV
+						return false;
+
+					if (context.Registers [Rm].State == UnwindContext.RegisterState.Preserved) {
+						context.Registers [Rd].State = UnwindContext.RegisterState.Register;
+						context.Registers [Rd].BaseRegister = Rm;
+						context.Registers [Rd].Offset = 0;
+					} else if (context.Registers [Rm].State == UnwindContext.RegisterState.Register) {
+						context.Registers [Rd].State = UnwindContext.RegisterState.Register;
+						context.Registers [Rd].BaseRegister = context.Registers [Rm].BaseRegister;
+						context.Registers [Rd].Offset = context.Registers [Rm].Offset;
+					} else {
+						return false;
+					}
+
+					return true;
+				}
 			}
 
 			return false;

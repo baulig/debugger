@@ -157,9 +157,7 @@ namespace Mono.Debugger.Architectures
 
 		internal override StackFrame UnwindStack (UnwindContext context, TargetMemoryAccess memory)
 		{
-			context.Dump ();
 			((Opcodes_ARM) Opcodes).ScanPrologue (context, memory);
-			context.Dump ();
 			return null;
 		}
 

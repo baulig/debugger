@@ -33,13 +33,22 @@ namespace Mono.Debugger.Architectures
 			context.Registers [(int) ARM_Register.FP].State = UnwindContext.RegisterState.Preserved;
 			context.Registers [(int) ARM_Register.IP].State = UnwindContext.RegisterState.Preserved;
 
+			context.Dump ();
+
 			while (!reader.IsEof) {
 				var opcode = reader.ReadUInt32 ();
 				Report.Debug (DebugFlags.StackUnwind, "  scanning: {0} {1:x}", address, opcode);
 				var insn = new Instruction_ARM (this, memory, address, context.Frame.Registers, opcode);
 				address += 4;
 
-				if (!insn.ScanPrologue (context))
+				bool ok = insn.ScanPrologue (context);
+
+				Report.Debug (DebugFlags.StackUnwind, "  scanning: {0} {1:x} -> {2}", address, opcode,
+					      ok ? "OK" : "ERROR");
+
+				context.Dump ();
+
+				if (!ok)
 					return false;
 			}
 
