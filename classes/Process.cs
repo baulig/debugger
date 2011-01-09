@@ -341,6 +341,10 @@ namespace Mono.Debugger
 			get { return operation_host; }
 		}
 
+		public TargetInfo TargetInfo {
+			get { return target_info; }
+		}
+
 		internal SingleSteppingEngine ThreadCreated (IInferior server_inferior)
 		{
 			var sse = new SingleSteppingEngine (manager, this, server_process, server_inferior);

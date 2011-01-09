@@ -203,10 +203,6 @@ namespace Mono.Debugger.Backend
 
 		protected void HandleEvent (ServerEvent e)
 		{
-			Console.WriteLine ("SERVER EVENT: {0} {1} {2}", e,
-					   e.Sender != null ? e.Sender.ID : 0,
-					   DebuggerWaitHandle.CurrentThread);
-
 			switch (e.Type) {
 			case ServerEventType.MainModuleLoaded:
 			case ServerEventType.DllLoaded:
@@ -239,7 +235,6 @@ namespace Mono.Debugger.Backend
 
 			if (e.Sender.Kind == ServerObjectKind.Inferior) {
 				var inferior = (IInferior) e.Sender;
-				Console.WriteLine ("INFERIOR EVENT: {0}", inferior.ID);
 
 				if (!sse_by_inferior.ContainsKey (inferior.ID)) {
 					Console.WriteLine ("UNKNOWN INFERIOR !");
@@ -288,8 +283,6 @@ namespace Mono.Debugger.Backend
 		internal bool HandleChildEvent (SingleSteppingEngine engine, Inferior inferior,
 						ref ServerEvent cevent, out bool resume_target)
 		{
-			Console.WriteLine ("HANDLE CHILD EVENT: {0}", cevent);
-
 			if (cevent.Type == ServerEventType.Notification)
 				return engine.Process.MonoManager.HandleEvent (engine, inferior, ref cevent, out resume_target);
 

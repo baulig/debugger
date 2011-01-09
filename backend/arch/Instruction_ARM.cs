@@ -104,10 +104,6 @@ namespace Mono.Debugger.Architectures
 			this.code = memory.ReadBuffer (address, 4);
 			this.registers = memory.GetRegisters ();
 
-			Console.WriteLine ("READ INSTRUCTION: {0} - {1:x} {2:x} {3:x} {4:x} - {5:x} {6:x}",
-					   address, code [0], code [1], code [2], code [3],
-					   (code [3] & 0xf0) >> 4, (code [3] & 0x0f));
-
 			is_conditional = (bits (28, 31) != 0x0e) && (bits (28, 31) != 0x0f);
 
 			//
@@ -212,8 +208,6 @@ namespace Mono.Debugger.Architectures
 
 				effective_address = make_address (result);
 				type = Type.IndirectJump;
-
-				Console.WriteLine ("INDIRECT JUMP: {0:x}", effective_address);
 			} else if ((bits (24, 27) >= 4) && (bits (24, 27) < 8) && (bits (12, 15) == 0x0f)) { // data transfer
 				/* byte write to PC */
 				var rn = bits (16, 19);
@@ -235,6 +229,9 @@ namespace Mono.Debugger.Architectures
 			} else {
 				type = Type.Unknown;
 			}
+
+			Console.WriteLine ("READ INSTRUCTION: {0} - {1:x} {2:x} {3:x} {4:x} - {5} {6}",
+					   address, code [0], code [1], code [2], code [3], type, effective_address);
 		}
 
 		protected readonly Opcodes_ARM opcodes;
@@ -288,8 +285,6 @@ namespace Mono.Debugger.Architectures
 
 		public override TargetAddress GetEffectiveAddress (TargetMemoryAccess memory)
 		{
-			Console.WriteLine ("GET EFFECTIVE ADDRESS: {0} {1} {2}", address, type, effective_address);
-
 			return effective_address;
 		}
 
@@ -299,8 +294,6 @@ namespace Mono.Debugger.Architectures
 
 		public override bool InterpretInstruction (Inferior inferior)
 		{
-			Console.WriteLine ("INTERPRET INSTRUCTION: {0} {1} {2}", address, type, effective_address);
-
 			if (type == Type.Jump) {
 				registers [(int) Architecture_ARM.ARM_Register.PC].SetValue (effective_address);
 				inferior.SetRegisters (registers);
