@@ -182,6 +182,7 @@ namespace Mono.Debugger.Backend
 		{
 			var exe = new ExecutableReader (process, TargetInfo, reader);
 			exe_reader_by_id.Add (reader.ID, exe);
+			exe.ReadDebuggingInfo ();
 			return exe;
 		}
 

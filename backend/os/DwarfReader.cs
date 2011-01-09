@@ -3493,10 +3493,18 @@ namespace Mono.Debugger.Backend
 			{
 				switch (attribute.DwarfAttribute) {
 				case DwarfAttribute.upper_bound:
+					if (attribute.Data is byte[]) {
+						Console.WriteLine ("OOPS: {0} in subrange's upper bound", attribute.DwarfForm);
+						break;
+					}
 					UpperBound = (int) (long) attribute.Data;
 					break;
 
 				case DwarfAttribute.lower_bound:
+					if (attribute.Data is byte[]) {
+						Console.WriteLine ("OOPS: {0} in subrange's lower bound", attribute.DwarfForm);
+						break;
+					}
 					LowerBound = (int) (long) attribute.Data;
 					break;
 
