@@ -81,17 +81,17 @@ if test x$build_sysdeps = xyes; then
 	AC_MSG_CHECKING([host platform characteristics])
 	case "$host" in
 	x86_64-*-linux*)
-		server_cflags=-D_GNU_SOURCE -DHAVE_THREAD_DB
+		server_cflags='-D_GNU_SOURCE -DHAVE_THREAD_DB'
 		platform=x86_linux
 		using_eglib=no
 		;;
 	i[[3-7]]86-*-linux*)
-		server_cflags=-D_GNU_SOURCE -DHAVE_THREAD_DB
+		server_cflags='-D_GNU_SOURCE -DHAVE_THREAD_DB'
 		platform=x86_linux
 		using_eglib=no
 		;;
 	arm-*-linux*)
-		server_cflags=
+		server_cflags='-D_GNU_SOURCE -DHAVE_THREAD_DB -DPLATFORM_ANDROID'
 		platform=arm_linux
 		using_eglib=yes
 		;;
@@ -324,6 +324,8 @@ AC_HEADER_DIRENT
 AC_CHECK_FUNCS(fcntl getpagesize setitimer sysconf fdopen getuid getgid)
 AC_CHECK_FUNCS(strlcpy strlcat fgetln)
 AC_CHECK_FUNCS(open64)
+
+AC_CHECK_TYPE([psaddr_t], [], [], [[#include <sys/procfs.h>]])
 
 if test x$check_mono = xyes; then
 	PKG_CHECK_MODULES(MONO, $mono_pc >= $MONO_REQUIRED_VERSION)

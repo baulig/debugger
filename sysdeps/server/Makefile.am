@@ -67,10 +67,13 @@ if PLATFORM_ARM_LINUX
 platform_sources = \
 	arm-arch.cpp \
 	arm-arch.h \
-	ptrace-inferior.cpp
+	ptrace-inferior.cpp \
+	thread-db.cpp
 platform_server = \
 	bfd-reader.cpp \
 	mdb-server-linux.cpp
+platform_libs = \
+	-lthread_db
 mdb_server_ldflags = -entry=main
 else
 mdb_server_ldflags =

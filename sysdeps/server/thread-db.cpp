@@ -1,5 +1,15 @@
 #include <thread-db.h>
 
+#ifdef PLATFORM_ANDROID
+#include <asm/elf.h>
+
+typedef void *psaddr_t;
+typedef __pid_t lwpid_t;
+
+typedef elf_gregset_t prgregset_t;
+typedef elf_fpregset_t prfpregset_t;
+#endif
+
 /* Functions in this interface return one of these status codes.  */
 typedef enum
 {
@@ -16,6 +26,10 @@ class ThreadDBImpl;
 
 extern "C" {
 	#include <thread_db.h>
+
+#ifdef PLATFORM_ANDROID
+	td_err_e td_thr_get_info (const td_thrhandle_t *__th, td_thrinfo_t *__infop);
+#endif
 
 	ps_err_e ps_pglobal_lookup (ThreadDBImpl *, const char *, const char *, psaddr_t *);
 	ps_err_e ps_pdread (ThreadDBImpl *, psaddr_t, void *, size_t);
@@ -57,10 +71,12 @@ ThreadDB::Initialize (MdbInferior *inferior, int pid)
 	ThreadDBImpl *handle;
 	td_err_e e;
 
+#ifndef PLATFORM_ANDROID
 	e = td_init ();
 	g_message (G_STRLOC ": %d", e);
 	if (e)
 		return NULL;
+#endif
 
 	handle = new ThreadDBImpl (inferior, pid);
 
@@ -134,7 +150,7 @@ iterate_over_threads_cb (const td_thrhandle_t *th, void *user_data)
 	if (e)
 		return 1;
 
-	g_message (G_STRLOC ": %d - %Lx - %Lx", ti.ti_lid, ti.ti_tid, ti.ti_tls);
+	g_message (G_STRLOC ": %d - %Lx", ti.ti_lid, ti.ti_tid);
 
 	data->callback->Invoke (data->thread_db, ti.ti_lid, ti.ti_tid);
 
