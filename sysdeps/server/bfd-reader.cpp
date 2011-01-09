@@ -177,7 +177,7 @@ BfdReader::GetEndAddress (void)
 	if (bss)
 		return base_address + bss->vma + bss->size;
 	else if (text)
-		return base_address + text->vma + bss->size;
+		return base_address + text->vma + text->size;
 
 	return 0;
 }
