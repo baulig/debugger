@@ -40,7 +40,32 @@ ArmArch::DisableBreakpoint (BreakpointInfo *breakpoint)
 ServerEvent *
 ArmArch::ChildStopped (int stopsig, bool *out_remain_stopped)
 {
-	return NULL;
+	ServerEvent *e;
+
+	g_message (G_STRLOC);
+
+	*out_remain_stopped = true;
+
+	if (GetRegisters ())
+		return NULL;
+
+	e = g_new0 (ServerEvent, 1);
+	e->sender = inferior;
+	e->type = SERVER_EVENT_STOPPED;
+
+#if defined(__linux__) || defined(__FreeBSD__)
+	if (stopsig == SIGSTOP) {
+		e->type = SERVER_EVENT_INTERRUPTED;
+		return e;
+	}
+
+	if (stopsig != SIGTRAP) {
+		e->arg = stopsig;
+		return e;
+	}
+#endif
+
+	return e;
 }
 
 ErrorCode
