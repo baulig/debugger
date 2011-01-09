@@ -11,7 +11,7 @@ namespace Mono.Debugger
 	public enum DebugFlags {
 		None			= 0,
 		JitSymtab		= 1,
-		MethodAddress		= 2,
+		StackUnwind		= 2,
 		Threads			= 4,
 		Signals			= 8,
 		EventLoop		= 16,
@@ -65,8 +65,8 @@ namespace Mono.Debugger
 				case "jit":
 					flags |= DebugFlags.JitSymtab;
 					break;
-				case "address":
-					flags |= DebugFlags.MethodAddress;
+				case "unwind":
+					flags |= DebugFlags.StackUnwind;
 					break;
 				case "threads":
 					flags |= DebugFlags.Threads;

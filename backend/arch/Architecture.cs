@@ -11,50 +11,51 @@ namespace Mono.Debugger.Backend
 	// </summary>
 	internal abstract class Architecture : DebuggerMarshalByRefObject, IDisposable
 	{
-		protected readonly Process process;
-		protected readonly TargetInfo TargetInfo;
-		protected readonly TargetMemoryInfo TargetMemoryInfo;
-
-		Disassembler disassembler;
-		Opcodes opcodes;
-
 		protected Architecture (Process process, TargetInfo info)
 		{
-			this.process = process;
+			this.Process = process;
 			this.TargetInfo = info;
 			this.TargetMemoryInfo = process.ThreadManager.GetTargetMemoryInfo (AddressDomain.Global);
 
-			disassembler = process.ThreadManager.DebuggerServer.GetDisassembler ();
+			Disassembler = process.ThreadManager.DebuggerServer.GetDisassembler ();
 
 			switch (process.ThreadManager.DebuggerServer.ArchType) {
 			case ArchType.I386:
-				opcodes = new Opcodes_X86_64 (this, TargetMemoryInfo);
+				Opcodes = new Opcodes_X86_64 (this, TargetMemoryInfo);
 				break;
 			case ArchType.X86_64:
-				opcodes = new Opcodes_I386 (this, TargetMemoryInfo);
+				Opcodes = new Opcodes_I386 (this, TargetMemoryInfo);
 				break;
 			case ArchType.ARM:
-				opcodes = new Opcodes_ARM (this, TargetMemoryInfo);
+				Opcodes = new Opcodes_ARM (this, TargetMemoryInfo);
 				break;
 			default:
 				throw new InternalError ();
 			}
 		}
 
-		internal Disassembler Disassembler {
-			get { return disassembler; }
-		}
-
 		public Process Process {
-			get { return process; }
+			get; private set;
 		}
 
 		public Opcodes Opcodes {
-			get { return opcodes; }
+			get; private set;
+		}
+
+		internal TargetInfo TargetInfo {
+			get; private set;
+		}
+
+		internal TargetMemoryInfo TargetMemoryInfo {
+			get; private set;
 		}
 
 		public int TargetAddressSize {
 			get { return TargetInfo.TargetAddressSize; }
+		}
+
+		internal Disassembler Disassembler {
+			get; private set;
 		}
 
 		// <summary>
@@ -123,8 +124,8 @@ namespace Mono.Debugger.Backend
 
 		internal Instruction ReadInstruction (TargetMemoryAccess memory, TargetAddress address)
 		{
-			if (opcodes != null)
-				return opcodes.ReadInstruction (memory, address);
+			if (Opcodes != null)
+				return Opcodes.ReadInstruction (memory, address);
 
 			return null;
 		}
@@ -155,18 +156,24 @@ namespace Mono.Debugger.Backend
 			if ((address.IsNull) || (address.Address == 0))
 				return null;
 
-			Method method = process.SymbolTableManager.Lookup (address);
+			Method method = Process.SymbolTableManager.Lookup (address);
 			if (method != null)
 				return new StackFrame (
 					thread, type, address, stack, frame_pointer, regs, method);
 
-			Symbol name = process.SymbolTableManager.SimpleLookup (address, false);
+			Symbol name = Process.SymbolTableManager.SimpleLookup (address, false);
 			return new StackFrame (
 				thread, type, address, stack, frame_pointer, regs,
-				process.NativeLanguage, name);
+				Process.NativeLanguage, name);
 		}
 
 		internal abstract TargetAddress GetMonoTrampoline (TargetMemoryAccess memory, TargetAddress address);
+
+		internal virtual StackFrame UnwindStack (UnwindContext context, TargetMemoryAccess memory)
+		{
+			return UnwindStack (context.Frame, memory, context.PrologueCode,
+					    (int) (context.Frame.TargetAddress - context.StartAddress));
+		}
 
 		//
 		// This is a horrible hack - don't use !
@@ -188,9 +195,9 @@ namespace Mono.Debugger.Backend
 
 		protected virtual void DoDispose ()
 		{
-			if (disassembler != null) {
-				disassembler.Dispose ();
-				disassembler = null;
+			if (Disassembler != null) {
+				Disassembler.Dispose ();
+				Disassembler = null;
 			}
 		}
 

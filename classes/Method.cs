@@ -4,6 +4,7 @@ using System.Collections;
 
 using Mono.Debugger.Languages;
 using Mono.Debugger.Backend;
+using Mono.Debugger.Architectures;
 
 namespace Mono.Debugger
 {
@@ -147,11 +148,19 @@ namespace Mono.Debugger
 			if (!IsLoaded)
 				return null;
 
+			Report.Debug (DebugFlags.StackUnwind, "Unwind method: {0}:{1} - {2}",
+				      frame.TargetAddress, name, HasMethodBounds);
+
 			try {
 				StackFrame new_frame = Module.UnwindStack (frame, memory);
-				if (new_frame != null)
+				if (new_frame != null) {
+					Report.Debug (DebugFlags.StackUnwind, "Unwind method #1: {0}:{1} -> {2}",
+						      frame.TargetAddress, name, new_frame);
 					return new_frame;
-			} catch {
+				}
+			} catch (Exception ex) {
+				Report.Debug (DebugFlags.StackUnwind, "Unwind method ex: {0}:{1} -> {2}",
+					      frame.TargetAddress, name, ex);
 			}
 
 			int prologue_size;
@@ -162,7 +171,11 @@ namespace Mono.Debugger
 			int offset = (int) (frame.TargetAddress - StartAddress);
 
 			byte[] prologue = memory.ReadBuffer (StartAddress, prologue_size);
-			return frame.Thread.Architecture.UnwindStack (frame, memory, prologue, offset);
+			Report.Debug (DebugFlags.StackUnwind, "Unwind method: {0}:{1} - {2} {3} - {4}",
+				      frame.TargetAddress, name, StartAddress, StartAddress + prologue_size, offset);
+
+			var context = new UnwindContext (frame, StartAddress, prologue);
+			return frame.Thread.Architecture.UnwindStack (context, memory);
 		}
 
 		//

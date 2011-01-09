@@ -5,6 +5,45 @@ namespace Mono.Debugger.Architectures
 {
 	internal abstract class Opcodes : DebuggerMarshalByRefObject, IDisposable
 	{
+		#region Bit Magic
+
+		static ulong submask (ushort x)
+		{
+			return ((1UL << (x + 1)) - 1);
+		}
+
+		internal static bool Bit (uint value, ushort n)
+		{
+			return ((value >> n) & 1) != 0;
+		}
+
+		internal static bool Bit (ulong value, ushort n)
+		{
+			return ((value >> n) & 1) != 0;
+		}
+
+		internal static uint Bits (uint value, ushort start, ushort end)
+		{
+			return (value >> start) & (uint) submask ((ushort) (end - start));
+		}
+
+		internal static ulong Bits (ulong value, ushort start, ushort end)
+		{
+			return (value >> start) & submask ((ushort) (end - start));
+		}
+
+		internal static int SBits (uint value, ushort start, ushort end)
+		{
+			return (int) (Bits (value, start, end) | ((Bit (value, end) ? 1UL : 0UL) * ~ submask ((ushort) (end - start))));
+		}
+
+		internal static long SBits (ulong value, ushort start, ushort end)
+		{
+			return (long) (Bits (value, start, end) | ((Bit (value, end) ? 1UL : 0UL) * ~ submask ((ushort) (end - start))));
+		}
+
+		#endregion
+
 		protected Opcodes (Architecture arch, TargetMemoryInfo target_info)
 		{
 			this.Architecture = arch;

@@ -4,6 +4,31 @@ using Mono.Debugger.Backend;
 
 namespace Mono.Debugger.Architectures
 {
+	internal enum ARM_Register : uint
+	{
+		R0 = 0,
+		R1,
+		R2,
+		R3,
+		R4,
+		R5,
+		R6,
+		R7,
+		R8,
+		R9,
+		R10,
+
+		FP,
+		IP,
+		SP,
+		LR,
+		PC,
+		CPSR,
+		ORIG_R0,
+
+		COUNT
+	}
+
 	// <summary>
 	//   Architecture-dependent stuff for the x86_64.
 	// </summary>
@@ -23,31 +48,6 @@ namespace Mono.Debugger.Architectures
 							     TargetAddress address)
 		{
 			return false;
-		}
-
-		internal enum ARM_Register
-		{
-			R0 = 0,
-			R1,
-			R2,
-			R3,
-			R4,
-			R5,
-			R6,
-			R7,
-			R8,
-			R9,
-			R10,
-
-			FP,
-			IP,
-			SP,
-			LR,
-			PC,
-			CPSR,
-			ORIG_R0,
-
-			COUNT
 		}
 
 		public override int[] AllRegisterIndices {
@@ -155,6 +155,14 @@ namespace Mono.Debugger.Architectures
 			return null;
 		}
 
+		internal override StackFrame UnwindStack (UnwindContext context, TargetMemoryAccess memory)
+		{
+			context.Dump ();
+			((Opcodes_ARM) Opcodes).ScanPrologue (context, memory);
+			context.Dump ();
+			return null;
+		}
+
 		internal override StackFrame TrySpecialUnwind (StackFrame frame,
 							       TargetMemoryAccess memory)
 		{
@@ -216,7 +224,7 @@ namespace Mono.Debugger.Architectures
 			if (target.IsNull)
 				return target;
 
-			if (!process.MonoLanguage.IsTrampolineAddress (target))
+			if (!Process.MonoLanguage.IsTrampolineAddress (target))
 				return TargetAddress.Null;
 
 			return target;

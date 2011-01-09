@@ -429,6 +429,8 @@ namespace Mono.Debugger
 			if (parent_frame != null)
 				return parent_frame;
 
+			Report.Debug (DebugFlags.StackUnwind, "Unwind: {0} {1}", this, method);
+
 			StackFrame new_frame = null;
 			if (method != null) {
 				try {

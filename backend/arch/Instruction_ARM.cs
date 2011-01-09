@@ -5,90 +5,82 @@ namespace Mono.Debugger.Architectures
 {
 	internal class Instruction_ARM : Instruction
 	{
-		static int submask (ushort x)
+		bool Bit (ushort n)
 		{
-			return (int) ((1L << (x + 1)) - 1);
+			return Opcodes.Bit ((uint) (code[0] + (code[1] << 8) + (code[2] << 16) + (code[3] << 24)), n);
 		}
 
-		static bool bit (int value, ushort n)
+		bool Bit (int n)
 		{
-			return ((value >> n) & 1) != 0;
+			return Bit ((ushort) n);
 		}
 
-		static int bits (int value, ushort start, ushort end)
+		uint Bits (ushort start, ushort end)
 		{
-			return (value >> start) & submask ((ushort) (end - start));
+			return Opcodes.Bits ((uint) (code[0] + (code[1] << 8) + (code[2] << 16) + (code[3] << 24)), start, end);
 		}
 
-		static int sbits (int value, ushort start, ushort end)
+		int SBits (ushort start, ushort end)
 		{
-			return bits (value, start, end) | ((bit (value, end) ? 1 : 0) * ~ submask ((ushort) (end - start)));
+			return Opcodes.SBits ((uint) (code[0] + (code[1] << 8) + (code[2] << 16) + (code[3] << 24)), start, end);
 		}
 
-		bool bit (ushort n)
-		{
-			return bit (code[0] + (code[1] << 8) + (code[2] << 16) + (code[3] << 24), n);
-		}
-
-		int bits (ushort start, ushort end)
-		{
-			return bits (code[0] + (code[1] << 8) + (code[2] << 16) + (code[3] << 24), start, end);
-		}
-
-		int sbits (ushort start, ushort end)
-		{
-			return sbits (code[0] + (code[1] << 8) + (code[2] << 16) + (code[3] << 24), start, end);
-		}
-
-		TargetAddress make_address (ulong value)
+		TargetAddress MakeAddress (ulong value)
 		{
 			return new TargetAddress (opcodes.TargetMemoryInfo.AddressDomain, (long) (value & 0x03fffffc));
 		}
 
-		uint get_reg (int rn)
+		uint GetRegister (uint rn)
 		{
 			return (uint) registers.Values [rn];
 		}
 
-		uint get_status_reg ()
-		{
-			return (uint) registers.Values [(int) Architecture_ARM.ARM_Register.CPSR];
+		uint StatusRegister {
+			get { return (uint) registers.Values [(int) ARM_Register.CPSR]; }
 		}
 
-		ulong shifted_reg_val (bool carry)
+		bool IsConditional {
+			get { return Bits (28, 31) != 0x0e; }
+		}
+
+		bool IsCarryFlagSet {
+			get { return (StatusRegister & 0x20000000) != 0; }
+		}
+
+		ulong GetShiftedRegister ()
 		{
 			ushort shift;
 			ulong res;
-			int rm = bits (0, 3);
-			int shifttype = bits (5, 6);
+			var rm = Bits (0, 3);
+			var shifttype = Bits (5, 6);
 
-			if (bit (4)) {
-				int rs = bits (8, 11);
-				shift = (ushort) ((rs == 15 ? address.Address + 8 : get_reg (rs)) & 0xFF);
+			if (Bit (4)) {
+				var rs = Bits (8, 11);
+				shift = (ushort) ((rs == 15 ? address.Address + 8 : GetRegister (rs)) & 0xFF);
 			} else
-				shift = (ushort) bits (7, 11);
+				shift = (ushort) Bits (7, 11);
 
-			res = (ulong) (rm == 15 ? (address.Address + (bit (4) ? 12 : 8)) : get_reg (rm));
+			res = (ulong) (rm == 15 ? (address.Address + (Bit (4) ? 12 : 8)) : GetRegister (rm));
 
 			switch (shifttype) {
-			case 0:			/* LSL */
+			case 0: /* LSL */
 				res = shift >= 32 ? 0 : res << shift;
 				break;
 
-			case 1:			/* LSR */
+			case 1: /* LSR */
 				res = shift >= 32 ? 0 : res >> shift;
 				break;
 
-			case 2:			/* ASR */
+			case 2: /* ASR */
 				if (shift >= 32)
 					shift = 31;
 				res = ((res & 0x80000000L) != 0) ? ~((~res) >> shift) : res >> shift;
 				break;
 
-			case 3:			/* ROR/RRX */
+			case 3: /* ROR/RRX */
 				shift &= 31;
 				if (shift == 0)
-					res = (res >> 1) | (carry ? 0x80000000UL : 0);
+					res = (res >> 1) | (IsCarryFlagSet ? 0x80000000UL : 0);
 				else
 					res = (res >> shift) | (res << (32 - shift));
 				break;
@@ -104,101 +96,119 @@ namespace Mono.Debugger.Architectures
 			this.code = memory.ReadBuffer (address, 4);
 			this.registers = memory.GetRegisters ();
 
-			is_conditional = (bits (28, 31) != 0x0e) && (bits (28, 31) != 0x0f);
+			read_instruction (memory);
+		}
 
+		internal Instruction_ARM (Opcodes_ARM opcodes, TargetMemoryAccess memory, TargetAddress address,
+					  Registers registers, uint insn)
+		{
+			this.opcodes = opcodes;
+			this.address = address;
+			this.code = BitConverter.GetBytes (insn);
+			this.registers = registers;
+
+			read_instruction (memory);
+		}
+
+		void read_instruction (TargetMemoryAccess memory)
+		{
 			//
-			// code[0] is bits 0..7
-			// code[1] is bits 8..15
-			// code[2] is bits 16..23
-			// code[3] is bits 24..31
+			// code[0] is Bits 0..7
+			// code[1] is Bits 8..15
+			// code[2] is Bits 16..23
+			// code[3] is Bits 24..31
 
-			if (bits (24, 27) == 0x0a) {
-				effective_address = address + 8 + (sbits (0, 23) << 2);
-				type = is_conditional ? Type.ConditionalJump : Type.Jump;
-			} else if (bits (24, 27) == 0x0b) {
+			if (Bits (24, 27) == 0x0a) {
+				effective_address = address + 8 + (SBits (0, 23) << 2);
+				type = IsConditional ? Type.ConditionalJump : Type.Jump;
+			} else if (Bits (24, 27) == 0x0b) {
 				// FIXME: Add Type.ConditionalCall
-				effective_address = address + 8 + (sbits (0, 23) << 2);
-				type = is_conditional ? Type.ConditionalJump : Type.Call;
-			} else if ((bits (24, 27) < 4) && (bits (12, 15) == 0x0f)) {
+				effective_address = address + 8 + (SBits (0, 23) << 2);
+				type = IsConditional ? Type.ConditionalJump : Type.Call;
+			} else if ((Bits (24, 27) < 4) && (Bits (12, 15) == 0x0f)) {
 				ulong operand1, operand2, result;
-				int rn;
+				uint rn;
 
-				if ((bits (4, 27) == 0x12fff1) || bits (4, 27) == 0x12fff3) { // BX <reg>, BLX <reg>
-					rn = bits (0, 3);
+				if ((Bits (4, 27) == 0x12fff1) || Bits (4, 27) == 0x12fff3) { // BX <reg>, BLX <reg>
+					rn = Bits (0, 3);
 					if (rn == 15)
 						effective_address = address + 8;
 					else
-						effective_address = make_address (get_reg (rn));
-					type = bits (4, 7) == 1 ? Type.IndirectJump : Type.IndirectCall;
+						effective_address = MakeAddress (GetRegister (rn));
+					type = Bits (4, 7) == 1 ? Type.IndirectJump : Type.IndirectCall;
 					Console.WriteLine ("BX/BLX: {0} {1:x}", rn, effective_address);
 				}
 
-				uint c = (get_status_reg () & 0x20000000) != 0 ? 1u : 0u;
-				rn = bits (16, 19);
-				operand1 = (ulong) (rn == 15 ? address.Address + 8 : get_reg (rn));
+				rn = Bits (16, 19);
+				operand1 = (ulong) (rn == 15 ? address.Address + 8 : GetRegister (rn));
 
-				if (bit (25)) {
-					ulong immval = (ulong) bits (0, 7);
-					ushort rotate = (ushort) (2 * bits (8, 11));
+				if (Bit (25)) {
+					ulong immval = (ulong) Bits (0, 7);
+					ushort rotate = (ushort) (2 * Bits (8, 11));
 					operand2 = ((immval >> rotate) | (immval << (32 - rotate))) & 0xffffffff;
 				} else {
-					operand2 = shifted_reg_val (c == 1);
+					operand2 = GetShiftedRegister ();
 				}
 
-				switch (bits (21, 24)) {
-				case 0x0:	/*and */
+				switch (Bits (21, 24)) {
+				case 0x0: /*and */
 					result = operand1 & operand2;
 					break;
 
-				case 0x1:	/*eor */
+				case 0x1: /*eor */
 					result = operand1 ^ operand2;
 					break;
 
-				case 0x2:	/*sub */
+				case 0x2: /*sub */
 					result = operand1 - operand2;
 					break;
 
-				case 0x3:	/*rsb */
+				case 0x3: /*rsb */
 					result = operand2 - operand1;
 					break;
 
-				case 0x4:	/*add */
+				case 0x4: /*add */
 					result = operand1 + operand2;
 					break;
 
-				case 0x5:	/*adc */
-					result = operand1 + operand2 + c;
+				case 0x5: /*adc */
+					result = operand1 + operand2;
+					if (IsCarryFlagSet)
+						result++;
 					break;
 
-				case 0x6:	/*sbc */
-					result = operand1 - operand2 + c;
+				case 0x6: /*sbc */
+					result = operand1 - operand2;
+					if (IsCarryFlagSet)
+						result++;
 					break;
 
-				case 0x7:	/*rsc */
-					result = operand2 - operand1 + c;
+				case 0x7: /*rsc */
+					result = operand2 - operand1;
+					if (IsCarryFlagSet)
+						result++;
 					break;
 
 				case 0x8:
 				case 0x9:
 				case 0xa:
-				case 0xb:	/* tst, teq, cmp, cmn */
+				case 0xb: /* tst, teq, cmp, cmn */
 					result = (ulong) (address.Address + 8);
 					break;
 
-				case 0xc:	/*orr */
+				case 0xc: /*orr */
 					result = operand1 | operand2;
 					break;
 
-				case 0xd:	/*mov */
-					/* Always step into a function.  */
+				case 0xd: /*mov */
 					result = operand2;
 					break;
 
-				case 0xe:	/*bic */
+				case 0xe: /*bic */
 					result = operand1 & ~operand2;
 					break;
 
-				case 0xf:	/*mvn */
+				case 0xf: /*mvn */
 					result = ~operand2;
 					break;
 
@@ -206,25 +216,24 @@ namespace Mono.Debugger.Architectures
 					throw new ArgumentException ();
 				}
 
-				effective_address = make_address (result);
+				effective_address = MakeAddress (result);
 				type = Type.IndirectJump;
-			} else if ((bits (24, 27) >= 4) && (bits (24, 27) < 8) && (bits (12, 15) == 0x0f)) { // data transfer
+			} else if ((Bits (24, 27) >= 4) && (Bits (24, 27) < 8) && (Bits (12, 15) == 0x0f)) { // data transfer
 				/* byte write to PC */
-				var rn = bits (16, 19);
-				var base_addr = new TargetAddress (memory.AddressDomain, rn == 15 ? address.Address + 8 : get_reg (rn));
+				var rn = Bits (16, 19);
+				var base_addr = MakeAddress (rn == 15 ? (ulong) address.Address + 8 : GetRegister (rn));
 
-				if (bit (24)) {
+				if (Bit (24)) {
 					/* pre-indexed */
-					uint c = (get_status_reg () & 0x20000000) != 0 ? 1u : 0u;
-					long offset = bit (25) ? (long) shifted_reg_val (c == 1) : bits (0, 11);
+					long offset = Bit (25) ? (long) GetShiftedRegister () : Bits (0, 11);
 
-					if (bit (23))
+					if (Bit (23))
 						base_addr += offset;
 					else
 						base_addr -= offset;
 				}
 
-				effective_address = make_address ((ulong) memory.ReadInteger (base_addr));
+				effective_address = MakeAddress ((ulong) memory.ReadInteger (base_addr));
 				type = Type.IndirectJump;
 			} else {
 				type = Type.Unknown;
@@ -235,11 +244,10 @@ namespace Mono.Debugger.Architectures
 		}
 
 		protected readonly Opcodes_ARM opcodes;
-		readonly TargetAddress address;
-		readonly Type type = Type.Unknown;
+		TargetAddress address;
+		Type type = Type.Unknown;
 		TargetAddress effective_address = TargetAddress.Null;
 		Registers registers;
-		bool is_conditional;
 		bool is_ip_relative;
 		byte[] code;
 
@@ -295,14 +303,72 @@ namespace Mono.Debugger.Architectures
 		public override bool InterpretInstruction (Inferior inferior)
 		{
 			if (type == Type.Jump) {
-				registers [(int) Architecture_ARM.ARM_Register.PC].SetValue (effective_address);
+				registers [(int) ARM_Register.PC].SetValue (effective_address);
 				inferior.SetRegisters (registers);
 				return true;
 			} else if (type == Type.Call) {
-				registers [(int) Architecture_ARM.ARM_Register.LR].SetValue (address + 4);
-				registers [(int) Architecture_ARM.ARM_Register.PC].SetValue (effective_address);
+				registers [(int) ARM_Register.LR].SetValue (address + 4);
+				registers [(int) ARM_Register.PC].SetValue (effective_address);
 				inferior.SetRegisters (registers);
 				return true;
+			}
+
+			return false;
+		}
+
+		public bool ScanPrologue (UnwindContext context)
+		{
+			if (IsConditional)
+				return false;
+
+			if (Bits (25, 27) == 4) { // Block data transfer
+				if (Bit (20)) // load
+					return false;
+
+				var Rn = (int) Bits (16, 19);
+
+				Report.Debug (DebugFlags.StackUnwind, "  found store: {0} {1} {2} {3} - {4:x}",
+					      opcodes.Architecture.RegisterNames [Rn],
+					      Bit (23) ? "up" : "down", Bit (22) ? "pre" : "post",
+					      Bit (21) ? "writeback" : "no-writeback",
+					      Bits (0, 15));
+
+				if (context.Registers [Rn].State != UnwindContext.RegisterState.Preserved)
+					return false;
+
+				int count = 0;
+				for (int i = 0; i < 15; i++) {
+					if (Bit (i))
+						count++;
+				}
+
+				int startoffset, endoffset;
+
+				if (Bit (23)) { // up
+					startoffset = (int) context.Registers [Rn].Offset;
+					endoffset = startoffset + 4 * count;
+				} else { // down
+					startoffset = (int) context.Registers [Rn].Offset - 4 * count;
+					endoffset = startoffset;
+				}
+
+				int offset = startoffset;
+				if (Bit (24)) // pre
+					offset += 4;
+
+				for (int i = 0; i < 15; i++) {
+					if (!Bit (i))
+						continue;
+
+					context.Registers [i].State = UnwindContext.RegisterState.Memory;
+					context.Registers [i].BaseRegister = Rn;
+					context.Registers [i].Offset = offset;
+
+					offset += 4;
+				}
+
+				if (Bit (21)) // writeback
+					context.Registers [Rn].Offset = endoffset;
 			}
 
 			return false;

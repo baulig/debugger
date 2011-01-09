@@ -566,7 +566,7 @@ namespace Mono.Debugger.Architectures
 				return TargetAddress.Null;
 
 			TargetAddress call = address + reader.ReadInt32 () + reader.Position;
-			if (!process.MonoLanguage.IsTrampolineAddress (call))
+			if (!Process.MonoLanguage.IsTrampolineAddress (call))
 				return TargetAddress.Null;
 
 			return address;

@@ -66,6 +66,9 @@ namespace Mono.Debugger
 		internal void GetBacktrace (ThreadServant thread, TargetMemoryAccess memory,
 					    Mode mode, TargetAddress until, int max_frames)
 		{
+			Report.Debug (DebugFlags.StackUnwind, "Starting stack unwind on {0}: {1} {2} {3}",
+				      thread, mode, until, max_frames);
+
 			while (TryUnwind (thread, memory, mode, until)) {
 				if ((max_frames != -1) && (frames.Count > max_frames))
 					break;
@@ -155,6 +158,8 @@ namespace Mono.Debugger
 		internal bool TryUnwind (ThreadServant thread, TargetMemoryAccess memory,
 					 Mode mode, TargetAddress until)
 		{
+			Report.Debug (DebugFlags.StackUnwind, "Unwind: {0}", last_frame);
+
 			StackFrame new_frame = null;
 			try {
 				new_frame = last_frame.UnwindStack (memory);
