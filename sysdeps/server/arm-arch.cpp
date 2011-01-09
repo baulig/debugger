@@ -19,7 +19,7 @@ ArmArch::DisableBreakpoint (BreakpointInfo *breakpoint)
 }
 
 ServerEvent *
-ArmArch::ChildStopped (int stopsig)
+ArmArch::ChildStopped (int stopsig, bool *out_remain_stopped)
 {
 	return NULL;
 }
@@ -51,3 +51,18 @@ ArmArch::SetRegisterValues (const guint64 *values)
 {
 	return ERR_NOT_IMPLEMENTED;
 }
+
+ErrorCode
+ArmArch::CallMethod (InvocationData *invocation)
+{
+	return ERR_NOT_IMPLEMENTED;
+}
+
+ErrorCode
+ArmArch::ExecuteInstruction (MdbInferior *inferior, gsize code_address, int insn_size,
+			     bool update_ip, InferiorCallback *callback)
+{
+	return ERR_NOT_IMPLEMENTED;
+}
+
+

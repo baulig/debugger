@@ -81,12 +81,12 @@ if test x$build_sysdeps = xyes; then
 	AC_MSG_CHECKING([host platform characteristics])
 	case "$host" in
 	x86_64-*-linux*)
-		server_cflags=-D_GNU_SOURCE
+		server_cflags=-D_GNU_SOURCE -DHAVE_THREAD_DB
 		platform=x86_linux
 		using_eglib=no
 		;;
 	i[[3-7]]86-*-linux*)
-		server_cflags=-D_GNU_SOURCE
+		server_cflags=-D_GNU_SOURCE -DHAVE_THREAD_DB
 		platform=x86_linux
 		using_eglib=no
 		;;

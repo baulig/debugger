@@ -2,7 +2,9 @@
 #include <mdb-inferior.h>
 #include <mdb-process.h>
 #include <mono-runtime.h>
+#if HAVE_THREAD_DB
 #include <thread-db.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -31,7 +33,9 @@
 #error "Unknown Architecture."
 #endif
 
+#if HAVE_THREAD_DB
 static void iterate_over_threads_cb (ThreadDB *thread_db, int lwp, gsize tid, gpointer user_data);
+#endif
 
 class PTraceInferior;
 
@@ -40,7 +44,9 @@ class PTraceProcess : public MdbProcess
 public:
 	PTraceProcess (MdbServer *server) : MdbProcess (server)
 	{
+#if HAVE_THREAD_DB
 		this->thread_db = NULL;
+#endif
 		this->attached = false;
 	}
 
@@ -60,12 +66,16 @@ private:
 
 	ErrorCode ResumeProcess (MdbInferior *caller);
 
+#if HAVE_THREAD_DB
 	void IterateOverThreadsCallback (ThreadDB *thread_db, int lwd, gsize tid);
 
 	friend void iterate_over_threads_cb (ThreadDB *thread_db, int lwp, gsize tid, gpointer user_data);
-	friend class PTraceInferior;
 
 	ThreadDB *thread_db;
+#endif
+
+	friend class PTraceInferior;
+
 	bool attached;
 };
 
@@ -337,7 +347,7 @@ PTraceProcess::Attach (int pid, MdbInferior **out_inferior, guint32 *out_thread_
 	PTraceInferior *inferior;
 	ErrorCode result;
 
-	if (ptrace (PT_ATTACH, pid, NULL, 0) != 0)
+	if (ptrace (PTRACE_ATTACH, pid, NULL, 0) != 0)
 		return ERR_CANNOT_START_TARGET;
 
 	attached = true;
@@ -902,6 +912,8 @@ PTraceProcess::SetupInferior (PTraceInferior *inferior, int pid)
 	return OnMainModuleLoaded (inferior, buffer) != NULL;
 }
 
+#if HAVE_THREAD_DB
+
 void
 PTraceProcess::IterateOverThreadsCallback (ThreadDB *thread_db, int lwp, gsize tid)
 {
@@ -918,7 +930,7 @@ PTraceProcess::IterateOverThreadsCallback (ThreadDB *thread_db, int lwp, gsize t
 		return;
 	}
 
-	if (ptrace (PT_ATTACH, lwp, NULL, 0) != 0) {
+	if (ptrace (PTRACE_ATTACH, lwp, NULL, 0) != 0) {
 		g_warning (G_STRLOC ": Cannot attach to thread %d", lwp);
 		return;
 	}
@@ -938,6 +950,8 @@ iterate_over_threads_cb (ThreadDB *thread_db, int lwp, gsize tid, gpointer user_
 	process->IterateOverThreadsCallback (thread_db, lwp, tid);
 }
 
+#endif
+
 ErrorCode
 PTraceProcess::InitializeProcess (MdbInferior *inferior)
 {
@@ -951,18 +965,22 @@ PTraceProcess::InitializeProcess (MdbInferior *inferior)
 	if (reader)
 		reader->ReadDynamicInfo (inferior);
 
+#if HAVE_THREAD_DB
 	thread_db = ThreadDB::Initialize (inferior, ptrace_inferior->pid);
+#endif
 
 	if (!attached) {
 		initialized = true;
 		return ERR_NONE;
 	}
 
+#if HAVE_THREAD_DB
 	if (thread_db) {
 		ThreadDBCallback *cb = new ThreadDBCallback (iterate_over_threads_cb, this);
 		thread_db->GetAllThreads (inferior, cb);
 		delete cb;
 	}
+#endif
 
 	g_message (G_STRLOC ": InitializeProcess(): %p", mono_runtime);
 
