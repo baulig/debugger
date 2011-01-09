@@ -80,7 +80,9 @@ namespace Mono.Debugger.Server
 		LongLong = 1,
 		LongLongLongString,
 		LongData,
-		Context
+
+		Context = 8,
+		RuntimeInvoke
 	}
 
 	[StructLayout (LayoutKind.Sequential)]
@@ -142,6 +144,37 @@ namespace Mono.Debugger.Server
 			Arg3 = 0;
 			StringArg = null;
 			DataArg = null;
+		}
+
+		public InvocationData (long method, long id, int length,
+				       byte[][] blobs, long[] addresses, bool debug)
+		{
+			Type = InvocationType.RuntimeInvoke;
+			MethodAddress = method;
+			CallbackID = id;
+			Arg1 = length;
+			Arg2 = debug ? 1 : 0;
+			StringArg = null;
+
+			Arg3 = 0;
+
+			var writer = new MdbServer.Connection.PacketWriter ();
+			for (int i = 0; i < length; i++) {
+				Console.WriteLine ("INVOCATION: {0} {1:x}", blobs [i] != null, addresses [i]);
+				if (blobs [i] != null) {
+					writer.WriteInt (blobs [i].Length);
+					writer.WriteData (blobs [i]);
+					Arg3 += blobs [i].Length;
+				} else {
+					writer.WriteInt (-1);
+					writer.WriteLong (addresses [i]);
+				}
+			}
+
+			Console.WriteLine ("INVOCATION DATA: {0} {1}", Arg3, writer.Offset);
+
+			DataArg = new byte [writer.Offset];
+			Array.Copy (writer.Data, 0, DataArg, 0, writer.Offset);
 		}
 	}
 

@@ -4361,7 +4361,7 @@ namespace Mono.Debugger.Backend
 							      "{0} stopped at invoke method {1} / {2}",
 							      sse, invoke, stage);
 
-						inferior.MarkRuntimeInvokeFrame ();
+						// inferior.MarkRuntimeInvokeFrame ();
 						RTI.SetupCallback (ID);
 
 						args = null;

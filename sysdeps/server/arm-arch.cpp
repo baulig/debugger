@@ -404,6 +404,9 @@ ArmArch::Marshal_Generic (InvocationData *invocation, CallbackData *cdata)
 	if (invocation->type == INVOCATION_TYPE_LONG_LONG_LONG_STRING) {
 		data_ptr = invocation->string_arg;
 		data_size = strlen (invocation->string_arg) + 1;
+	} else {
+		data_ptr = invocation->data;
+		data_size = invocation->data_size;
 	}
 
 	invocation_func = runtime->GetGenericInvocationFunc ();
@@ -429,6 +432,10 @@ ArmArch::Marshal_Generic (InvocationData *invocation, CallbackData *cdata)
 		return false;
 	if (inferior->WriteMemory (new_sp + 4, sizeof (data), &data))
 		return false;
+
+	if (invocation->type == INVOCATION_TYPE_RUNTIME_INVOKE) {
+		cdata->exc_address = new_sp + 24;
+	}
 
 	INFERIOR_REG_R0 (current_regs) = new_sp + 4;
 	INFERIOR_REG_PC (current_regs) = runtime->GetGenericInvocationFunc ();

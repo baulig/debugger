@@ -262,6 +262,13 @@ namespace Mono.Debugger.MdbServer
 			writer.WriteLong (data.Arg3);
 			writer.WriteString (data.StringArg);
 
+			if (data.DataArg != null) {
+				writer.WriteInt (data.DataArg.Length);
+				writer.WriteData (data.DataArg);
+			} else {
+				writer.WriteInt (0);
+			}
+
 			Connection.SendReceive (CommandSet.INFERIOR, (int) CmdInferior.CALL_METHOD, writer);
 		}
 

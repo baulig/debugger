@@ -199,7 +199,6 @@ namespace Mono.Debugger.Backend
 
 			int blob_size = 0;
 			byte[][] blobs = new byte [length][];
-			int[] blob_offsets = new int [length];
 			long[] addresses = new long [length];
 
 			for (int i = 0; i < length; i++) {
@@ -207,28 +206,16 @@ namespace Mono.Debugger.Backend
 
 				if (obj == null)
 					continue;
-				if (obj.Location.HasAddress) {
-					blob_offsets [i] = -1;
+				else if (obj.Location.HasAddress) {
 					addresses [i] = obj.Location.GetAddress (this).Address;
 					continue;
 				}
 				blobs [i] = obj.Location.ReadBuffer (this, obj.Type.Size);
-				blob_offsets [i] = blob_size;
-				blob_size += blobs [i].Length;
 			}
 
-			byte[] blob = new byte [blob_size];
-			blob_size = 0;
-			for (int i = 0; i < length; i++) {
-				if (blobs [i] == null)
-					continue;
-				blobs [i].CopyTo (blob, blob_size);
-				blob_size += blobs [i].Length;
-			}
-
-			server_inferior.RuntimeInvoke (
-				invoke_method.Address, method_argument.Address,
-				length, blob, blob_offsets, addresses, callback_arg, debug);
+			var data = new InvocationData (method_argument.Address, callback_arg,
+						       length, blobs, addresses, debug);
+			server_inferior.CallMethod (data);
 		}
 
 		public void MarkRuntimeInvokeFrame ()

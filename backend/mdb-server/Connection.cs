@@ -306,6 +306,10 @@ namespace Mono.Debugger.MdbServer
 			}
 
 			public PacketWriter WriteString (string s) {
+				if (s == null) {
+					encode_int (data, 0, ref offset);
+					return this;
+				}
 				encode_int (data, s.Length, ref offset);
 				byte[] b = Encoding.UTF8.GetBytes (s);
 				Buffer.BlockCopy (b, 0, data, offset, b.Length);

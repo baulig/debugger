@@ -33,7 +33,7 @@ enum InvocationType {
 	INVOCATION_TYPE_LONG_LONG_LONG_STRING,
 	INVOCATION_TYPE_DATA,
 	INVOCATION_TYPE_LONG_LONG_DATA,
-	INVOCATION_TYPE_FINALIZER,
+	INVOCATION_TYPE_CONTEXT		= 8,
 	INVOCATION_TYPE_RUNTIME_INVOKE
 };
 
@@ -46,7 +46,7 @@ typedef struct {
 	guint64 arg3;
 	gchar *string_arg;
 	int data_size;
-	guint8* data;
+	const guint8* data;
 	InferiorCallback *callback;
 } InvocationData;
 

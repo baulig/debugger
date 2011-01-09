@@ -364,6 +364,10 @@ MdbInferior::ProcessCommand (int command, int id, Buffer *in, Buffer *out)
 		data->arg3 = in->DecodeLong ();
 		data->string_arg = in->DecodeString ();
 
+		data->data_size = in->DecodeInt ();
+		if (data->data_size > 0)
+			data->data = in->DecodeBuffer (data->data_size);
+
 		result = CallMethod (data);
 		g_free (data->string_arg);
 		g_free (data);
