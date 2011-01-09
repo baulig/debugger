@@ -531,6 +531,8 @@ namespace Mono.Debugger.Frontend
 		TargetAddress start;
 		Expression expression;
 
+		int addr_size;
+
 		char format = '_';
 		char size = '_';
 		int count = 1;
@@ -597,7 +599,7 @@ namespace Mono.Debugger.Frontend
 				case 'g':
 					return 8;
 				case 'a':
-					return IntPtr.Size;
+					return addr_size;
 				default:
 					throw new ScriptingException ("Unknown size " + size);
 			}
@@ -683,12 +685,12 @@ namespace Mono.Debugger.Frontend
 			}
 		}
 		int LengthOfAddressItem () {
-			if (IntPtr.Size == 4) {
+			if (addr_size == 4) {
 				return LengthOfWordItem ();
-			} else if (IntPtr.Size == 8) {
+			} else if (addr_size == 8) {
 				return LengthOfGiantItem ();
 			} else {
-				throw new ScriptingException ("Unsupported IntPtr.Size: " + IntPtr.Size);
+				throw new ScriptingException ("Unsupported address size: " + addr_size);
 			}
 		}
 		int LengthOfItem () {
@@ -733,18 +735,18 @@ namespace Mono.Debugger.Frontend
 				case 'b':
 					return data [startIndex];
 				case 'h':
-					return new BinaryReader(new MemoryStream (data, startIndex, 2, false, false)).ReadInt16 ();
+					return new BinaryReader(new MemoryStream (data, startIndex, 2, false, false)).ReadUInt16 ();
 				case 'w':
-					return new BinaryReader(new MemoryStream (data, startIndex, 4, false, false)).ReadInt32 ();
+					return new BinaryReader(new MemoryStream (data, startIndex, 4, false, false)).ReadUInt32 ();
 				case 'g':
 					return new BinaryReader(new MemoryStream (data, startIndex, 8, false, false)).ReadInt64 ();
 				case 'a':
-					if (IntPtr.Size == 4) {
+					if (addr_size == 4) {
 						return new BinaryReader(new MemoryStream (data, startIndex, 4, false, false)).ReadUInt32 ();
-					} else if (IntPtr.Size == 8) {
+					} else if (addr_size == 8) {
 						return new BinaryReader(new MemoryStream (data, startIndex, 8, false, false)).ReadInt64 ();
 					} else {
-						throw new ScriptingException ("Unsupported IntPtr.Size " + IntPtr.Size);
+						throw new ScriptingException ("Unsupported address size " + addr_size);
 					}
 				default:
 					throw new ScriptingException ("Unknown size " + size);
@@ -799,6 +801,8 @@ namespace Mono.Debugger.Frontend
 
 			if (Args == null)
 				throw new ScriptingException ("Argument expected");
+
+			addr_size = context.CurrentProcess.TargetInfo.TargetAddressSize;
 
 			if (Args.Count > 1) {
 				string formatArgument = (string) Args [0];
@@ -871,12 +875,12 @@ namespace Mono.Debugger.Frontend
 			//		itemSize, itemsPerLine, data.Length, count);
 			for (int i = 0; i < count; i++) {
 				if (itemsInCurrentLine == 0) {
-					if (IntPtr.Size == 4) {
+					if (addr_size == 4) {
 						PrintPaddedValue (output, 8, '0', System.Convert.ToString (start.Address + (i * itemSize), 16));
-					} else if (IntPtr.Size == 8) {
+					} else if (addr_size == 8) {
 						PrintPaddedValue (output, 16, '0', System.Convert.ToString (start.Address + (i * itemSize), 16));
 					} else {
-						throw new ScriptingException ("Unsupported IntPtr.Size " + IntPtr.Size);
+						throw new ScriptingException ("Unsupported address size " + addr_size);
 					}
 					output.Append (": ");
 				}
