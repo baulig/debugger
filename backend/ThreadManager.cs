@@ -178,6 +178,13 @@ namespace Mono.Debugger.Backend
 			process.OnDllLoaded (exe);
 		}
 
+		internal ExecutableReader CreateExeReader (Process process, IExecutableReader reader)
+		{
+			var exe = new ExecutableReader (process, TargetInfo, reader);
+			exe_reader_by_id.Add (reader.ID, exe);
+			return exe;
+		}
+
 		internal void OnThreadCreated (IInferior inferior)
 		{
 			if (sse_by_inferior.ContainsKey (inferior.ID))

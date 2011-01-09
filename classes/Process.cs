@@ -165,6 +165,7 @@ namespace Mono.Debugger
 
 		IProcess server_process;
 		MonoRuntimeManager mono_manager;
+		ExecutableReader main_reader;
 
 		Dictionary<string, ExecutableReader> exe_reader_by_filename;
 
@@ -499,6 +500,8 @@ namespace Mono.Debugger
 				server_inferior = server_process.Spawn (start.WorkingDirectory, args, env);
 			}
 
+			main_reader = manager.CreateExeReader (this, server_process.MainReader);
+
 			var engine = new SingleSteppingEngine (manager, this, server_process, server_inferior);
 			manager.AddEngine (server_inferior, engine);
 
@@ -573,6 +576,12 @@ namespace Mono.Debugger
 				}
 
 				return TargetAddress.Null;
+			}
+		}
+
+		internal ExecutableReader MainExeReader {
+			get {
+				return main_reader;
 			}
 		}
 

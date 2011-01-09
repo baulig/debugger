@@ -57,6 +57,7 @@ public:
 	}
 
 	guint64 GetEndAddress (void);
+	guint64 GetEntryPoint (void);
 
 private:
 	bfd *bfd_handle;
@@ -157,13 +158,10 @@ BfdReader::GetStartAddress (void)
 	text = FindSection (".text");
 	bss = FindSection (".bss");
 
-	g_message (G_STRLOC ": GetStartAddress() - %s - %Lx - %Lx", filename, base_address,
-		   bfd_get_start_address (bfd_handle));
-
-	if (text) {
-		g_message (G_STRLOC ": %Lx - %Lx", text->vma, base_address + text->vma);
+	if (text)
 		return base_address + text->vma;
-	}
+	else if (bss)
+		return base_address + bss->vma;
 
 	return base_address + bfd_get_start_address (bfd_handle);
 }
@@ -182,6 +180,12 @@ BfdReader::GetEndAddress (void)
 		return base_address + text->vma + text->size;
 
 	return 0;
+}
+
+guint64
+BfdReader::GetEntryPoint (void)
+{
+	return base_address + bfd_get_start_address (bfd_handle);
 }
 
 guint64

@@ -28,6 +28,7 @@ namespace Mono.Debugger.Backend
 		TargetAddress start_address = TargetAddress.Null;
 		TargetAddress end_address = TargetAddress.Null;
 		TargetAddress base_address = TargetAddress.Null;
+		TargetAddress entry_point = TargetAddress.Null;
 
 		public ExecutableReader (Process process, TargetInfo target_info, IExecutableReader reader)
 		{
@@ -45,6 +46,7 @@ namespace Mono.Debugger.Backend
 			start_address = create_address (reader.StartAddress);
 			end_address = create_address (reader.EndAddress);
 			base_address = create_address (reader.BaseAddress);
+			entry_point = create_address (reader.EntryPoint);
 
 			Module = process.Session.GetModule (FileName);
 			if (Module == null) {
@@ -124,6 +126,10 @@ namespace Mono.Debugger.Backend
 			get { return base_address; }
 		}
 
+		public TargetAddress EntryPoint {
+			get { return entry_point; }
+		}
+
 		public TargetAddress LookupSymbol (string name)
 		{
 			var addr = reader.LookupSymbol (name);
@@ -150,13 +156,6 @@ namespace Mono.Debugger.Backend
 		public byte[] GetSectionContents (string name)
 		{
 			return reader.GetSectionContents (name);
-		}
-
-		public TargetAddress EntryPoint {
-			get {
-				var addr = reader.StartAddress;
-				return create_address (addr);
-			}
 		}
 
 		void create_frame_reader ()

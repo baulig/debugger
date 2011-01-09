@@ -31,5 +31,9 @@ namespace Mono.Debugger.Server
 		{
 			get;
 		}
+
+		long EntryPoint {
+			get;
+		}
 	}
 }

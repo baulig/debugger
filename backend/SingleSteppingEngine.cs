@@ -2931,6 +2931,17 @@ namespace Mono.Debugger.Backend
 				      "{0} start execute: {1} {2} {3}", sse, sse.Process.IsAttached,
 				      inferior.CurrentFrame, sse.manager.HasThreadEvents);
 
+			if (!sse.Process.IsAttached) {
+				var main = sse.Process.MainExeReader;
+
+				Report.Debug (DebugFlags.SSE, "{0} start execute #1: {1}", this, main.EntryPoint);
+
+				if (!main.EntryPoint.IsNull) {
+					sse.do_continue (main.EntryPoint);
+					return;
+				}
+			}
+
 			sse.do_continue ();
 
 			return;
@@ -2971,6 +2982,8 @@ namespace Mono.Debugger.Backend
 
 			if (sse.InitializeBreakpoints ())
 				return EventResult.Running;
+
+			return EventResult.Completed;
 
 			Report.Debug (DebugFlags.SSE, "{0} start #1: {1} {2}", sse, cevent, Result);
 			sse.PushOperation (new OperationStep (sse, StepMode.Run, Result));
