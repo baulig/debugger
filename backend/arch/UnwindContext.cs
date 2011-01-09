@@ -62,6 +62,10 @@ namespace Mono.Debugger.Architectures
 			public long Offset;
 		}
 
+		public TargetAddress[] OriginalRegisters {
+			get { return original_registers; }
+		}
+
 		public RegisterValue[] Registers {
 			get { return registers; }
 		}

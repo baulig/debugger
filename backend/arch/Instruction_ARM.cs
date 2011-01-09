@@ -329,7 +329,7 @@ namespace Mono.Debugger.Architectures
 
 				Report.Debug (DebugFlags.StackUnwind, "  found store: {0} {1} {2} {3} - {4:x}",
 					      opcodes.Architecture.RegisterNames [Rn],
-					      Bit (23) ? "up" : "down", Bit (22) ? "pre" : "post",
+					      Bit (24) ? "pre" : "post", Bit (23) ? "up" : "down",
 					      Bit (21) ? "writeback" : "no-writeback",
 					      Bits (0, 15));
 
@@ -361,18 +361,20 @@ namespace Mono.Debugger.Architectures
 				}
 
 				int offset = startoffset;
-				if (Bit (24)) // pre
-					offset += 4;
 
 				for (int i = 0; i < 15; i++) {
 					if (!Bit (i))
 						continue;
 
+					if (!Bit (24)) // post
+						offset += 4;
+
 					context.PreservedRegisters [i].State = UnwindContext.RegisterState.Memory;
 					context.PreservedRegisters [i].BaseRegister = Rn;
 					context.PreservedRegisters [i].Offset = offset;
 
-					offset += 4;
+					if (Bit (24)) // pre
+						offset += 4;
 				}
 
 				if (Bit (21)) { // writeback
